@@ -584,7 +584,7 @@ function notesFor(
       `Index: showing the ${ctx.indexElided.shown} entries that differ from HEAD, of ${ctx.indexElided.total} staged paths.`,
     );
   }
-  if (ctx.more) notes.push(`Showing ${ctx.shown} commits — scroll past the bottom for more.`);
+  if (ctx.more) notes.push(`Showing ${ctx.shown} commits — click "load more history" for the rest.`);
   if (ctx.refsOutside > 0)
     notes.push(`${ctx.refsOutside} refs point outside this window and are left out.`);
   if (!ctx.view.showIndex) notes.push('The index is hidden.');

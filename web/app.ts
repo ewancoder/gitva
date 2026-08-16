@@ -448,13 +448,19 @@ canvas.addEventListener('pointermove', (e) => {
     drag.x = e.clientX;
     drag.y = e.clientY;
     schedule();
-    maybeWiden();
   }
 });
 
 canvas.addEventListener('pointerup', (e) => {
   canvas.classList.remove('dragging');
   if (drag && !drag.moved) {
+    // A button, not an object: clicking it loads, it never becomes the thing
+    // the rest of the graph is dimmed around.
+    if (drag.id === 'more') {
+      loadMoreHistory();
+      drag = null;
+      return;
+    }
     selected = drag.id;
     const node = scene?.nodes.find((n) => n.id === selected) ?? null;
     renderPanel(panel, snap, node);
@@ -505,22 +511,16 @@ canvas.addEventListener(
     } else {
       const at = glide ?? camera;
       glide = { x: at.x - e.deltaX, y: at.y - e.deltaY };
-      maybeWiden();
     }
     schedule();
   },
   { passive: false },
 );
 
-/** Reaching the bottom widens the window — and stops asking once it stops producing. */
-function maybeWiden() {
-  if (!snap || !scene || exhausted || !snap.window.more || !following) return;
-  // Where the scroll is headed, not where it has got to — otherwise more
-  // history is asked for a glide late.
-  const y = glide ? glide.y : camera.y;
-  const bottom = -y / camera.scale + canvas.clientHeight / camera.scale;
-  if (bottom < scene.height - 40) return;
-  view = { ...view, limit: view.limit + 120 };
+/** Clicking "load more history" asks for all of it — scrolling never loads anything. */
+function loadMoreHistory() {
+  if (!snap || exhausted || !snap.window.more || !following) return;
+  view = { ...view, limit: snap.window.totalCommits ?? view.limit + 1000 };
   pushView();
 }
 

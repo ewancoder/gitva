@@ -50,8 +50,8 @@ const KIND: Record<string, { title: string; what: string; made: string }> = {
     made: 'git update-index --add <path>',
   },
   more: {
-    title: 'History continues',
-    what: 'These commits have parents that are real, but outside the window gitva asked for. The arrow is drawn honestly into here rather than pointing at a node that is not on screen. Scroll past the bottom to widen the window.',
+    title: 'Load more history',
+    what: 'These commits have parents that are real, but outside the window gitva asked for. The arrow is drawn honestly into here rather than pointing at a node that is not on screen. Click this block to load the rest of the history.',
     made: 'git rev-list -n <more>',
   },
 };

@@ -316,7 +316,7 @@ export function layout(
       y: y + 8,
       w: 210,
       h: 30,
-      label: 'history continues',
+      label: 'load more history',
       sub: snap.window.totalCommits
         ? `${commits.length} of ${snap.window.totalCommits} commits`
         : `${commits.length} commits shown`,
