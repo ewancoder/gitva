@@ -301,6 +301,10 @@ function fillBranches(s: Snapshot) {
   sel.size = Math.min(6, Math.max(2, s.refs.length));
 }
 
+const SEARCH_IN = ['message', 'author', 'path', 'content'] as const;
+const searchField = (v: string): (typeof SEARCH_IN)[number] =>
+  (SEARCH_IN as readonly string[]).includes(v) ? (v as (typeof SEARCH_IN)[number]) : 'message';
+
 $('question').addEventListener('change', () => {
   const kind = $<HTMLSelectElement>('question').value;
   const search = $<HTMLInputElement>('search');
@@ -311,7 +315,11 @@ $('question').addEventListener('change', () => {
   if (kind === 'all') tape.view = { ...tape.view, question: { kind: 'all' } };
   else if (kind === 'branches')
     tape.view = { ...tape.view, question: { kind: 'refs', refs: [...branches.selectedOptions].map((o) => o.value) } };
-  else tape.view = { ...tape.view, question: { kind: 'search', text: search.value, in: kind as 'message' } };
+  else
+    tape.view = {
+      ...tape.view,
+      question: { kind: 'search', text: search.value, in: searchField(kind) },
+    };
   pushView();
 });
 $('search').addEventListener('input', () => {
@@ -319,7 +327,7 @@ $('search').addEventListener('input', () => {
   if (kind === 'all' || kind === 'branches') return;
   exhausted = false;
   const text = $<HTMLInputElement>('search').value;
-  tape.view = { ...tape.view, question: { kind: 'search', text, in: kind as 'message' } };
+  tape.view = { ...tape.view, question: { kind: 'search', text, in: searchField(kind) } };
   pushView();
 });
 $('branches').addEventListener('change', () => {
