@@ -190,14 +190,33 @@ function drawEdge(
     ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(ax, ay);
-    if (Math.abs(ax - bx) < 0.5) {
-      ctx.lineTo(bx, by);
+    if (by >= ay) {
+      if (Math.abs(ax - bx) < 0.5) {
+        ctx.lineTo(bx, by);
+      } else {
+        // The head points straight down, so the line must arrive that way too:
+        // a diagonal running into it reads as an arrow stuck on sideways.
+        ctx.lineTo(ax, by - 18);
+        ctx.lineTo(bx, by - 8);
+        ctx.lineTo(bx, by);
+      }
+      ctx.stroke();
+      arrowhead(ctx, bx, by, Math.PI / 2, theme.ink);
     } else {
-      ctx.lineTo(ax, by - 14);
-      ctx.lineTo(bx, by - 2);
+      // Dragged level with or above its parent. Still leave the child from the
+      // bottom and route around both, entering the parent's side: the top of a
+      // commit is where its own children arrive, and two meanings on one edge
+      // is exactly the confusion this avoids.
+      const aisle = Math.max(a.x + a.w, b.x + b.w) + 16;
+      const foot = Math.max(a.y + a.h, b.y + b.h) + 12;
+      const my = b.y + b.h / 2;
+      ctx.lineTo(ax, foot);
+      ctx.lineTo(aisle, foot);
+      ctx.lineTo(aisle, my);
+      ctx.lineTo(b.x + b.w, my);
+      ctx.stroke();
+      arrowhead(ctx, b.x + b.w, my, Math.PI, theme.ink);
     }
-    ctx.stroke();
-    arrowhead(ctx, bx, by, Math.PI / 2, theme.ink);
   } else if (e.kind === 'pointer') {
     // "Points at" is learned in five seconds and then should not be shouted.
     ctx.strokeStyle = theme.muted;
