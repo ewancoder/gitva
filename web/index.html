@@ -89,7 +89,7 @@
       /* The details panel is where the teaching lives, so it earns width. */
       aside {
         width: 380px; background: var(--panel); border-left: 1px solid var(--line);
-        overflow-y: auto; padding: calc(var(--u) * 2);
+        overflow-y: auto; scroll-behavior: smooth; padding: calc(var(--u) * 2);
         display: flex; flex-direction: column; gap: calc(var(--u) * 1.5);
       }
       aside h2 { margin: 0; font-size: 15px; }
@@ -195,6 +195,7 @@
       <div class="legend" style="grid-template-columns: 140px 1fr">
         <code>wheel</code><span>pan &middot; hold <kbd>ctrl</kbd> to zoom</span>
         <code>drag background</code><span>pan</span>
+        <code>double-click background</code><span>fit the graph to the width again</span>
         <code>drag a node</code><span>pin it where you put it</span>
         <code>click</code><span>select, and read what it is</span>
         <code>right-click commit</code><span>fold or open what it contains</span>

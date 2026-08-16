@@ -34,12 +34,36 @@ export interface Paint {
   enter: number;
   /** Nodes that have gone, drawn at their old place while they fade. */
   ghosts: SceneNode[];
+  /** False under prefers-reduced-motion: everything snaps to its end state. */
+  motion: boolean;
 }
 
 const TIER = { none: 0.45, sha: 0.75, kind: 1.05, names: 1.35 };
 
-export function draw(ctx: CanvasRenderingContext2D, scene: Scene, p: Paint) {
+// Hover dimming eases rather than snapping. The dimmed graph is an answer to
+// "what connects to what"; arriving at it instantly reads as a glitch instead.
+const dimming = new Map<string, number>();
+let easeK = 0.2;
+let settling = false;
+/** 0 lit, 1 fully dimmed — one step of the way towards `target`. */
+function dimmed(id: string, target: number): number {
+  const cur = dimming.get(id) ?? target;
+  const next = cur + (target - cur) * easeK;
+  if (Math.abs(target - next) < 0.01) {
+    dimming.set(id, target);
+    return target;
+  }
+  dimming.set(id, next);
+  settling = true;
+  return next;
+}
+
+/** True while something is still easing, so the caller keeps painting. */
+export function draw(ctx: CanvasRenderingContext2D, scene: Scene, p: Paint): boolean {
   const { camera: cam } = p;
+  easeK = p.motion ? 0.2 : 1;
+  settling = false;
+  if (dimming.size > 4000) dimming.clear();
   ctx.save();
   ctx.setTransform(p.dpr, 0, 0, p.dpr, 0, 0);
   ctx.fillStyle = theme.ground;
@@ -107,6 +131,7 @@ export function draw(ctx: CanvasRenderingContext2D, scene: Scene, p: Paint) {
   }
 
   ctx.restore();
+  return settling;
 }
 
 function overlaps(a: SceneNode, b: SceneNode, v: { x0: number; y0: number; x1: number; y1: number }) {
@@ -148,9 +173,9 @@ function drawEdge(
   p: Paint,
   lit: Set<string>,
 ) {
-  const dim = lit.size > 0 && !(lit.has(e.from) && lit.has(e.to));
+  const dim = dimmed(`${e.kind}:${e.from}>${e.to}`, lit.size > 0 && !(lit.has(e.from) && lit.has(e.to)) ? 1 : 0);
   ctx.save();
-  ctx.globalAlpha *= dim ? 0.12 : 1;
+  ctx.globalAlpha *= 1 - dim * 0.88;
   ctx.setLineDash([]);
 
   if (e.kind === 'parent') {
@@ -234,14 +259,14 @@ function arrowhead(ctx: CanvasRenderingContext2D, x: number, y: number, angle: n
 // ---------------------------------------------------------------------------
 
 function drawNode(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, lit: Set<string>) {
-  const dim = lit.size > 0 && !lit.has(n.id);
+  const dim = dimmed(n.id, lit.size > 0 && !lit.has(n.id) ? 1 : 0);
   const hue = hueFor(n.kind);
   const ghost = n.unreachable === true;
   const changed =
     p.flash > 0 && (p.change.added.has(n.id) || p.change.updated.has(n.id) || p.change.removed.has(n.id));
 
   ctx.save();
-  ctx.globalAlpha *= dim ? 0.18 : 1;
+  ctx.globalAlpha *= 1 - dim * 0.82;
   ctx.lineWidth = 1.4;
   ctx.setLineDash(ghost ? [3, 3] : []);
 
@@ -270,7 +295,7 @@ function drawNode(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, lit: Se
   }
   if (changed) {
     ctx.setLineDash([]);
-    ctx.globalAlpha = p.flash * (dim ? 0.3 : 1);
+    ctx.globalAlpha = p.flash * (1 - dim * 0.7);
     ctx.strokeStyle = theme.accent;
     ctx.lineWidth = 2.5;
     shape(ctx, n, 5);
@@ -322,11 +347,11 @@ function shape(ctx: CanvasRenderingContext2D, n: SceneNode, grow = 0) {
   }
 }
 
-function label(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, dim: boolean, ghost: boolean) {
+function label(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, dim: number, ghost: boolean) {
   const s = p.camera.scale;
   if (s < TIER.none) return;
   ctx.save();
-  ctx.globalAlpha *= dim ? 0.2 : 1;
+  ctx.globalAlpha *= 1 - dim * 0.8;
 
   if (n.kind === 'ref' || n.kind === 'head' || n.kind === 'more' || n.kind === 'index' || n.kind === 'tag') {
     ctx.font = `${n.kind === 'head' ? '600 ' : ''}11px ${theme.sans}`;
@@ -369,7 +394,12 @@ export function hitTest(scene: Scene, wx: number, wy: number): SceneNode | null 
   return null;
 }
 
-export function fit(scene: Scene, width: number, height: number): Camera {
-  const scale = Math.min(1.2, Math.max(0.15, Math.min(width / (scene.width + 40), height / (scene.height + 40))));
+/**
+ * Fit the width and let history run off the bottom. A repository is tall and
+ * narrow, so a scale that fits its height too is a scale at which nothing can
+ * be read — the graph is meant to be scrolled, not squinted at.
+ */
+export function fit(scene: Scene, width: number): Camera {
+  const scale = Math.min(2, Math.max(0.15, (width - 40) / scene.width));
   return { x: 20, y: 20, scale };
 }

@@ -79,7 +79,8 @@ function paint() {
   const now = performance.now();
   const flash = reduceMotion ? 0 : Math.max(0, 1 - (now - flashAt) / 1100);
   const enter = reduceMotion ? 1 : Math.min(1, (now - enterAt) / theme.duration);
-  draw(ctx, scene, {
+  glideStep();
+  const settling = draw(ctx, scene, {
     camera,
     width: canvas.clientWidth,
     height: canvas.clientHeight,
@@ -90,8 +91,25 @@ function paint() {
     selected,
     enter,
     ghosts,
+    motion: !reduceMotion,
   });
-  if (flash > 0 || enter < 1) schedule();
+  if (flash > 0 || enter < 1 || settling || glide) schedule();
+}
+
+/**
+ * Wheel panning glides to where it was asked for rather than jumping there:
+ * the graph is a page, and a page that lurches is a page you lose your place in.
+ * Every other way of moving the camera is direct, and cancels the glide.
+ */
+let glide: { x: number; y: number } | null = null;
+function glideStep() {
+  if (!glide) return;
+  const k = reduceMotion ? 1 : 0.22;
+  const x = camera.x + (glide.x - camera.x) * k;
+  const y = camera.y + (glide.y - camera.y) * k;
+  const done = Math.abs(glide.x - x) < 0.5 && Math.abs(glide.y - y) < 0.5;
+  camera = { ...camera, x: done ? glide.x : x, y: done ? glide.y : y };
+  if (done) glide = null;
 }
 
 function relayout(animate: boolean, repoChanged: boolean) {
@@ -192,7 +210,8 @@ source.addEventListener('snapshot', (e) => {
   if (s.window.commits.length < s.view.limit) exhausted = true;
   record(s);
   if (firstEver && scene) {
-    camera = fit(scene, canvas.clientWidth, canvas.clientHeight);
+    camera = fit(scene, canvas.clientWidth);
+    glide = null;
     schedule();
   }
 });
@@ -338,7 +357,8 @@ function step(d: number) {
 addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
   if (e.key === 'f' && scene) {
-    camera = fit(scene, canvas.clientWidth, canvas.clientHeight);
+    camera = fit(scene, canvas.clientWidth);
+    glide = null;
     schedule();
   } else if (e.key === '[') step(-1);
   else if (e.key === ']') step(1);
@@ -364,6 +384,7 @@ let drag: { id: string | null; x: number; y: number; moved: boolean; dx: number;
 
 canvas.addEventListener('pointerdown', (e) => {
   if (e.button !== 0) return;
+  glide = null;
   canvas.setPointerCapture(e.pointerId);
   canvas.classList.add('dragging');
   const w = world(e);
@@ -413,6 +434,7 @@ canvas.addEventListener('pointerup', (e) => {
     const node = scene?.nodes.find((n) => n.id === selected) ?? null;
     renderPanel(panel, snap, node);
     if (node && prefs.centreOnClick) {
+      glide = null;
       camera = {
         ...camera,
         x: canvas.clientWidth / 2 - (node.x + node.w / 2) * camera.scale,
@@ -423,6 +445,16 @@ canvas.addEventListener('pointerup', (e) => {
   }
   drag = null;
   void e;
+});
+
+// Double-clicking nothing in particular is the way back: the same fit the view
+// starts at, for when panning and zooming have lost the graph.
+canvas.addEventListener('dblclick', (e) => {
+  const w = world(e);
+  if (!scene || hitTest(scene, w.x, w.y)) return;
+  camera = fit(scene, canvas.clientWidth);
+  glide = null;
+  schedule();
 });
 
 canvas.addEventListener('contextmenu', (e) => {
@@ -440,12 +472,14 @@ canvas.addEventListener(
   (e) => {
     e.preventDefault();
     if (e.ctrlKey || e.metaKey) {
+      glide = null;
       const w = world(e);
       const k = Math.exp(-e.deltaY / 400);
       const scale = Math.min(4, Math.max(0.1, camera.scale * k));
       camera = { scale, x: camera.x + (w.x * camera.scale - w.x * scale), y: camera.y + (w.y * camera.scale - w.y * scale) };
     } else {
-      camera = { ...camera, x: camera.x - e.deltaX, y: camera.y - e.deltaY };
+      const at = glide ?? camera;
+      glide = { x: at.x - e.deltaX, y: at.y - e.deltaY };
       maybeWiden();
     }
     schedule();
@@ -456,7 +490,10 @@ canvas.addEventListener(
 /** Reaching the bottom widens the window — and stops asking once it stops producing. */
 function maybeWiden() {
   if (!snap || !scene || exhausted || !snap.window.more || !following) return;
-  const bottom = -camera.y / camera.scale + canvas.clientHeight / camera.scale;
+  // Where the scroll is headed, not where it has got to — otherwise more
+  // history is asked for a glide late.
+  const y = glide ? glide.y : camera.y;
+  const bottom = -y / camera.scale + canvas.clientHeight / camera.scale;
   if (bottom < scene.height - 40) return;
   view = { ...view, limit: view.limit + 120 };
   pushView();
