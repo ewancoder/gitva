@@ -9,7 +9,9 @@ import { describe, it } from 'node:test';
 import { assignLanes, layout, objectGraph, M } from '../src/layout.js';
 import { DEFAULT_VIEW, type Commit, type Snapshot, type View } from '../src/types.js';
 
-const oid = (n: string) => n.padEnd(40, '0');
+// The separator matters: without it `c1`, `c10` and `c100` all pad to the same
+// forty characters, and the twenty-thousand-commit case stops being a chain.
+const oid = (n: string) => (n + '-').padEnd(40, '0');
 
 function fakeSnapshot(commits: Record<string, string[]>, extra: Partial<Snapshot> = {}): Snapshot {
   const order = Object.keys(commits);
@@ -72,6 +74,15 @@ describe('lanes', () => {
     const { lane, laneCount } = assignLanes(['m', 'x', 'y', 'base'], (o) => parents[o]);
     assert.equal(lane.get('m'), 0);
     assert.notEqual(lane.get('x'), lane.get('y'));
+    assert.equal(laneCount, 2);
+  });
+
+  it('frees the lane of a branch whose parent another lane already holds', () => {
+    // a and b both fork off base: b's lane has nothing left to carry, so the
+    // next tip reuses it instead of the graph creeping one lane rightwards.
+    const parents: Record<string, string[]> = { a: ['base'], b: ['base'], base: ['root'], c: [], root: [] };
+    const { lane, laneCount } = assignLanes(['a', 'b', 'base', 'c', 'root'], (o) => parents[o]);
+    assert.equal(lane.get('c'), lane.get('b'));
     assert.equal(laneCount, 2);
   });
 

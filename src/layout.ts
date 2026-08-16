@@ -120,18 +120,25 @@ export function assignLanes(order: Oid[], parentsOf: (oid: Oid) => Oid[]) {
     return lanes.length - 1;
   };
 
+  let used = 0;
   for (const oid of order) {
     let i = lanes.indexOf(oid);
     if (i < 0) i = claim(oid);
     lane.set(oid, i);
+    used = Math.max(used, i + 1);
 
     const parents = parentsOf(oid).filter((p) => inWindow.has(p));
-    // This commit's lane carries on into its first parent, or is released.
-    lanes[i] = parents[0] ?? null;
+    // This commit's lane is free the moment it is drawn; it carries on only if
+    // it has a first parent no other lane is already holding. Reserving a
+    // parent twice would leave the duplicate lane occupied forever — that is
+    // what made the graph creep rightwards on every branch point.
+    lanes[i] = null;
+    if (parents[0] !== undefined && !lanes.includes(parents[0])) lanes[i] = parents[0];
     // A merge fans out: every other parent gets a lane of its own.
     for (const p of parents.slice(1)) if (!lanes.includes(p)) claim(p);
   }
-  return { lane, laneCount: Math.max(1, lanes.length) };
+  // Only lanes something was actually drawn in count towards the width.
+  return { lane, laneCount: Math.max(1, used) };
 }
 
 // ---------------------------------------------------------------------------
