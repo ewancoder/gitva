@@ -11,7 +11,7 @@ import { diffScenes, describe, EMPTY_CHANGE, type Change } from '../src/diff.js'
 import { layout, type Scene, type SceneNode } from '../src/layout.js';
 import { type Snapshot, type View } from '../src/types.js';
 import { renderPanel } from './panel.js';
-import { draw, fit, hitTest, type Camera } from './render.js';
+import { draw, fit, hitTest, snapPositions, type Camera } from './render.js';
 import { Tape } from './tape.js';
 import { theme } from './theme.js';
 
@@ -128,37 +128,19 @@ function glideStep() {
   if (done) glide = null;
 }
 
-/** Nodes that *are* an object; an index chip only names one. */
-const isObject = (n: SceneNode) =>
-  n.oid !== undefined && n.kind !== 'index';
-
 function relayout(animate: boolean, repoChanged: boolean) {
   // Every tree the tape has ever read, not only the ones this state came with:
   // a commit opened now has to draw open on a state recorded before it was.
   const state = tape.world;
   if (!state) return;
-  let next = layout(state, tape.view, pinsAt(state.seq));
+  const next = layout(state, tape.view, pinsAt(state.seq));
   // Losing your last arrow is the lesson — being teleported to the bottom of the
-  // page is not. An object drawn somewhere new because its relations changed —
-  // into the orphanage, or back out of it, or from a gutter chip to a node —
-  // keeps the spot it already had, so what changed is the arrow, and only the
-  // arrow. Keyed by oid, because the same object is a different node id in the
-  // gutter than it is in the object band.
-  if (scene) {
-    const before = new Map<string, SceneNode>();
-    for (const n of scene.nodes) if (isObject(n) && !before.has(n.oid!)) before.set(n.oid!, n);
-    let stuck = false;
-    for (const n of next.nodes) {
-      const was = isObject(n) ? before.get(n.oid!) : undefined;
-      // Same node, same place in its band: rows shifting under it is not a
-      // change of relation, and freezing those would peg the whole graph.
-      if (!was || (was.id === n.id && !!was.stray === !!n.stray)) continue;
-      if ((was.x === n.x && was.y === n.y) || pins.some((p) => p.id === n.id)) continue;
-      pins.push({ seq: 0, id: n.id, x: was.x, y: was.y });
-      stuck = true;
-    }
-    if (stuck) next = layout(state, tape.view, pinsAt(state.seq));
-  }
+  // page is not. An object whose relations changed used to be pinned where it
+  // already was, which froze it there for good: everything else went on
+  // reflowing underneath, and the pile-up was the pins, not the layout. It
+  // travels instead — see `snapPositions`. Dragging is the one move that must
+  // not lag the cursor, so it snaps.
+  if (!animate) snapPositions();
   change = diffScenes(scene, next);
   ghosts = scene ? scene.nodes.filter((n) => change.removed.has(n.id)) : [];
   scene = next;

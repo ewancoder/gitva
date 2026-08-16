@@ -329,6 +329,42 @@ describe('the scene', () => {
     assert.ok(!scene.edges.some((e) => e.from === adrift));
   });
 
+  it('draws a blob only the index holds above the history, not below it', () => {
+    // `git add` is the first thing the tutorial does, and below a page of
+    // history the blob it wrote is off the bottom of the screen.
+    const s = fakeSnapshot({ a: ['b'], b: [] });
+    const blob = oid('added');
+    s.objects[blob] = { oid: blob, type: 'blob', size: 3 };
+    s.stagedOnly = [blob];
+    s.index = [{ path: 'added.txt', oid: blob, mode: '100644', stage: 0 }];
+
+    const scene = layout(s, DEFAULT_VIEW);
+    const node = (o: string) => scene.nodes.find((n) => n.id === o)!;
+    const objects = scene.bands.find((b) => b.key === 'objects')!;
+    assert.equal(node(blob).x, objects.x, 'in the object band, where objects go');
+    assert.equal(node(blob).staged, true);
+    assert.ok(node(blob).y < node(oid('a')).y, 'above the newest commit');
+    const chip = scene.nodes.find((n) => n.kind === 'index')!;
+    assert.ok(chip.y <= node(blob).y, 'and the chip holding it comes up beside it');
+  });
+
+  it('leaves a staged tree below, where its fan-out has room', () => {
+    // Only a gitlink can put a tree in the index's reach, and a tree is a row
+    // of its own — the top of the page is for the loose blobs `git add` writes.
+    const s = fakeSnapshot({ a: [] });
+    const [tree, blob] = ['tstaged', 'bstaged'].map(oid);
+    s.trees[tree] = [{ mode: '100644', name: 'x.txt', oid: blob, type: 'blob' }];
+    s.objects[tree] = { oid: tree, type: 'tree', size: 1 };
+    s.objects[blob] = { oid: blob, type: 'blob', size: 1 };
+    s.stagedOnly = [tree, blob];
+
+    const scene = layout(s, DEFAULT_VIEW);
+    const node = (o: string) => scene.nodes.find((n) => n.id === o)!;
+    assert.ok(node(tree).y > node(oid('a')).y, 'below the history, with the strays');
+    assert.ok(node(blob).x > node(tree).x, 'and its blob still fans out beside it');
+    assert.ok(scene.edges.some((e) => e.from === tree && e.to === blob));
+  });
+
   it('lets a pinned orphan stay where it was drawn, reserving no room below', () => {
     const s = fakeSnapshot({ a: ['b'], b: ['c'], c: ['d'], d: ['e'], e: [] });
     s.objects[oid('lost')] = { oid: oid('lost'), type: 'blob', size: 7 };
@@ -348,6 +384,41 @@ describe('the scene', () => {
     assert.deepEqual([moved.x, moved.y], [999, 888]);
     const other = pinned.nodes.find((n) => n.id === oid('a'))!;
     assert.deepEqual(other, free.nodes.find((n) => n.id === oid('a')));
+  });
+
+  it('never puts two nodes in the same place, however busy the state', () => {
+    // The pile-up this guards against was pins, not layout — but layout is the
+    // only thing that can promise there is somewhere for everything to go.
+    const s = fakeSnapshot({ c: ['b'], b: ['a'], a: [] });
+    const [tree, blob, deep, lost, tlost, added] =
+      ['t', 'bl', 'deep', 'lost', 'tlost', 'added'].map(oid);
+    s.commits[oid('c')].tree = tree;
+    s.trees[tree] = [
+      { mode: '100644', name: 'a.txt', oid: blob, type: 'blob' },
+      { mode: '40000', name: 'lib', oid: deep, type: 'tree' },
+    ];
+    s.trees[deep] = [{ mode: '100644', name: 'b.txt', oid: blob, type: 'blob' }];
+    s.commits[lost] = { ...s.commits[oid('a')], oid: lost, tree: tlost, parents: [] };
+    s.trees[tlost] = [{ mode: '100644', name: 'gone.txt', oid: oid('bgone'), type: 'blob' }];
+    s.unreachable = [lost, tlost, oid('bgone')];
+    s.stagedOnly = [added];
+    s.objects[added] = { oid: added, type: 'blob', size: 1 };
+    s.index = [
+      { path: 'added.txt', oid: added, mode: '100644', stage: 0 },
+      { path: 'a.txt', oid: blob, mode: '100644', stage: 0 },
+    ];
+
+    const scene = layout(s, { ...DEFAULT_VIEW, expanded: [oid('c')] });
+    assert.ok(scene.nodes.length > 12, 'a state worth checking');
+    for (let i = 0; i < scene.nodes.length; i++) {
+      for (let j = i + 1; j < scene.nodes.length; j++) {
+        const a = scene.nodes[i];
+        const b = scene.nodes[j];
+        const hit =
+          a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+        assert.ok(!hit, `${a.kind} ${a.label} sits on top of ${b.kind} ${b.label}`);
+      }
+    }
   });
 
   it('is fast enough on twenty thousand commits', () => {

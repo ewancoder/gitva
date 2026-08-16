@@ -46,12 +46,15 @@ whole repository. Pins and folding stay local to each browser.
   coloured by what kind of pointer each one is. A branch is drawn as what it is: a file with
   a sha in it.
 - **The index**, apart, in its own column, each entry wired to the blob it stages — including
-  the ones no commit names yet, drawn violet: written by `git add`, held by the index alone,
-  and an orphan the moment you unstage them. Conflict stages are dashed.
+  the ones no commit names yet, drawn violet at the top of the page: written by `git add`,
+  held by the index alone, and an orphan the moment you unstage them. Conflict stages are
+  dashed.
 - **Unreachable objects** as ghosts, found by walking out from the roots. A discarded commit
   keeps its tree and its parents, so you see the whole abandoned state sitting there
   waiting for `gc`.
-- **What just changed**, in one accent spent on nothing else.
+- **What just changed**, in one accent spent on nothing else. An object that changes what it
+  belongs to travels to its new place — a blob rising into the commit that just named it, a
+  whole tree falling into the orphans after a reset — so the move is part of what you read.
 - **What is not on screen and why**, always, in the strip under the toolbar.
 
 Click anything to read what that file in `.git` actually does, which command creates it, and

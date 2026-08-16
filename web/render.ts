@@ -58,6 +58,31 @@ function dimmed(id: string, target: number): number {
   return next;
 }
 
+// A node that changes what it belongs to changes where it goes: a blob leaves
+// the staging band for the commit that just named it, a whole tree drops into
+// the orphanage after a reset. It travels there rather than reappearing there,
+// so the move is the thing you read. Layout still decides where every node
+// goes — this only decides how it gets there.
+const drawnAt = new Map<string, { x: number; y: number }>();
+
+/** Forget where everything was, so the next frame draws it where it is now. */
+export function snapPositions() {
+  drawnAt.clear();
+}
+
+function eased(n: SceneNode): SceneNode {
+  const cur = drawnAt.get(n.id);
+  const x = cur ? cur.x + (n.x - cur.x) * easeK : n.x;
+  const y = cur ? cur.y + (n.y - cur.y) * easeK : n.y;
+  if (Math.abs(n.x - x) < 0.5 && Math.abs(n.y - y) < 0.5) {
+    drawnAt.set(n.id, { x: n.x, y: n.y });
+    return n;
+  }
+  drawnAt.set(n.id, { x, y });
+  settling = true;
+  return { ...n, x, y };
+}
+
 /** True while something is still easing, so the caller keeps painting. */
 export function draw(ctx: CanvasRenderingContext2D, scene: Scene, p: Paint): boolean {
   const { camera: cam } = p;
@@ -78,8 +103,9 @@ export function draw(ctx: CanvasRenderingContext2D, scene: Scene, p: Paint): boo
     y1: (p.height - cam.y) / cam.scale,
   };
 
+  if (drawnAt.size > 4000) drawnAt.clear();
   const nodes = new Map<string, SceneNode>();
-  for (const n of scene.nodes) nodes.set(n.id, n);
+  for (const n of scene.nodes) nodes.set(n.id, eased(n));
 
   drawBands(ctx, scene, view, p);
 

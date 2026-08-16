@@ -209,6 +209,7 @@ export function layout(
   const inWindow = new Set(commits);
   const expanded = new Set(view.expanded);
   const unreachable = new Set(snap.unreachable ?? []);
+  const stagedOnly = new Set(snap.stagedOnly ?? []);
 
   const lanesX = M.gutterX + M.gutterW + M.bandGap;
   const lanesW = laneCount * M.laneW;
@@ -246,8 +247,20 @@ export function layout(
     chainAt(snap.head.oid, ['HEAD']);
   }
 
+  // `git add` writes a blob before anything points at it, and that blob is the
+  // first thing the tutorial has to show. Down with the orphans it is off the
+  // bottom of a page of history; up here it is beside the newest commit — where
+  // the index chip holding it already sits, and where the commit that will name
+  // it is about to appear. Blobs only: a staged tree fans out, and fanning out
+  // is what the orphanage below is shaped for, and a blob one of those trees
+  // names belongs to its fan-out rather than up here on its own.
+  const under = new Set([...stagedOnly].flatMap((o) => (snap.trees[o] ?? []).map((e) => e.oid)));
+  const stagedTop = [...stagedOnly].filter(
+    (o) => (snap.objects[o]?.type ?? 'blob') === 'blob' && !under.has(o),
+  );
+
   const rows: { oid: Oid; y: number; h: number }[] = [];
-  let y = 16;
+  let y = 16 + (stagedTop.length > 0 ? stagedTop.length * M.objRowH + M.rowPad : 0);
   let maxColumns = 0;
   for (const oid of commits) {
     const g = graphs.get(oid);
@@ -279,6 +292,23 @@ export function layout(
     at.set(n.id, n);
     return n;
   };
+
+  // --- staged blobs, above everything, in the object band ---
+  stagedTop.forEach((oid, i) => {
+    put({
+      id: oid,
+      kind: 'blob',
+      oid,
+      x: objectsX,
+      y: 16 + i * M.objRowH,
+      w: M.objW,
+      h: M.objH,
+      label: short(oid),
+      sub: 'blob',
+      staged: true,
+      stray: true,
+    });
+  });
 
   // --- commits, as dots in lanes ---
   for (const row of rows) {
@@ -425,7 +455,6 @@ export function layout(
   // A staged object comes down here too, solid rather than a ghost: `git add`
   // wrote a real blob, and the index chip beside it is the only thing holding
   // it. Objects do not vanish because something started pointing at them.
-  const stagedOnly = new Set(snap.stagedOnly ?? []);
   const strays = [...unreachable, ...stagedOnly].filter((oid) => !at.has(oid));
   if (strays.length > 0) {
     const strayed = new Set(strays);
