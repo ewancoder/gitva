@@ -29,7 +29,7 @@ export interface Server {
   close(): Promise<void>;
 }
 
-export async function serve(repoPath: string, port = 0): Promise<Server> {
+export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Promise<Server> {
   const handle = await open(repoPath);
   const caps: Capabilities = await measure(handle.repo, handle.gitDir);
 
@@ -139,7 +139,7 @@ export async function serve(repoPath: string, port = 0): Promise<Server> {
     }
   }
 
-  await new Promise<void>((r) => server.listen(port, '127.0.0.1', r));
+  await new Promise<void>((r) => server.listen(port, host, r));
   const address = server.address();
   const bound = typeof address === 'object' && address ? address.port : port;
 
