@@ -12,7 +12,7 @@
 
 import type { Scene, SceneEdge, SceneNode } from '../src/layout.js';
 import type { Change } from '../src/diff.js';
-import { hueFor, theme } from './theme.js';
+import { chipHue, hueFor, theme } from './theme.js';
 
 export interface Camera {
   x: number;
@@ -342,7 +342,7 @@ function drawNode(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, lit: Se
   } else {
     ctx.fillStyle = theme.raised;
     ctx.fill();
-    ctx.strokeStyle = n.kind === 'head' ? theme.ink : theme.muted;
+    ctx.strokeStyle = chipHue(n.kind, n.id);
     ctx.lineWidth = n.kind === 'head' ? 1.8 : 1.2;
     if (n.conflict) ctx.setLineDash([4, 2]);
     ctx.stroke();
@@ -418,7 +418,7 @@ function label(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, dim: numbe
   if (n.kind === 'ref' || n.kind === 'head' || n.kind === 'more' || n.kind === 'index' || n.kind === 'tag') {
     // A tag chip's label is a sha now, and shas are machine text.
     ctx.font = n.kind === 'tag' ? `11px ${theme.mono}` : `${n.kind === 'head' ? '600 ' : ''}11px ${theme.sans}`;
-    ctx.fillStyle = ghost ? theme.ghost : theme.ink;
+    ctx.fillStyle = ghost ? theme.ghost : n.kind === 'more' || n.kind === 'index' ? theme.ink : chipHue(n.kind, n.id);
     ctx.fillText(clip(ctx, n.label, n.w - 12), n.x + 6, n.y + (n.sub && s >= TIER.kind ? 12 : n.h / 2 + 4));
     if (n.sub && s >= TIER.kind) {
       ctx.font = `10px ${theme.mono}`;

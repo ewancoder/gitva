@@ -31,6 +31,15 @@ export const theme = {
 
   accent: '#ff5ea8',
 
+  // Pointer chips are outlines, not fills, so they can carry their own hues
+  // without competing with the three object hues above: what a chip is
+  // (HEAD, local, remote, tag, tag object) is the thing you scan for first.
+  head: '#b98cff',
+  refLocal: '#4fd1c5',
+  refRemote: '#f08c5a',
+  refTag: '#e0c74f',
+  tagObject: '#8fb0ff',
+
   ghost: '#6b7488',
 
   sans: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
@@ -45,3 +54,17 @@ export type Theme = typeof theme;
 
 export const hueFor = (kind: string): string =>
   kind === 'commit' ? theme.commit : kind === 'tree' ? theme.tree : kind === 'blob' ? theme.blob : theme.ink;
+
+/** Chip hue by what the pointer is. Ids are `ref:<full ref name>`. */
+export const chipHue = (kind: string, id: string): string =>
+  kind === 'head'
+    ? theme.head
+    : kind === 'tag'
+      ? theme.tagObject
+      : kind !== 'ref'
+        ? theme.muted
+        : id.startsWith('ref:refs/remotes/')
+          ? theme.refRemote
+          : id.startsWith('ref:refs/tags/')
+            ? theme.refTag
+            : theme.refLocal;
