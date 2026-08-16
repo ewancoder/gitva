@@ -233,6 +233,84 @@ describe('the scene', () => {
     assert.equal(lost.unreachable, true);
   });
 
+  it('keeps the arrows between objects that were orphaned together', () => {
+    // A discarded commit -> its tree -> its blob, all lost at the same moment,
+    // plus one still-reachable blob the lost tree also names.
+    const s = fakeSnapshot({ a: [] });
+    const [lost, tree, blob, kept] = ['lost', 'tlost', 'blost', 'kept'].map(oid);
+    s.commits[lost] = { ...s.commits[oid('a')], oid: lost, tree, parents: [] };
+    s.trees[tree] = [
+      { mode: '100644', name: 'gone.txt', oid: blob, type: 'blob' },
+      { mode: '100644', name: 'here.txt', oid: kept, type: 'blob' },
+    ];
+    for (const [o, type] of [[lost, 'commit'], [tree, 'tree'], [blob, 'blob'], [kept, 'blob']] as const)
+      s.objects[o] = { oid: o, type, size: 1 };
+    s.unreachable = [lost, tree, blob];
+
+    const scene = layout(s, DEFAULT_VIEW);
+    const between = scene.edges.filter((e) => e.from === lost || e.from === tree);
+    assert.deepEqual(
+      between.map((e) => [e.from, e.to, e.label]),
+      [
+        [lost, tree, undefined],
+        [tree, blob, 'gone.txt'],
+      ],
+      'the orphaned set keeps its own links, and drops the one out to a live blob',
+    );
+    assert.ok(!scene.nodes.some((n) => n.id === kept), 'the live blob is not dragged down here');
+
+    // Drawn in the bands everything else uses: the ghost commit under the live
+    // ones, its tree and blob fanning out to the right in the object band.
+    const node = (o: string) => scene.nodes.find((n) => n.id === o)!;
+    const live = node(oid('a'));
+    assert.equal(node(lost).x, live.x, 'the orphan is in the commit band');
+    assert.ok(node(lost).y > live.y, 'below the live history');
+    assert.ok(live.x < node(tree).x && node(tree).x < node(blob).x);
+    assert.deepEqual(node(tree).y, node(lost).y, 'the tree sits on its commit row');
+  });
+
+  it('dangles an orphan with no orphaned parent below, out of the commit band', () => {
+    const s = fakeSnapshot({ a: [] });
+    const [tree, blob] = ['tlost', 'blost'].map(oid);
+    s.trees[tree] = [{ mode: '100644', name: 'gone.txt', oid: blob, type: 'blob' }];
+    s.objects[tree] = { oid: tree, type: 'tree', size: 1 };
+    s.objects[blob] = { oid: blob, type: 'blob', size: 1 };
+    s.unreachable = [tree, blob];
+
+    const scene = layout(s, DEFAULT_VIEW);
+    const node = (o: string) => scene.nodes.find((n) => n.id === o)!;
+    const commits = scene.bands.find((b) => b.key === 'commits')!;
+    const objects = scene.bands.find((b) => b.key === 'objects')!;
+    assert.equal(node(tree).x, objects.x, 'the rootless tree starts the object band');
+    assert.ok(node(tree).x >= commits.x + commits.w, 'and never where the commits are');
+    assert.ok(node(blob).x > node(tree).x);
+    assert.ok(node(tree).y > node(oid('a')).y);
+  });
+
+  it('puts an orphaned tag in the pointer gutter, beside what it still names', () => {
+    const s = fakeSnapshot({ a: [] });
+    const [lost, tagged, adrift] = ['lost', 'tagged', 'adrift'].map(oid);
+    s.commits[lost] = { ...s.commits[oid('a')], oid: lost, tree: oid('none'), parents: [] };
+    const tag = (o: string, target: string) => ({
+      oid: o, target, targetType: 'commit' as const, name: 'v1', tagger: 'A <a@b>', message: '',
+    });
+    s.tags[tagged] = tag(tagged, lost);
+    s.tags[adrift] = tag(adrift, oid('a')); // still-reachable target: link dropped
+    for (const o of [lost, tagged, adrift]) s.objects[o] = { oid: o, type: o === lost ? 'commit' : 'tag', size: 1 };
+    s.unreachable = [lost, tagged, adrift];
+
+    const scene = layout(s, DEFAULT_VIEW);
+    const node = (o: string) => scene.nodes.find((n) => n.id === o)!;
+    const gutter = scene.bands.find((b) => b.key === 'pointers')!;
+    assert.equal(node(tagged).kind, 'tag');
+    assert.ok(node(tagged).x >= gutter.x && node(tagged).x < gutter.x + gutter.w);
+    assert.equal(node(tagged).y, node(lost).y);
+    assert.ok(scene.edges.some((e) => e.from === tagged && e.to === lost && e.kind === 'pointer'));
+    // Nothing orphaned left to point at, so it joins the danglers instead.
+    assert.ok(node(adrift).x >= scene.bands.find((b) => b.key === 'objects')!.x);
+    assert.ok(!scene.edges.some((e) => e.from === adrift));
+  });
+
   it('lets a pinned orphan stay where it was drawn, reserving no room below', () => {
     const s = fakeSnapshot({ a: ['b'], b: ['c'], c: ['d'], d: ['e'], e: [] });
     s.objects[oid('lost')] = { oid: oid('lost'), type: 'blob', size: 7 };

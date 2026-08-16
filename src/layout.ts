@@ -11,7 +11,7 @@
  * here: generality bought nothing and cost slow, jumpy and generic-looking.
  */
 
-import type { Oid, Snapshot, View } from './types.js';
+import type { Oid, Snapshot, TreeEntry, View } from './types.js';
 
 export type NodeKind =
   | 'commit'
@@ -94,6 +94,9 @@ export const M = {
 };
 
 const short = (oid: Oid) => oid.slice(0, 7);
+/** The name is in the tree, never in the blob — so the arrow carries it. */
+const entryLabel = (e: { name: string; mode: string }) =>
+  `${e.name}${e.mode === '100755' ? ' +x' : e.mode === '120000' ? ' ->' : ''}`;
 const refLabel = (name: string) =>
   name.replace(/^refs\/heads\//, '').replace(/^refs\/tags\//, 'tag: ').replace(/^refs\//, '');
 
@@ -171,11 +174,7 @@ export function objectGraph(root: Oid, trees: Record<Oid, { name: string; oid: O
     const t = queue.shift()!;
     const d = depth.get(t)!;
     for (const e of trees[t] ?? []) {
-      edges.set(`${t}>${e.oid}:${e.name}`, {
-        from: t,
-        to: e.oid,
-        label: `${e.name}${e.mode === '100755' ? ' +x' : e.mode === '120000' ? ' ->' : ''}`,
-      });
+      edges.set(`${t}>${e.oid}:${e.name}`, { from: t, to: e.oid, label: entryLabel(e) });
       if (!depth.has(e.oid)) order.push(e.oid);
       if ((depth.get(e.oid) ?? -1) < d + 1) {
         depth.set(e.oid, d + 1);
@@ -261,8 +260,8 @@ export function layout(
     y += h;
   }
 
-  const objectsW = Math.max(maxColumns, 1) * M.objColW;
-  const indexX = objectsX + objectsW + M.bandGap;
+  // Widened below if the orphans reach further right than any open commit does.
+  let objectsW = Math.max(maxColumns, 1) * M.objColW;
 
   const nodes: SceneNode[] = [];
   const edges: SceneEdge[] = [];
@@ -389,33 +388,137 @@ export function layout(
   }
 
   // --- unreachable objects nothing on screen points at ---
+  //
+  // Orphaned together, drawn together, and drawn in the bands everything else
+  // uses: a discarded commit carries on down the commit band as a ghost, its
+  // tree fans out to the right of it exactly as an open commit's does, and what
+  // no orphaned commit or tree names any more hangs below, from the object
+  // band's first column. Losing its last referrer does not make a commit forget
+  // its own tree — that is how you see a whole discarded state sitting there
+  // intact, waiting for gc. Links out to objects that are still reachable are
+  // dropped: they would cross the picture to say what the ghost already says.
   const strays = [...unreachable].filter((oid) => !at.has(oid));
   if (strays.length > 0) {
-    const perRow = Math.max(1, Math.floor(objectsW / M.objColW));
-    const top = y + 24;
+    const strayed = new Set(strays);
+    // The orphaned set's own subgraph, cut once here: entries pointing back
+    // into reachable territory are gone, and everything below follows what is
+    // left, through the same objectGraph the live commits go through.
+    const strayTrees: Record<Oid, TreeEntry[]> = {};
+    for (const oid of strays) {
+      if (snap.trees[oid]) strayTrees[oid] = snap.trees[oid].filter((e) => strayed.has(e.oid));
+    }
+
+    let cursor = y + 24;
     // A pinned stray stays where it was drawn, so it reserves no room down here.
     let bottom = y;
-    strays.forEach((oid, i) => {
-      const type = snap.objects[oid]?.type ?? 'blob';
+    let strayCols = 0;
+
+    /** One root's objects, in columns to the right of `top`. Returns its height. */
+    const objectRow = (top: number, g: ObjectGraph, from?: string) => {
+      g.columns.forEach((col, d) => {
+        col.forEach((oid, i) => {
+          if (at.has(oid)) return;
+          const type = snap.objects[oid]?.type ?? (strayTrees[oid] ? 'tree' : 'blob');
+          const n = put({
+            id: oid,
+            kind: type === 'tree' ? 'tree' : type === 'commit' ? 'submodule' : 'blob',
+            oid,
+            x: objectsX + d * M.objColW,
+            y: top + i * M.objRowH,
+            w: M.objW,
+            h: M.objH,
+            label: short(oid),
+            sub: type,
+            unreachable: true,
+            stray: true,
+            origin: d === 0 ? from : undefined,
+          });
+          bottom = Math.max(bottom, n.y + n.h);
+        });
+      });
+      for (const e of g.edges) {
+        edges.push({ id: `e:${e.from}:${e.to}:${e.label}`, from: e.from, to: e.to, kind: 'entry', label: e.label });
+      }
+      strayCols = Math.max(strayCols, g.columns.length);
+      return Math.max(M.rowH, Math.max(...g.columns.map((c) => c.length), 1) * M.objRowH + M.rowPad);
+    };
+
+    // Orphaned commits carry on down the commit band, in the first lane.
+    // ponytail: newest first by date, not topologically — a skewed clock could
+    // draw a parent above its child. rev-list does not reach down here, and a
+    // second lane sweep to fix an arrow direction is not worth the width.
+    const strayCommits = strays
+      .filter((oid) => snap.commits[oid])
+      .sort((a, b) => snap.commits[b].authorDate - snap.commits[a].authorDate || a.localeCompare(b));
+    for (const oid of strayCommits) {
+      const c = snap.commits[oid];
       const n = put({
         id: oid,
-        kind: type === 'tree' ? 'tree' : type === 'commit' ? 'commit' : type === 'tag' ? 'tag' : 'blob',
+        kind: 'commit',
         oid,
-        x: objectsX + (i % perRow) * M.objColW,
-        y: top + Math.floor(i / perRow) * M.objRowH,
-        w: M.objW,
-        h: M.objH,
+        x: lanesX,
+        y: cursor + M.rowPad,
+        w: M.commitW,
+        h: M.commitH,
         label: short(oid),
-        sub: type,
         unreachable: true,
         stray: true,
       });
       bottom = Math.max(bottom, n.y + n.h);
-    });
+      let h = M.rowH;
+      if (strayed.has(c.tree)) {
+        edges.push({ id: `t:${oid}`, from: oid, to: c.tree, kind: 'tree' });
+        h = objectRow(cursor + M.rowPad, objectGraph(c.tree, strayTrees), oid);
+      }
+      // One lane, so a parent arrow is the same straight drop it is above.
+      for (const p of c.parents) {
+        if (strayed.has(p)) edges.push({ id: `p:${oid}:${p}`, from: oid, to: p, kind: 'parent' });
+      }
+      rows.push({ oid, y: cursor, h });
+      cursor += h;
+    }
+
+    // Trees and blobs with no orphaned parent left: they dangle, one root per
+    // row, never in the commit band — only commits live over there.
+    for (const oid of strays) {
+      if (at.has(oid) || snap.tags[oid]) continue;
+      cursor += objectRow(cursor, objectGraph(oid, strayTrees));
+    }
+
+    // A tag is a pointer, so it goes in the pointer gutter beside the thing it
+    // names, exactly as a live one does above. Nothing left to name, and it
+    // joins the danglers.
+    const stacked = new Map<Oid, number>();
+    for (const oid of strays) {
+      if (at.has(oid)) continue; // by now, only tags are left
+      const t = snap.tags[oid];
+      const target = strayed.has(t.target) ? at.get(t.target) : undefined;
+      const i = stacked.get(t.target) ?? 0;
+      stacked.set(t.target, i + 1);
+      const n = put({
+        id: oid,
+        kind: 'tag',
+        oid,
+        x: target ? M.gutterX + 2 * M.chipPitch : objectsX,
+        y: target ? target.y + i * (M.chipH + 6) : cursor,
+        w: target ? M.chipW : M.objW,
+        h: target ? M.chipH : M.objH,
+        label: short(oid),
+        sub: target ? undefined : 'tag',
+        unreachable: true,
+        stray: true,
+      });
+      if (target) edges.push({ id: `ptr:${oid}:${t.target}`, from: oid, to: t.target, kind: 'pointer' });
+      else cursor += M.objRowH;
+      bottom = Math.max(bottom, n.y + n.h);
+    }
+
+    objectsW = Math.max(objectsW, strayCols * M.objColW);
     y = Math.max(y, bottom + 16);
   }
 
   // --- the index, apart, at the far right ---
+  const indexX = objectsX + objectsW + M.bandGap;
   if (view.showIndex) {
     const placed = snap.index
       .map((e) => ({ e, blob: at.get(e.oid) }))
