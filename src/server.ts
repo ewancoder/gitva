@@ -1,0 +1,178 @@
+/**
+ * The server: asks git the cheap question on a timer, does real work only when
+ * the answer moves, and pushes whole states down a server-sent-events stream.
+ *
+ * No delta protocol. Bounding the view is what makes whole states permanently
+ * affordable, and whole states are what make the diffing and the replay simple.
+ */
+
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { extname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { changeSignal, measure, open, readBody, snapshot } from './git.js';
+import type { Capabilities, Snapshot, View } from './types.js';
+import { DEFAULT_VIEW } from './types.js';
+
+const ROOT = fileURLToPath(new URL('../../', import.meta.url));
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.map': 'application/json',
+  '.css': 'text/css; charset=utf-8',
+};
+
+const POLL_MS = 400;
+
+export interface Server {
+  port: number;
+  close(): Promise<void>;
+}
+
+export async function serve(repoPath: string, port = 0): Promise<Server> {
+  const handle = await open(repoPath);
+  const caps: Capabilities = await measure(handle.repo, handle.gitDir);
+
+  let view: View = { ...DEFAULT_VIEW };
+  let seq = 0;
+  let last: Snapshot | null = null;
+  let signal = '';
+  let building = false;
+  const clients = new Set<ServerResponse>();
+
+  async function build(force: boolean) {
+    if (building) return;
+    building = true;
+    try {
+      const s = await snapshot(handle, view, caps, ++seq);
+      last = s;
+      const frame = `event: snapshot\ndata: ${JSON.stringify(s)}\n\n`;
+      for (const c of clients) c.write(frame);
+    } catch (err) {
+      const frame = `event: trouble\ndata: ${JSON.stringify({ message: String(err) })}\n\n`;
+      for (const c of clients) c.write(frame);
+      if (force) throw err;
+    } finally {
+      building = false;
+    }
+  }
+
+  // The overwhelmingly common case is "nothing happened", and it costs one
+  // for-each-ref, one count-objects and one stat.
+  const timer = setInterval(async () => {
+    if (clients.size === 0) return;
+    try {
+      const next = await changeSignal(handle.repo, handle.gitDir);
+      if (next === signal) return;
+      signal = next;
+      await build(false);
+    } catch {
+      /* a repo mid-rewrite: try again on the next tick */
+    }
+  }, POLL_MS);
+  timer.unref?.();
+
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    try {
+      if (url.pathname === '/events') return sse(req, res);
+      if (url.pathname === '/view' && req.method === 'POST') return await setView(req, res);
+      if (url.pathname === '/object') return await object(url, res);
+      return await statik(url.pathname, res);
+    } catch (err) {
+      res.writeHead(500, { 'content-type': 'text/plain' }).end(String(err));
+    }
+  });
+
+  function sse(req: IncomingMessage, res: ServerResponse) {
+    res.writeHead(200, {
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache',
+      connection: 'keep-alive',
+    });
+    res.write(': hello\n\n');
+    clients.add(res);
+    req.on('close', () => clients.delete(res));
+    if (last) res.write(`event: snapshot\ndata: ${JSON.stringify(last)}\n\n`);
+    else void build(false);
+  }
+
+  async function setView(req: IncomingMessage, res: ServerResponse) {
+    const body = await text(req);
+    view = sanitise(JSON.parse(body));
+    res.writeHead(204).end();
+    await build(false);
+  }
+
+  async function object(url: URL, res: ServerResponse) {
+    const oid = url.searchParams.get('oid') ?? '';
+    if (!/^[0-9a-f]{4,64}$/.test(oid)) return res.writeHead(400).end('bad oid');
+    const body = await readBody(handle, oid);
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(body));
+  }
+
+  async function statik(pathname: string, res: ServerResponse) {
+    const file =
+      pathname === '/' || pathname === '/index.html'
+        ? 'web/index.html'
+        : /^\/(web|src)\/[\w.-]+$/.test(pathname)
+          ? `dist${pathname}`
+          : null;
+    if (!file) return res.writeHead(404).end('not found');
+    try {
+      const data = await readFile(ROOT + file);
+      res
+        .writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' })
+        .end(data);
+    } catch {
+      res.writeHead(404).end('not found');
+    }
+  }
+
+  await new Promise<void>((r) => server.listen(port, '127.0.0.1', r));
+  const address = server.address();
+  const bound = typeof address === 'object' && address ? address.port : port;
+
+  return {
+    port: bound,
+    async close() {
+      clearInterval(timer);
+      for (const c of clients) c.end();
+      await new Promise<void>((r) => server.close(() => r()));
+    },
+  };
+}
+
+function text(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (c) => {
+      body += c;
+      if (body.length > 1e6) reject(new Error('view too large'));
+    });
+    req.on('end', () => resolve(body));
+    req.on('error', reject);
+  });
+}
+
+/** The view arrives from the browser, so it is checked before it reaches git. */
+export function sanitise(raw: unknown): View {
+  const v = (raw ?? {}) as Partial<View>;
+  const q = v.question;
+  const question: View['question'] =
+    q?.kind === 'refs'
+      ? { kind: 'refs', refs: (q.refs ?? []).filter((r) => /^[\w./@^~-]+$/.test(r)).slice(0, 200) }
+      : q?.kind === 'search'
+        ? {
+            kind: 'search',
+            text: String(q.text ?? '').slice(0, 200),
+            in: (['message', 'author', 'path', 'content'] as const).includes(q.in) ? q.in : 'message',
+          }
+        : { kind: 'all' };
+  return {
+    question,
+    limit: Math.min(Math.max(Math.trunc(Number(v.limit) || DEFAULT_VIEW.limit), 1), 20_000),
+    expanded: (v.expanded ?? []).filter((o) => /^[0-9a-f]{4,64}$/.test(o)).slice(0, 5_000),
+    showIndex: v.showIndex !== false,
+  };
+}

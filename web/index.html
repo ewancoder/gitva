@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>gitva</title>
+    <style>
+      /*
+        One spacing unit, everything a multiple of it; one corner radius.
+        Three surface levels — ground, panel, raised — rather than borders
+        doing work a background step should do. Monospace is for machine text
+        only: shas, paths, modes, object contents.
+      */
+      :root {
+        --u: 8px;
+        --r: 4px;
+        --ground: #0d0f13;
+        --panel: #171a21;
+        --raised: #20242e;
+        --line: #2c313d;
+        --ink: #dfe4ee;
+        --muted: #8d96a8;
+        --faint: #59616f;
+        --commit: #e8a33c;
+        --tree: #54bf85;
+        --blob: #5aa7ea;
+        --accent: #ff5ea8;
+        --sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+        --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        background: var(--ground);
+        color: var(--ink);
+        font: 13px/1.5 var(--sans);
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        overflow: hidden;
+      }
+      kbd, code, .mono { font-family: var(--mono); }
+
+      /* Chrome: grouped, separated controls — what repo, what you're looking
+         at, what state it's in. Not a flat run of unrelated buttons. */
+      header {
+        display: flex; align-items: center; gap: calc(var(--u) * 2);
+        padding: var(--u) calc(var(--u) * 1.5);
+        background: var(--panel);
+        border-bottom: 1px solid var(--line);
+      }
+      .group { display: flex; align-items: center; gap: var(--u); }
+      .group + .group { padding-left: calc(var(--u) * 2); border-left: 1px solid var(--line); }
+      .group.right { margin-left: auto; }
+      .repo-name { font-weight: 600; }
+      .repo-dir { color: var(--faint); font-family: var(--mono); font-size: 11px; }
+
+      button, select, input {
+        font: inherit; color: var(--ink);
+        background: var(--raised);
+        border: 1px solid var(--line); border-radius: var(--r);
+        padding: 3px var(--u);
+      }
+      button { cursor: pointer; }
+      button:hover, button[aria-pressed='true'] { background: #2b3140; }
+      button[aria-pressed='true'] { border-color: var(--muted); }
+      input[type='range'] { padding: 0; background: none; border: none; width: 140px; }
+
+      .live { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tree); }
+      .dot.off { background: var(--accent); }
+      .dot.paused { background: var(--commit); }
+      .tally { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+      .change { color: var(--accent); font-family: var(--mono); font-size: 11px; min-width: 8ch; }
+
+      #notes {
+        padding: 6px calc(var(--u) * 1.5);
+        background: var(--ground);
+        border-bottom: 1px solid var(--line);
+        color: var(--muted); font-size: 12px;
+        display: flex; flex-wrap: wrap; gap: calc(var(--u) * 2);
+      }
+      #notes li { list-style: none; }
+      #notes ul { display: contents; margin: 0; padding: 0; }
+
+      main { display: grid; grid-template-columns: 1fr auto; min-height: 0; }
+      #graph { display: block; width: 100%; height: 100%; cursor: grab; }
+      #graph.dragging { cursor: grabbing; }
+
+      /* The details panel is where the teaching lives, so it earns width. */
+      aside {
+        width: 380px; background: var(--panel); border-left: 1px solid var(--line);
+        overflow-y: auto; padding: calc(var(--u) * 2);
+        display: flex; flex-direction: column; gap: calc(var(--u) * 1.5);
+      }
+      aside h2 { margin: 0; font-size: 15px; }
+      aside .what { margin: 0; color: var(--muted); }
+      aside .made {
+        background: var(--raised); border-radius: var(--r);
+        padding: var(--u); font-family: var(--mono); font-size: 12px; color: var(--tree);
+        overflow-x: auto;
+      }
+      aside dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px var(--u); margin: 0; }
+      aside dt { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+      aside dd { margin: 0; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
+      aside pre {
+        background: var(--raised); border-radius: var(--r); padding: var(--u);
+        margin: 0; max-height: 40vh; overflow: auto; font-size: 12px;
+      }
+      aside .empty { color: var(--faint); }
+
+      dialog {
+        background: var(--panel); color: var(--ink);
+        border: 1px solid var(--line); border-radius: var(--r);
+        padding: calc(var(--u) * 2); max-width: 560px;
+      }
+      dialog::backdrop { background: rgba(0, 0, 0, .6); }
+      .legend { display: grid; grid-template-columns: 20px 1fr; gap: var(--u); align-items: center; }
+      .swatch { width: 16px; height: 16px; }
+      .swatch.commit { border-radius: 50%; background: var(--commit); }
+      .swatch.tree { background: var(--tree); clip-path: polygon(30% 0, 100% 0, 100% 100%, 30% 100%, 0 70%, 0 30%); }
+      .swatch.blob { border-radius: 8px; background: var(--blob); }
+      .swatch.ref { border: 1px solid var(--muted); border-radius: var(--r); }
+      .swatch.tag { border: 1px solid var(--muted); clip-path: polygon(0 50%, 35% 0, 100% 0, 100% 100%, 35% 100%); }
+      .swatch.index { border: 1px dashed var(--muted); border-radius: var(--r); }
+      .swatch.ghost { border: 1px dashed var(--faint); border-radius: 8px; }
+      .swatch.changed { box-shadow: 0 0 0 2px var(--accent); border-radius: var(--r); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="group">
+        <span class="repo-name" id="repo-name">…</span>
+        <span class="repo-dir" id="repo-dir"></span>
+      </div>
+
+      <div class="group">
+        <select id="question" title="What this view is asking">
+          <option value="all">everything</option>
+          <option value="branches">branches…</option>
+          <option value="message">search: message</option>
+          <option value="author">search: author</option>
+          <option value="path">search: path</option>
+          <option value="content">search: content</option>
+        </select>
+        <input id="search" placeholder="search" size="14" hidden />
+        <select id="branches" multiple size="1" hidden></select>
+        <button id="unfold" title="Open every commit (right-click one commit for just it)">unfold all</button>
+        <button id="fold" title="Fold everything back to the commit DAG">fold all</button>
+        <button id="toggle-index" aria-pressed="true" title="The index is the sandbox beside the object graph">index</button>
+      </div>
+
+      <div class="group right">
+        <span class="live"><span class="dot" id="live-dot"></span><span id="live-text">connecting</span></span>
+        <span class="tally" id="tally"></span>
+        <span class="change" id="change"></span>
+      </div>
+
+      <div class="group">
+        <button id="step-back" title="Previous state">◀</button>
+        <button id="play" aria-pressed="false" title="Pause following the tail">pause</button>
+        <button id="step-fwd" title="Next state">▶</button>
+        <input type="range" id="scrub" min="0" max="0" value="0" />
+        <span class="tally" id="tape-pos"></span>
+      </div>
+
+      <div class="group">
+        <button id="legend-btn">legend</button>
+      </div>
+    </header>
+
+    <div id="notes"><ul id="notes-list"></ul></div>
+
+    <main>
+      <canvas id="graph"></canvas>
+      <aside id="panel"><p class="empty">Click anything to find out what it is.</p></aside>
+    </main>
+
+    <dialog id="legend">
+      <h2>What the shapes mean</h2>
+      <p style="color: var(--muted)">
+        Identity is never colour alone: shape first, then the label, then hue. Three hues carry the
+        three things you look at constantly; everything else is an outline shape in plain ink.
+      </p>
+      <div class="legend">
+        <span class="swatch commit"></span><span><b>commit</b> — a tree, some parents, a message</span>
+        <span class="swatch tree"></span><span><b>tree</b> — one directory: names, modes, shas</span>
+        <span class="swatch blob"></span><span><b>blob</b> — file contents, with no name of its own</span>
+        <span class="swatch ref"></span><span><b>ref / HEAD</b> — a file with a sha in it</span>
+        <span class="swatch tag"></span><span><b>annotated tag</b> — a name and a message pointing at an object</span>
+        <span class="swatch index"></span><span><b>index entry</b> — a staged path; dashed border means a conflict stage</span>
+        <span class="swatch ghost"></span><span><b>unreachable</b> — a state, not a kind. Still there; still rescuable</span>
+        <span class="swatch changed"></span><span><b>just changed</b> — the one reserved accent, spent on nothing else</span>
+      </div>
+      <h2 style="margin-top: 16px">Gestures</h2>
+      <div class="legend" style="grid-template-columns: 140px 1fr">
+        <code>wheel</code><span>pan &middot; hold <kbd>ctrl</kbd> to zoom</span>
+        <code>drag background</code><span>pan</span>
+        <code>drag a node</code><span>pin it where you put it</span>
+        <code>click</code><span>select, and read what it is</span>
+        <code>right-click commit</code><span>fold or open what it contains</span>
+        <code>scroll past bottom</code><span>ask for more history</span>
+        <code>f / [ / ] / space</code><span>fit &middot; step back &middot; step forward &middot; pause</span>
+      </div>
+      <h2 style="margin-top: 16px">Preferences</h2>
+      <p style="color: var(--muted)">
+        These are about how you like to work, not about this session, so they survive a reload.
+      </p>
+      <label><input type="checkbox" id="centre-on-click" /> clicking a node centres the view on it</label>
+      <p><button onclick="this.closest('dialog').close()">close</button></p>
+    </dialog>
+
+    <script type="module" src="/web/app.js"></script>
+  </body>
+</html>
