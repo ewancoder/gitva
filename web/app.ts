@@ -386,6 +386,12 @@ $('fold').addEventListener('click', () => {
   view = { ...view, expanded: [] };
   pushView();
 });
+// Dropping every pin, at every moment of the tape: a pin is a thing you put
+// there by hand, so taking them all back is one gesture, not a page reload.
+$('unpin').addEventListener('click', () => {
+  pins.length = 0;
+  relayout(true, false);
+});
 $('legend-btn').addEventListener('click', () => $<HTMLDialogElement>('legend').showModal());
 const centre = $<HTMLInputElement>('centre-on-click');
 centre.checked = prefs.centreOnClick;
@@ -515,7 +521,16 @@ canvas.addEventListener('pointerup', (e) => {
 // place you were reading.
 canvas.addEventListener('dblclick', (e) => {
   const w = world(e);
-  if (!scene || hitTest(scene, w.x, w.y)) return;
+  const hit = scene ? hitTest(scene, w.x, w.y) : null;
+  // Double-clicking a node is the undo of dragging it: the pin comes out and
+  // the layout takes it back.
+  if (hit) {
+    const n = pins.length;
+    for (let i = pins.length - 1; i >= 0; i--) if (pins[i].id === hit.id) pins.splice(i, 1);
+    if (n !== pins.length) relayout(true, false);
+    return;
+  }
+  if (!scene) return;
   const { scale } = fit(scene, canvas.clientWidth);
   camera = { scale, ...bounded({ x: 20, y: canvas.clientHeight / 2 - w.y * scale }, scale) };
   glide = null;

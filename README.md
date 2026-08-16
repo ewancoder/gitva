@@ -59,16 +59,18 @@ the one line inside a ref.
 |---|---|
 | wheel | pan; hold <kbd>ctrl</kbd> to zoom |
 | drag background | pan |
-| drag a node | pin it where you put it |
+| drag a node | pin it where you put it (*unpin all* in the toolbar drops every pin) |
 | click | select: read what it is, and light the whole path through it |
 | hover | light what it connects to |
 | right-click a commit | fold or unfold what it contains (a commit git just made arrives unfolded) |
+| double-click a node | unpin it, wherever the layout wants it |
 | double-click background | fit to width again, centred on the point you clicked |
 | click *load more history* | load another thousand commits (*load all* in the toolbar loads the lot) |
 | <kbd>f</kbd> <kbd>[</kbd> <kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |
 
 In the toolbar: ask for everything, for chosen branches, or search by message, author, path or
-content; load the whole history; fold or unfold every commit at once; hide the index. Every one of those is the same
+content; load the whole history; fold or unfold every commit at once; drop every pin; hide the
+index. Every one of those is the same
 mechanism — a change to the *view* the browser holds, which is why none of them care how big
 the repository is.
 
