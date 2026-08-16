@@ -24,6 +24,7 @@
         --commit: #e8a33c;
         --tree: #54bf85;
         --blob: #5aa7ea;
+        --staged: #8f86e6;
         --accent: #ff5ea8;
         --sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
         --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
@@ -119,6 +120,7 @@
       .swatch.commit { border-radius: 50%; background: var(--commit); }
       .swatch.tree { background: var(--tree); clip-path: polygon(30% 0, 100% 0, 100% 100%, 30% 100%, 0 70%, 0 30%); }
       .swatch.blob { border-radius: 8px; background: var(--blob); }
+      .swatch.staged { border-radius: 8px; background: var(--staged); }
       .swatch.ref { border: 1px solid var(--muted); border-radius: var(--r); }
       .swatch.tag { border: 1px solid var(--muted); clip-path: polygon(0 50%, 35% 0, 100% 0, 100% 100%, 35% 100%); }
       .swatch.index { border: 1px dashed var(--muted); border-radius: var(--r); }
@@ -186,6 +188,7 @@
         <span class="swatch commit"></span><span><b>commit</b> — a tree, some parents, a message</span>
         <span class="swatch tree"></span><span><b>tree</b> — one directory: names, modes, shas</span>
         <span class="swatch blob"></span><span><b>blob</b> — file contents, with no name of its own</span>
+        <span class="swatch staged"></span><span><b>staged blob</b> — written by <code>git add</code>, held only by the index: no commit names it, and nothing collects it while the entry lasts</span>
         <span class="swatch ref"></span><span><b>ref / HEAD</b> — a file with a sha in it</span>
         <span class="swatch tag"></span><span><b>annotated tag</b> — a name and a message pointing at an object</span>
         <span class="swatch index"></span><span><b>index entry</b> — a staged path; dashed border means a conflict stage</span>

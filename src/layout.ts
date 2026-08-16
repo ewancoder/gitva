@@ -40,6 +40,9 @@ export interface SceneNode {
   conflict?: boolean;
   /** Put down here because nothing on screen points at it, not beside anything. */
   stray?: boolean;
+  /** Only the index holds this: written, not committed, and safe from gc while
+   *  the entry beside it lasts. A state, like `unreachable`, not a kind. */
+  staged?: boolean;
   /** Where this node came from, so it can grow out of it rather than fly in. */
   origin?: string;
 }
@@ -408,7 +411,7 @@ export function layout(
     }
   }
 
-  // --- unreachable objects nothing on screen points at ---
+  // --- objects nothing on screen points at ---
   //
   // Orphaned together, drawn together, and drawn in the bands everything else
   // uses: a discarded commit carries on down the commit band as a ghost, its
@@ -418,7 +421,12 @@ export function layout(
   // its own tree — that is how you see a whole discarded state sitting there
   // intact, waiting for gc. Links out to objects that are still reachable are
   // dropped: they would cross the picture to say what the ghost already says.
-  const strays = [...unreachable].filter((oid) => !at.has(oid));
+  //
+  // A staged object comes down here too, solid rather than a ghost: `git add`
+  // wrote a real blob, and the index chip beside it is the only thing holding
+  // it. Objects do not vanish because something started pointing at them.
+  const stagedOnly = new Set(snap.stagedOnly ?? []);
+  const strays = [...unreachable, ...stagedOnly].filter((oid) => !at.has(oid));
   if (strays.length > 0) {
     const strayed = new Set(strays);
     // The orphaned set's own subgraph, cut once here: entries pointing back
@@ -450,7 +458,8 @@ export function layout(
             h: M.objH,
             label: short(oid),
             sub: type,
-            unreachable: true,
+            unreachable: unreachable.has(oid),
+            staged: stagedOnly.has(oid),
             stray: true,
             origin: d === 0 ? from : undefined,
           });
@@ -482,7 +491,7 @@ export function layout(
         w: M.commitW,
         h: M.commitH,
         label: short(oid),
-        unreachable: true,
+        unreachable: unreachable.has(oid),
         stray: true,
       });
       bottom = Math.max(bottom, n.y + n.h);

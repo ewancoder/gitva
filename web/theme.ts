@@ -28,6 +28,11 @@ export const theme = {
   commit: '#e8a33c',
   tree: '#54bf85',
   blob: '#5aa7ea',
+  // Not a fourth hue: the blob blue tilted towards violet, for an object only
+  // the index holds. Same family, so it still reads as a blob at a glance —
+  // staged is a state, like unreachable, and states never get a hue of their
+  // own. Far from the accent, which stays reserved for "this just changed".
+  staged: '#8f86e6',
 
   accent: '#ff5ea8',
 

@@ -40,7 +40,9 @@ browser opens itself. Node ≥20. No runtime dependencies.
 - **Pointers** — branches, remotes, tags, packed refs, HEAD attached or detached, chips
   coloured by what kind of pointer each one is. A branch is drawn as what it is: a file with
   a sha in it.
-- **The index**, apart, in its own column. Conflict stages are dashed.
+- **The index**, apart, in its own column, each entry wired to the blob it stages — including
+  the ones no commit names yet, drawn violet: written by `git add`, held by the index alone,
+  and an orphan the moment you unstage them. Conflict stages are dashed.
 - **Unreachable objects** as ghosts, found by walking out from the roots. A discarded commit
   keeps its tree and its parents, so you see the whole abandoned state sitting there
   waiting for `gc`.

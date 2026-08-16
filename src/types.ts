@@ -125,6 +125,9 @@ export interface Snapshot {
   indexElided?: { shown: number; total: number };
   /** null means orphan detection is off — not that there are none. */
   unreachable: Oid[] | null;
+  /** Objects only the index holds: staged, uncommitted, and named by nothing
+   *  that is drawn as a graph. Same null meaning as `unreachable`. */
+  stagedOnly?: Oid[] | null;
   caps: Capabilities;
   window: {
     commits: Oid[];

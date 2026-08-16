@@ -322,7 +322,7 @@ function arrowhead(ctx: CanvasRenderingContext2D, x: number, y: number, angle: n
 
 function drawNode(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, lit: Set<string>) {
   const dim = dimmed(n.id, lit.size > 0 && !lit.has(n.id) ? 1 : 0);
-  const hue = hueFor(n.kind);
+  const hue = n.staged ? theme.staged : hueFor(n.kind);
   const ghost = n.unreachable === true;
   const changed =
     p.flash > 0 && (p.change.added.has(n.id) || p.change.updated.has(n.id) || p.change.removed.has(n.id));

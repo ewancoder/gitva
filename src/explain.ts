@@ -79,6 +79,11 @@ export function explain(snap: Snapshot, kind: string, id: string): Explanation {
         'reachable',
         'no — nothing points here. It is still in the object database and can be rescued by name until git gc removes it.',
       ]);
+    } else if (snap.stagedOnly?.includes(id)) {
+      facts.push([
+        'reachable',
+        'only through the index — no commit names it yet. git gc keeps it while it is staged, and unstaging it makes it an orphan.',
+      ]);
     }
   }
 

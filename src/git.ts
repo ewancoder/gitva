@@ -482,7 +482,7 @@ export async function snapshot(
     }
   }
 
-  const unreachable = caps.fullLoad
+  const reach = caps.fullLoad
     ? findUnreachable(objects, commits, trees, tags, head, refs, index)
     : null;
 
@@ -503,7 +503,8 @@ export async function snapshot(
     tags,
     index: view.showIndex ? index : [],
     indexElided,
-    unreachable,
+    unreachable: reach?.unreachable ?? null,
+    stagedOnly: reach?.stagedOnly ?? null,
     caps,
     window: {
       commits: windowCommits,
@@ -526,6 +527,12 @@ function countCommits(objects: Record<Oid, GitObject>): number {
  * Reachability, computed rather than asked for: walk out from the roots — HEAD,
  * every ref, every index entry — and anything the walk never reached is an
  * orphan. Faster than the built-in checker, and it is the lesson itself.
+ *
+ * The walk runs in two halves because the index is a root of a different kind.
+ * History is drawn as a graph; the index is not, so an object only the index
+ * holds — everything `git add` has ever written and no commit names yet — has
+ * nothing on screen pointing at it, and would otherwise be drawn nowhere at
+ * all. It is not an orphan (gc keeps it), so it gets its own list.
  */
 export function findUnreachable(
   objects: Record<Oid, GitObject>,
@@ -535,7 +542,7 @@ export function findUnreachable(
   head: Head,
   refs: Ref[],
   index: IndexEntry[],
-): Oid[] {
+): { unreachable: Oid[]; stagedOnly: Oid[] } {
   const seen = new Set<Oid>();
   const stack: Oid[] = [];
   const push = (o?: Oid) => {
@@ -544,25 +551,38 @@ export function findUnreachable(
       stack.push(o);
     }
   };
+  const walk = () => {
+    while (stack.length > 0) {
+      const oid = stack.pop()!;
+      const commit = commits[oid];
+      if (commit) {
+        push(commit.tree);
+        for (const p of commit.parents) push(p);
+        continue;
+      }
+      const tag = tags[oid];
+      if (tag) {
+        push(tag.target);
+        continue;
+      }
+      for (const e of trees[oid] ?? []) push(e.oid);
+    }
+  };
+
   push(head.oid);
   for (const r of refs) push(r.oid);
+  walk();
+  const named = new Set(seen); // everything history reaches, before the index
+
   for (const e of index) push(e.oid);
-  while (stack.length > 0) {
-    const oid = stack.pop()!;
-    const commit = commits[oid];
-    if (commit) {
-      push(commit.tree);
-      for (const p of commit.parents) push(p);
-      continue;
-    }
-    const tag = tags[oid];
-    if (tag) {
-      push(tag.target);
-      continue;
-    }
-    for (const e of trees[oid] ?? []) push(e.oid);
-  }
-  return Object.keys(objects).filter((oid) => !seen.has(oid));
+  walk();
+
+  return {
+    unreachable: Object.keys(objects).filter((oid) => !seen.has(oid)),
+    // A gitlink entry names a commit that need not be here at all, so ask the
+    // object list rather than assume.
+    stagedOnly: [...seen].filter((oid) => !named.has(oid) && oid in objects),
+  };
 }
 
 function notesFor(

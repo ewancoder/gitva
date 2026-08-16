@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { measure, open, snapshot, type RepoHandle } from '../src/git.js';
 import { describe as describeChange } from '../src/diff.js';
+import { explain } from '../src/explain.js';
 import { layout } from '../src/layout.js';
 import { DEFAULT_VIEW, type Capabilities, type Snapshot } from '../src/types.js';
 import { Repo } from './fixture.js';
@@ -78,6 +79,21 @@ test('both halves are drawn at once', () => {
   const bNode = byId.get(bBlob);
   assert.ok(bNode, 'the surviving blob is drawn');
   assert.equal(bNode!.unreachable, true, 'as a ghost, never silently dropped');
+
+  // Staging is not a disappearing act: the blob `git add` wrote is still an
+  // object, drawn solid, with the index entry that holds it wired to it.
+  const aNode = byId.get(aBlob);
+  assert.ok(aNode, 'the staged blob is drawn');
+  assert.ok(!aNode!.unreachable, 'solid, not a ghost — the index holds it');
+  assert.equal(aNode!.staged, true, 'and marked as held by the index alone');
+  assert.match(
+    explain(reset, 'blob', aBlob).facts.find(([k]) => k === 'reachable')![1],
+    /only through the index/,
+  );
+  assert.ok(
+    scene.edges.some((e) => e.kind === 'stage' && e.from === 'index:0:a.txt' && e.to === aBlob),
+    'and the index entry points at it',
+  );
 
   const aEntry = scene.nodes.find((n) => n.kind === 'index' && n.label === 'a.txt');
   const bEntry = scene.nodes.find((n) => n.kind === 'index' && n.label === 'b.txt');
