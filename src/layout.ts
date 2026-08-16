@@ -361,6 +361,22 @@ export function layout(
     });
   }
 
+  // An unborn HEAD has nothing to sit beside, so it sits alone at the top of
+  // the gutter — a fresh `git init` is a pointer to a branch file that does not
+  // exist yet, and that pointer is the whole picture until the first commit.
+  if (snap.head.unborn && snap.head.ref && !at.has('HEAD')) {
+    put({
+      id: 'HEAD',
+      kind: 'head',
+      x: M.gutterX,
+      y: 16,
+      w: M.chipW,
+      h: M.chipH + 8, // two lines: the name it holds is written under it
+      label: 'HEAD',
+      sub: refLabel(snap.head.ref),
+    });
+  }
+
   // --- objects, growing rightwards from their commit's row ---
   for (const row of rows) {
     const g = graphs.get(row.oid);

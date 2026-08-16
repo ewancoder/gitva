@@ -204,6 +204,16 @@ describe('the scene', () => {
     assert.ok(scene.edges.some((e) => e.from === 'HEAD' && e.to === oid('c')));
   });
 
+  it('still draws HEAD on a repo with nothing in it yet', () => {
+    const s = fakeSnapshot({}, {});
+    s.head = { ref: 'refs/heads/main', detached: false, unborn: true };
+    s.refs = [];
+    const scene = layout(s, DEFAULT_VIEW);
+    const head = scene.nodes.find((n) => n.kind === 'head')!;
+    assert.ok(head, 'a fresh git init is not an empty screen');
+    assert.equal(head.sub, 'main');
+  });
+
   it('leaves a ref pointing outside the window out of the drawing', () => {
     const s = fakeSnapshot({ c: ['b'], b: [] });
     s.refs.push({ name: 'refs/heads/old', oid: oid('gone'), objectType: 'commit', packed: true });
