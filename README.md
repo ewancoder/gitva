@@ -67,7 +67,7 @@ the one line inside a ref.
 | drag a node | pin it where you put it (*unpin all* in the toolbar drops every pin) |
 | click | select: read what it is, and light the whole path through it |
 | hover | light what it connects to |
-| right-click a commit | fold or unfold what it contains (a commit git just made arrives unfolded) |
+| right-click a commit | fold or unfold what it contains (a commit git just made arrives unfolded, unless you turn that off in the legend) |
 | double-click a node | unpin it, wherever the layout wants it |
 | double-click background | fit to width again, centred on the point you clicked |
 | click *load more history* | load another thousand commits (*load all* in the toolbar loads the lot) |
@@ -83,8 +83,8 @@ Every state is kept. Pause and the tape keeps recording behind you, so a demo ca
 **replayed instead of redone**; stepping backwards highlights the change in reverse, which is
 how you show a reset twice without doing it twice.
 
-The legend dialog also holds preferences, which survive a reload — currently whether clicking a
-node centres the view on it.
+The legend dialog also holds preferences, which survive a reload — whether clicking a node centres
+the view on it, and whether a commit git just made arrives unfolded.
 
 ## Two promises
 

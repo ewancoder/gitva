@@ -115,6 +115,7 @@
         padding: calc(var(--u) * 2); max-width: 560px;
       }
       dialog::backdrop { background: rgba(0, 0, 0, .6); }
+      dialog label { display: block; margin-bottom: var(--u); }
       .legend { display: grid; grid-template-columns: 20px 1fr; gap: var(--u); align-items: center; }
       .swatch { width: 16px; height: 16px; }
       .swatch.commit { border-radius: 50%; background: var(--commit); }
@@ -213,6 +214,9 @@
         These are about how you like to work, not about this session, so they survive a reload.
       </p>
       <label><input type="checkbox" id="centre-on-click" /> clicking a node centres the view on it</label>
+      <label
+        ><input type="checkbox" id="open-new-commits" /> a commit git just made arrives unfolded</label
+      >
       <p><button onclick="this.closest('dialog').close()">close</button></p>
     </dialog>
 

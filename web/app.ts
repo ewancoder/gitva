@@ -26,10 +26,12 @@ const panel = $('panel');
 interface Prefs {
   showIndex: boolean;
   centreOnClick: boolean;
+  openNewCommits: boolean;
 }
 const prefs: Prefs = {
   showIndex: true,
   centreOnClick: false,
+  openNewCommits: true,
   ...JSON.parse(localStorage.getItem('gitva.prefs') ?? '{}'),
 };
 const savePrefs = () => localStorage.setItem('gitva.prefs', JSON.stringify(prefs));
@@ -249,7 +251,7 @@ source.addEventListener('snapshot', (e) => {
       view = { ...view, expanded: s.window.commits };
       pushView();
     }
-  } else if (following && last && s.seq !== last.seq) {
+  } else if (prefs.openNewCommits && following && last && s.seq !== last.seq) {
     // A commit git just made opens itself: the lesson is that it points at the
     // trees and blobs already on screen, which folding it away would hide.
     // Only on a new state — paging in older commits is not something that
@@ -397,6 +399,12 @@ const centre = $<HTMLInputElement>('centre-on-click');
 centre.checked = prefs.centreOnClick;
 centre.addEventListener('change', () => {
   prefs.centreOnClick = centre.checked;
+  savePrefs();
+});
+const openNew = $<HTMLInputElement>('open-new-commits');
+openNew.checked = prefs.openNewCommits;
+openNew.addEventListener('change', () => {
+  prefs.openNewCommits = openNew.checked;
   savePrefs();
 });
 $('play').addEventListener('click', () => {

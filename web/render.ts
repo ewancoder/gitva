@@ -180,7 +180,7 @@ function drawBands(
  * a parent tree stay dark. `parent` edges are skipped — a commit's history is a
  * different question from what a commit contains.
  */
-function path(scene: Scene, start: string, lit: Set<string>, litEdges: Set<string>) {
+export function path(scene: Scene, start: string, lit: Set<string>, litEdges: Set<string>) {
   const out = new Map<string, SceneEdge[]>();
   const into = new Map<string, SceneEdge[]>();
   for (const e of scene.edges) {
@@ -189,6 +189,9 @@ function path(scene: Scene, start: string, lit: Set<string>, litEdges: Set<strin
     (into.get(e.to) ?? into.set(e.to, []).get(e.to)!).push(e);
   }
 
+  // What this walk reached, which is not the same as what is lit — hover may
+  // have lit neighbours already, and those are not on the selection's path.
+  const reached = new Set([start]);
   lit.add(start);
   // Staging is identity, not containment: an index entry *is* its blob, so the
   // upward walk carries on from the blob and finds the trees holding it too.
@@ -201,12 +204,22 @@ function path(scene: Scene, start: string, lit: Set<string>, litEdges: Set<strin
         const next = e[at];
         litEdges.add(e.id);
         lit.add(next);
+        reached.add(next);
         if (e.kind === 'stage') up.push(next);
         if (seen.has(next)) continue;
         seen.add(next);
         queue.push(next);
       }
     }
+  }
+
+  // Where a commit ends up lit, its immediate parents come with it: "what did
+  // this build on?" is the one history question a selection should answer. One
+  // level only — walking further would light the whole spine and say nothing.
+  for (const e of scene.edges) {
+    if (e.kind !== 'parent' || !reached.has(e.from)) continue;
+    litEdges.add(e.id);
+    lit.add(e.to);
   }
 }
 

@@ -106,6 +106,11 @@ first two things the tutorial teaches.
 - Unit tests cover every branch: each branch exists because some git situation demanded it, so
   an untested branch is a git situation nobody checked. Rendering is exempt — check it by
   looking at it.
+- **Every edge case found by hand gets a test in the same pass** — a bug that reached the screen
+  is a case nobody thought of, so the fix is not done until something fails when it comes back.
+  Name the test after the situation, not the function. This overrides the rendering exemption
+  where the logic is pure: `path()` in `render.ts` decides which nodes a selection lights and is
+  tested in `test/render.test.ts`; only actual painting is checked by looking.
 - Tests run against real fixture repos built with real plumbing, including a deliberate orphan.
   Fixtures set `GIT_CONFIG_GLOBAL=/dev/null` and `GIT_CONFIG_SYSTEM=/dev/null` — the author's
   global config signs commits and tags, and a signing prompt hangs the suite. **Never touch the
