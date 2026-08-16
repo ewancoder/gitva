@@ -41,7 +41,13 @@ export class Repo {
   }
 
   dispose() {
-    rmSync(this.dir, { recursive: true, force: true });
+    try {
+      rmSync(this.dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 50 });
+    } catch {
+      // Windows can keep a handle on .git after the last git process has
+      // exited; the OS collects the temp dir. Failing the suite over that
+      // teaches nothing about git.
+    }
   }
 }
 

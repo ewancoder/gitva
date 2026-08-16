@@ -26,16 +26,20 @@ describe('the view arriving from the browser', () => {
 async function* snapshots(res: Response) {
   const reader = res.body!.getReader();
   let buf = '';
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) return;
-    buf += new TextDecoder().decode(value);
-    let end: number;
-    while ((end = buf.indexOf('\n\n')) >= 0) {
-      const frame = buf.slice(0, end);
-      buf = buf.slice(end + 2);
-      if (frame.startsWith('event: snapshot')) yield JSON.parse(frame.split('\ndata: ')[1]);
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) return;
+      buf += new TextDecoder().decode(value);
+      let end: number;
+      while ((end = buf.indexOf('\n\n')) >= 0) {
+        const frame = buf.slice(0, end);
+        buf = buf.slice(end + 2);
+        if (frame.startsWith('event: snapshot')) yield JSON.parse(frame.split('\ndata: ')[1]);
+      }
     }
+  } finally {
+    await reader.cancel().catch(() => {});
   }
 }
 
@@ -51,6 +55,8 @@ describe('the server', () => {
   });
   after(async () => {
     await server.close();
+    // Windows holds the temp dir until the last socket is really gone.
+    await new Promise((r) => setTimeout(r, 80));
     repo.dispose();
   });
 
@@ -76,7 +82,7 @@ describe('the server', () => {
     }
     const line = buf.split('\n').find((l) => l.startsWith('data: '))!;
     const snap = JSON.parse(line.slice(6));
-    assert.equal(snap.repo, repo.dir.split('/').pop());
+    assert.equal(snap.repo, repo.dir.split(/[/\\]/).pop());
     assert.ok(snap.window.commits.length >= 3);
     await reader.cancel();
   });
