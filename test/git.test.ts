@@ -95,7 +95,13 @@ describe('the question a view asks', () => {
     const v = (q: object) => ({ ...DEFAULT_VIEW, question: q as never });
     assert.ok(revListArgs(v({ kind: 'search', text: 'x', in: 'message' }), 5, true)!.includes('--grep=x'));
     assert.ok(revListArgs(v({ kind: 'search', text: 'x', in: 'author' }), 5, true)!.includes('--author=x'));
-    assert.ok(revListArgs(v({ kind: 'search', text: 'x', in: 'content' }), 5, true)!.includes('-Sx'));
+    assert.deepEqual(revListArgs(v({ kind: 'search', text: 'x', in: 'content' }), 5, true)!.slice(0, 5), [
+      'log',
+      '--topo-order',
+      '-n5',
+      '--format=%H',
+      '-Sx',
+    ]);
     assert.ok(revListArgs(v({ kind: 'search', text: 'p', in: 'path' }), 5, true)!.includes('--'));
     assert.deepEqual(revListArgs(v({ kind: 'refs', refs: [] }), 5, true), null);
     assert.ok(revListArgs(v({ kind: 'refs', refs: ['refs/heads/main'] }), 5, true)!.includes('refs/heads/main'));
@@ -115,6 +121,17 @@ describe('a repository read through its own plumbing', () => {
     snap = await snapshot(handle, { ...DEFAULT_VIEW, expanded: [] }, caps, 1);
   });
   after(() => repo.dispose());
+
+  it('answers a content search with the commits that touched that text', async () => {
+    const found = await snapshot(
+      handle,
+      { ...DEFAULT_VIEW, question: { kind: 'search', text: 'delta', in: 'content' } },
+      caps,
+      1,
+    );
+    const messages = found.window.commits.map((oid) => found.commits[oid].message.trim());
+    assert.deepEqual(messages, ['a side branch']);
+  });
 
   it('measures the repository and finds it small enough to hold whole', () => {
     assert.equal(caps.fullLoad, true);

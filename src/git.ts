@@ -37,6 +37,7 @@ const READ_ONLY = new Set([
   'for-each-ref',
   'cat-file',
   'rev-list',
+  'log',
   'ls-files',
   'count-objects',
   'diff-index',
@@ -339,7 +340,9 @@ export function revListArgs(view: View, limit: number, hasHead: boolean): string
     if (q.text.length === 0) return [...base, ...everything];
     if (q.in === 'message') return [...base, `--grep=${q.text}`, ...everything];
     if (q.in === 'author') return [...base, `--author=${q.text}`, ...everything];
-    if (q.in === 'content') return [...base, `-S${q.text}`, ...everything];
+    // rev-list refuses the pickaxe; `log --format=%H` takes it and prints the same list.
+    if (q.in === 'content')
+      return ['log', '--topo-order', `-n${limit}`, '--format=%H', `-S${q.text}`, ...everything];
     return [...base, ...everything, '--', q.text];
   }
   return [...base, ...everything];
