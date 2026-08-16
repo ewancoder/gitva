@@ -49,6 +49,11 @@ const KIND: Record<string, { title: string; what: string; made: string }> = {
     what: 'The index is a single binary file listing the paths that will go into the next commit, each with a blob sha and a mode. It is the only place a half-staged change exists: not in the working tree, not in any object. Staging writes here; committing turns it into a tree.',
     made: 'git update-index --add <path>',
   },
+  submodule: {
+    title: 'Submodule (gitlink)',
+    what: 'A gitlink is a tree entry with mode 160000: a name pointing at a commit in another repository. Git stores only that sha — not the other project. The other repository is not here. This is a pointer that happens to live in a tree rather than in refs.',
+    made: 'git update-index --add --cacheinfo 160000,<sha>,<path>',
+  },
   more: {
     title: 'Load more history',
     what: 'These commits have parents that are real, but outside the window gitva asked for. The arrow is drawn honestly into here rather than pointing at a node that is not on screen. Click this block to load the rest of the history.',
@@ -70,7 +75,7 @@ export function explain(snap: Snapshot, kind: string, id: string): Explanation {
   const base = explainKind(kind);
   const facts: [string, string][] = [];
 
-  if (kind === 'commit' || kind === 'tree' || kind === 'blob' || kind === 'tag') {
+  if (kind === 'commit' || kind === 'tree' || kind === 'blob' || kind === 'tag' || kind === 'submodule') {
     const obj = snap.objects[id];
     facts.push(['sha', id]);
     if (obj) facts.push(['size', bytes(obj.size)]);
@@ -107,6 +112,9 @@ export function explain(snap: Snapshot, kind: string, id: string): Explanation {
       facts.push(['tagger', t.tagger]);
       facts.push(['message', t.message.trim()]);
     }
+  } else if (kind === 'submodule') {
+    facts.push(['mode', '160000 — a gitlink, not a blob or a tree']);
+    facts.push(['other repo', 'not here — git stores only the sha']);
   } else if (kind === 'ref') {
     const r = snap.refs.find((x) => x.name === refName(id));
     if (r) {

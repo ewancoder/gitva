@@ -18,7 +18,7 @@ export function renderPanel(el: HTMLElement, snap: Snapshot | null, node: SceneN
     return;
   }
 
-  const e = explain(snap, node.kind === 'submodule' ? 'commit' : node.kind, node.id);
+  const e = explain(snap, node.kind, node.id);
   el.append(el2('h2', '', e.title));
   el.append(el2('p', 'what', e.what));
   if (e.made) el.append(el2('div', 'made', e.made));

@@ -115,7 +115,7 @@ describe('saying what just happened', () => {
 
 describe('the teaching', () => {
   it('has plain language and a command for every kind it draws', () => {
-    for (const kind of ['blob', 'tree', 'commit', 'tag', 'ref', 'head', 'index', 'more']) {
+    for (const kind of ['blob', 'tree', 'commit', 'tag', 'ref', 'head', 'index', 'more', 'submodule']) {
       const e = explainKind(kind);
       assert.ok(e.what.length > 40, `${kind} is explained`);
       assert.ok(e.made.length > 0, `${kind} names the command that makes it`);
@@ -144,5 +144,12 @@ describe('the teaching', () => {
     const s = snap({ index: [{ path: 'a.txt', oid: 'b1', mode: '100644', stage: 2 }] });
     const e = explain(s, 'index', 'index:2:a.txt');
     assert.match(e.facts.find(([k]) => k === 'stage')![1], /ours/);
+  });
+
+  it('explains a gitlink as a pointer into another repository, not as a commit', () => {
+    const e = explain(snap({ objects: { c1: { oid: 'c1', type: 'commit', size: 1 } } }), 'submodule', 'c1');
+    assert.match(e.title, /gitlink/i);
+    assert.match(e.what, /160000/);
+    assert.match(e.facts.find(([k]) => k === 'mode')![1], /gitlink/);
   });
 });
