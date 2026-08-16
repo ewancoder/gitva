@@ -102,6 +102,24 @@ function paint() {
  * Every other way of moving the camera is direct, and cancels the glide.
  */
 let glide: { x: number; y: number } | null = null;
+
+/**
+ * The graph is a page, not a plane: you can reach every edge of it and no
+ * further. Panning past the last commit into empty grey is how you lose the
+ * whole thing and have to scroll back for it.
+ */
+function bounded(c: { x: number; y: number }, scale = camera.scale): { x: number; y: number } {
+  if (!scene) return c;
+  const m = 20;
+  const axis = (v: number, span: number, content: number) => {
+    const far = span - content * scale - m;
+    return Math.min(Math.max(v, Math.min(m, far)), Math.max(m, far));
+  };
+  return {
+    x: axis(c.x, canvas.clientWidth, scene.width),
+    y: axis(c.y, canvas.clientHeight, scene.height),
+  };
+}
 function glideStep() {
   if (!glide) return;
   const k = reduceMotion ? 1 : 0.22;
@@ -444,7 +462,7 @@ canvas.addEventListener('pointermove', (e) => {
     } else pins.push({ seq, id: drag.id, x: w.x - drag.dx, y: w.y - drag.dy });
     relayout(false, false);
   } else if (!drag.id) {
-    camera = { ...camera, x: camera.x + dx, y: camera.y + dy };
+    camera = { ...camera, ...bounded({ x: camera.x + dx, y: camera.y + dy }) };
     drag.x = e.clientX;
     drag.y = e.clientY;
     schedule();
@@ -507,10 +525,11 @@ canvas.addEventListener(
       const w = world(e);
       const k = Math.exp(-e.deltaY / 400);
       const scale = Math.min(4, Math.max(0.1, camera.scale * k));
-      camera = { scale, x: camera.x + (w.x * camera.scale - w.x * scale), y: camera.y + (w.y * camera.scale - w.y * scale) };
+      const at = bounded({ x: camera.x + (w.x * camera.scale - w.x * scale), y: camera.y + (w.y * camera.scale - w.y * scale) }, scale);
+      camera = { scale, ...at };
     } else {
       const at = glide ?? camera;
-      glide = { x: at.x - e.deltaX, y: at.y - e.deltaY };
+      glide = bounded({ x: at.x - e.deltaX, y: at.y - e.deltaY });
     }
     schedule();
   },
