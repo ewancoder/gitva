@@ -112,6 +112,11 @@ first two things the tutorial teaches.
   author's global git config, and never commit to a repo they own unless asked.**
 - Write performance numbers down when you change something that affects them; the README's
   Speed table is the record.
+- **Finish every change by asking whether it added or altered something a user would want to
+  know about** — a gesture, a key, a toolbar control, a flag, a limit, a new thing on screen.
+  If so, update the README in the same pass. The README stays minimal: only what someone needs
+  to understand the project, run it, and know the features they would look for. Internal
+  refactors, bug fixes and anything invisible from the browser get no mention.
 
 ## The canonical scenario
 

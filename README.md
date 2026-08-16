@@ -1,11 +1,18 @@
 # gitva
 
-A visual tutorial for git, taught from the internals upward: plumbing first, porcelain later.
-It shows the contents of a repository's `.git` folder as a live graph in a browser.
-
-The thesis it exists to demonstrate:
+A live picture of a repository's `.git` in your browser, to make one sentence obvious:
 
 > **git is just a key-value store plus a few pointers**
+
+Put a terminal beside the browser and type. Hash an object, update the index, write a tree,
+commit, reset, tag — the graph updates on its own within a second and flashes what changed.
+
+```
+git add a.txt b.txt   → two blobs, two index entries appear
+git reset b.txt       → the index entry goes; the blob survives, now a ghost
+```
+
+## Run
 
 ```
 npm i -g gitva
@@ -13,21 +20,10 @@ cd some-repo
 gitva
 ```
 
-Then put a terminal beside the browser and type. Hash an object, update the index, write a tree,
-commit, reset, tag — **the browser updates on its own, within a second, and visibly shows what
-changed.** That is the product; everything else serves it.
+`gitva [repo] [--port N] [--no-open]` — repo defaults to `.`, port to a free one, and the
+browser opens itself. Node ≥20. No runtime dependencies.
 
-The canonical demo, both halves visible at once:
-
-```
-git add a.txt b.txt   → two blobs, two index entries appear
-git reset b.txt       → the index entry goes; the blob survives, now marked unreachable
-```
-
-## What it shows
-
-One surface, four bands, with the arrows drawn straight across the boundaries because those
-arrows are the lesson:
+## What you see
 
 ```
 ┌── pointers ──┬──────── commits ────────┬───── objects ─────┬── index ──┐
@@ -39,62 +35,75 @@ arrows are the lesson:
 └──────────────┴─────────────────────────┴───────────────────┴───────────┘
 ```
 
-- Every kind of object — blobs, trees, commits, annotated tags — loose and packed alike, because
-  to git there is no difference.
-- Every kind of pointer — HEAD attached and detached, branches, tags, packed refs. A branch is
-  drawn as what it is: a file with a sha in it.
-- The staging index, apart, in its own column. Conflict stages look different from clean ones.
-- Orphans, found by walking out from the roots. Marked unreachable, never silently dropped,
-  because their rescuability is part of the lesson.
-- What changed since the last state, in one reserved accent that is spent on nothing else.
-- **What it is not showing, and why** — always, out loud, in the strip under the toolbar.
+- **Objects** — blobs, trees, commits, annotated tags, submodule gitlinks; loose and packed
+  alike, because to git there is no difference. Commit warm, tree green, blob blue.
+- **Pointers** — branches, remotes, tags, packed refs, HEAD attached or detached, chips
+  coloured by what kind of pointer each one is. A branch is drawn as what it is: a file with
+  a sha in it.
+- **The index**, apart, in its own column. Conflict stages are dashed.
+- **Unreachable objects** as ghosts, found by walking out from the roots. A discarded commit
+  keeps its tree and its parents, so you see the whole abandoned state sitting there
+  waiting for `gc`.
+- **What just changed**, in one accent spent on nothing else.
+- **What is not on screen and why**, always, in the strip under the toolbar.
 
-Click anything to read what that file in `.git` actually does and which command creates it.
+Click anything to read what that file in `.git` actually does, which command creates it, and
+its raw bytes — the contents of a blob, the entries of a tree, the text of a commit object,
+the one line inside a ref.
 
-## Gestures
+## Controls
 
 | | |
 |---|---|
 | wheel | pan; hold <kbd>ctrl</kbd> to zoom |
-| drag background / drag a node | pan / pin it where you put it |
-| click | select, and read what it is |
-| right-click a commit | fold or open what it contains |
-| scroll past the bottom | ask for more history |
+| drag background | pan |
+| drag a node | pin it where you put it |
+| click | select: read what it is, and light the whole path through it |
+| hover | light what it connects to |
+| right-click a commit | fold or unfold what it contains |
+| double-click background | fit to width again, centred on the point you clicked |
+| click *load more history* | load the rest of the commits |
 | <kbd>f</kbd> <kbd>[</kbd> <kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |
 
-Pausing stops following the tail while recording continues behind you, so a demo can be
-**replayed instead of redone** — and stepping backwards highlights the change in reverse, which
-is how you show a reset twice without doing it twice.
+In the toolbar: ask for everything, for chosen branches, or search by message, author, path or
+content; fold or unfold every commit at once; hide the index. Every one of those is the same
+mechanism — a change to the *view* the browser holds, which is why none of them care how big
+the repository is.
+
+Every state is kept. Pause and the tape keeps recording behind you, so a demo can be
+**replayed instead of redone**; stepping backwards highlights the change in reverse, which is
+how you show a reset twice without doing it twice.
+
+The legend dialog also holds preferences, which survive a reload — currently whether clicking a
+node centres the view on it.
 
 ## Two promises
 
 **It never writes to the repository it watches.** Not the index, not a cache, not a config
-value. `src/git.ts` will only spawn git commands from a read-only allowlist, and sets
-`GIT_OPTIONAL_LOCKS=0` so git will not take a lock to be helpful either. Where a cache would
-make things faster, gitva says so and leaves you to build it.
+value. `src/git.ts` will only spawn git subcommands from a read-only allowlist, and sets
+`GIT_OPTIONAL_LOCKS=0` so git will not take a lock to be helpful either. Where `git gc` or a
+commit-graph would make things faster, gitva says so and leaves you to run it.
 
-**Everything it knows, it learns by running git's own plumbing.** No git library, no
-reimplementation of a format. The app runs the same commands it is teaching, so you can read
-what it does and then type it yourself.
+**Everything it knows, it learns from git's own plumbing.** No git library, no reimplemented
+format. It runs the commands it is teaching, so you can read what it does and then type it
+yourself.
 
-## Capabilities, not modes
+## Big repositories
 
-There is no big-project flag. The repository is measured once, cheaply, at startup, and what the
-interface offers follows from that — and it **says why** when something isn't on offer:
+There is no big-project flag. The repository is measured once at startup and the interface
+follows from that — and says so, in the notes strip, when something is off:
 
 | Above the limit | What you get instead |
 |---|---|
-| Orphan detection | An honest note that it is off, and why. Everything drawn is reachable by construction. |
-| One index node per staged path | The entries that **differ from HEAD**, plus a count for the rest — which was always the interesting part. |
+| 12,000 objects | No orphan detection — finding one means reading every object. Everything drawn is reachable by construction, and trees load only for the commits you open. |
+| 400 staged paths | The index entries that **differ from HEAD**, plus a count for the rest. |
 
-The limits come from measurement, and specifically from the *expensive* step. Listing every
-object is nearly free; reading every tree so orphans can be found is what binds, at roughly
-8.5 µs per object.
+Both limits come from measurement, and from the *expensive* step: listing every object is
+nearly free, reading every tree is what binds, at roughly 8.5 µs per object.
 
 ## Speed
 
-Measured on a mid-range laptop against real repositories. Numbers written down as they were
-found, because that is the only way a later change is knowable as an improvement.
+Measured on a mid-range laptop against real repositories.
 
 | | 25 objects | 3,100 objects | 46,000 objects |
 |---|---|---|---|
@@ -104,26 +113,17 @@ found, because that is the only way a later change is knowable as an improvement
 | Build a whole snapshot, bounded | — | 6.9 ms | 38.3 ms |
 | Lay out everything opened | 0.1 ms | 4.5 ms | 16.8 ms |
 
-Deciding where 20,000 commits go: **~110 ms** (tested, and the test fails if it regresses).
-Sitting still with no animation and no input costs no CPU at all: the render loop stops.
+Deciding where 20,000 commits go stays **under 100 ms**, and a test fails if it stops. Sitting
+still costs no CPU at all — the render loop stops when nothing is animating.
 
 ## Building it
 
 ```
 npm install
-npm test        # node:test, over real fixture repos built with real plumbing commands
+npm test                        # node:test, over real fixture repos built with real plumbing
 npm start -- /path/to/repo
 ```
 
-Node.js and TypeScript on both sides, so the pure parts — layout, diffing, the tape, the
-explanations — are written once and tested in one runner. Canvas 2D, hand-written, for the
-graph. Zero runtime dependencies.
-
-| | |
-|---|---|
-| `src/git.ts` | the only place that talks to git |
-| `src/layout.ts` | where everything goes — a pure function of the state, knows nothing about painting |
-| `src/diff.ts` | what changed between two whole states |
-| `src/explain.ts` | the teaching, in plain language |
-| `src/server.ts` | the cheap poll, and whole states down an SSE stream |
-| `web/render.ts` | the painter — decides no positions |
+TypeScript on both sides, so the pure parts — layout, diffing, the tape, the explanations —
+are written once and tested in one runner. Canvas 2D, hand-written, for the graph.
+`CLAUDE.md` is the map of the code; `INITIAL_DESIGN.md` is the why.
