@@ -293,13 +293,18 @@ export function layout(
     });
   }
 
+  // Under a search, a parent outside the window is one that did not match, not
+  // history waiting to be loaded — so it gets neither the arrow nor the button.
+  const q = snap.view.question;
+  const searching = q.kind === 'search' && q.text.length > 0;
+
   // --- the spine: commit to parent ---
   let danglingParents = 0;
   for (const oid of commits) {
     for (const p of snap.commits[oid]?.parents ?? []) {
       if (inWindow.has(p)) {
         edges.push({ id: `p:${oid}:${p}`, from: oid, to: p, kind: 'parent' });
-      } else {
+      } else if (!searching) {
         danglingParents++;
         edges.push({ id: `p:${oid}:more`, from: oid, to: 'more', kind: 'parent' });
       }

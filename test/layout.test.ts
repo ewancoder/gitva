@@ -179,6 +179,14 @@ describe('the scene', () => {
     assert.ok(!scene.edges.some((e) => e.to === oid('gone')), 'never an edge to a node that is not there');
   });
 
+  it('offers no "history continues" under a search — those parents did not match', () => {
+    const view = { ...DEFAULT_VIEW, question: { kind: 'search', text: 'x', in: 'content' } as const };
+    const s = fakeSnapshot({ c: ['b'], b: ['gone'] }, { view });
+    const scene = layout(s, view);
+    assert.ok(!scene.nodes.some((n) => n.kind === 'more'));
+    assert.ok(!scene.edges.some((e) => e.to === 'more'));
+  });
+
   it('puts HEAD outside the ref it names, pointing at it', () => {
     const scene = layout(snap, DEFAULT_VIEW);
     const head = scene.nodes.find((n) => n.kind === 'head')!;
