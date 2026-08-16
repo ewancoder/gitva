@@ -194,16 +194,16 @@ describe('what is folded', () => {
     assert.ok(t.view.expanded.includes(oid('b')), 'it folded a commit nobody could see');
   });
 
-  it('opens a repository small enough to see all of at once', () => {
+  it('opens every repository folded, however small, however the server left it', () => {
     const big = new Tape();
-    big.arrive(state(1, []), SHUT); // seven: more than you would open unasked
+    big.arrive(state(1, []), SHUT);
     assert.deepEqual(big.view.expanded, []);
 
     const small = new Tape();
     const s = state(1, []);
     s.window.commits = s.window.commits.slice(0, 3);
-    const opened = small.arrive(s, SHUT);
-    assert.deepEqual(small.view.expanded, s.window.commits);
-    assert.deepEqual(opened.post?.expanded, s.window.commits);
+    s.view = { ...s.view, expanded: [...s.window.commits] }; // another viewer had opened them
+    small.arrive(s, SHUT);
+    assert.deepEqual(small.view.expanded, []);
   });
 });

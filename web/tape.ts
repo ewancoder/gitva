@@ -56,12 +56,9 @@ export class Tape {
     let post: View | null = null;
 
     if (first) {
-      this.view = { ...s.view, showIndex: prefs.showIndex };
-      // Anything past a handful of commits starts folded.
-      if (s.window.commits.length <= 6 && this.view.expanded.length === 0) {
-        this.view = { ...this.view, expanded: [...s.window.commits] };
-        post = this.view;
-      }
+      // Everything starts folded: opening a repository should cost nothing to
+      // draw, and unfolding a commit is the gesture the tutorial wants asked.
+      this.view = { ...s.view, showIndex: prefs.showIndex, expanded: [] };
     } else if (prefs.openNewCommits && last && s.seq !== last.seq) {
       // A commit git just made opens itself: the lesson is that it points at
       // the trees and blobs already on screen, which folding it away would
