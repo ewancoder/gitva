@@ -174,7 +174,13 @@ function shown(prev: Snapshot | null) {
 function redressed() {
   updateHeader();
   if (selected) {
-    renderPanel(panel, tape.current, scene?.nodes.find((n) => n.id === selected) ?? null);
+    const node = scene?.nodes.find((n) => n.id === selected) ?? null;
+    if (!node) {
+      selected = null;
+      renderPanel(panel, null, null);
+    } else {
+      renderPanel(panel, tape.current, node);
+    }
   }
 }
 
@@ -231,7 +237,11 @@ source.onopen = () => live(true);
 function live(ok: boolean) {
   const dot = $('live-dot');
   dot.className = 'dot' + (ok ? (tape.following ? '' : ' paused') : ' off');
-  $('live-text').textContent = ok ? (tape.following ? 'live' : 'paused') : 'connection lost';
+  $('live-text').textContent = ok
+    ? tape.following
+      ? 'live'
+      : 'paused'
+    : 'connection lost — reconnecting';
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +276,7 @@ function updateHeader() {
     li.textContent = n;
     list.append(li);
   }
+  $('notes').hidden = notes.length === 0;
 
   const n = tape.states.length;
   const scrub = $<HTMLInputElement>('scrub');
