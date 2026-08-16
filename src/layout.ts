@@ -333,7 +333,9 @@ export function layout(
         const col = Math.max(0, 3 - (chain.length - j));
         const isHead = id === 'HEAD';
         const isTag = id.startsWith('tag:');
-        const name = isHead ? 'HEAD' : isTag ? snap.tags[id.slice(4)]?.name ?? 'tag' : refLabel(id.slice(4));
+        // The tag object gets its sha and nothing else: the ref chip beside it
+        // already carries the name, and a chip is one line tall.
+        const name = isHead ? 'HEAD' : isTag ? short(id.slice(4)) : refLabel(id.slice(4));
         if (!at.has(id)) {
           put({
             id,
@@ -344,7 +346,6 @@ export function layout(
             w: M.chipW,
             h: M.chipH,
             label: name,
-            sub: isTag ? short(id.slice(4)) : undefined,
             unreachable: isTag && unreachable.has(id.slice(4)),
           });
         }
