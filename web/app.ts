@@ -496,12 +496,14 @@ canvas.addEventListener('pointerup', (e) => {
   void e;
 });
 
-// Double-clicking nothing in particular is the way back: the same fit the view
-// starts at, for when panning and zooming have lost the graph.
+// Double-clicking nothing in particular is the way back to the starting zoom —
+// full width, but staying where you are: jumping to the top would lose the
+// place you were reading.
 canvas.addEventListener('dblclick', (e) => {
   const w = world(e);
   if (!scene || hitTest(scene, w.x, w.y)) return;
-  camera = fit(scene, canvas.clientWidth);
+  const { scale } = fit(scene, canvas.clientWidth);
+  camera = { scale, ...bounded({ x: 20, y: canvas.clientHeight / 2 - w.y * scale }, scale) };
   glide = null;
   schedule();
 });
