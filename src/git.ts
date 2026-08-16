@@ -355,15 +355,49 @@ async function readIndex(repo: string, caps: Capabilities) {
     const [mode, oid, stage] = l.slice(0, tab).split(' ');
     return { mode, oid, stage: Number(stage), path: l.slice(tab + 1) };
   });
-  if (caps.indexNodes || all.length === 0) return { index: all };
+  // null: HEAD does not resolve (unborn), so every staged path is new.
+  const delta = await maybe(repo, ['diff-index', '--cached', '-z', 'HEAD']);
+  const { changedPaths, headOids } =
+    delta === null ? { changedPaths: null, headOids: new Set<Oid>() } : parseDiffIndex(delta);
+  // Blobs HEAD already names: the old side of the delta (mode-only keeps the
+  // same sha), plus every clean index entry — those still match HEAD, and a
+  // new path can reuse one of them without walking a tree.
+  const headHeld = new Set(headOids);
+  if (changedPaths) {
+    for (const e of all) {
+      if (e.stage === 0 && !changedPaths.has(e.path)) headHeld.add(e.oid);
+    }
+  }
+  if (caps.indexNodes || all.length === 0) return { index: all, changedPaths, headHeld };
 
   // Above the limit the interesting part of the index is the delta, not the
   // inventory: draw what differs from HEAD and count the rest.
-  const changed = new Set(
-    zsplit((await maybe(repo, ['diff-index', '--cached', '--name-only', '-z', 'HEAD'])) ?? ''),
-  );
-  const shown = all.filter((e) => changed.has(e.path) || e.stage !== 0);
-  return { index: shown, indexElided: { shown: shown.length, total: all.length } };
+  const shown = all.filter((e) => (changedPaths?.has(e.path) ?? true) || e.stage !== 0);
+  return { index: shown, indexElided: { shown: shown.length, total: all.length }, changedPaths, headHeld };
+}
+
+/** `git diff-index -z`: `:mode mode sha sha status` NUL path NUL. */
+export function parseDiffIndex(raw: string): { changedPaths: Set<string>; headOids: Set<Oid> } {
+  const changedPaths = new Set<string>();
+  const headOids = new Set<Oid>();
+  const parts = zsplit(raw);
+  for (let i = 0; i < parts.length; ) {
+    const meta = parts[i];
+    if (!meta.startsWith(':')) {
+      i++;
+      continue;
+    }
+    const fields = meta.slice(1).split(' ');
+    const src = fields[2];
+    const status = fields[4] ?? '';
+    // Rename/copy records carry two paths; everything else carries one.
+    const two = /^[RC]/.test(status);
+    const paths = two ? parts.slice(i + 1, i + 3) : parts.slice(i + 1, i + 2);
+    for (const p of paths) if (p) changedPaths.add(p);
+    if (src && !/^0+$/.test(src)) headOids.add(src);
+    i += 1 + paths.length;
+  }
+  return { changedPaths, headOids };
 }
 
 /** Read the bodies of a set of oids in one conversation, following trees down. */
@@ -408,7 +442,7 @@ export async function snapshot(
     readRefs(h.repo, h.gitDir),
     readIndex(h.repo, caps),
   ]);
-  const { index, indexElided } = indexRead;
+  const { index, indexElided, changedPaths, headHeld } = indexRead;
 
   // The window: one more than asked for, so we know whether there is more.
   const args = revListArgs(view, view.limit + 1, head.oid !== undefined);
@@ -485,6 +519,12 @@ export async function snapshot(
   const reach = caps.fullLoad
     ? findUnreachable(objects, commits, trees, tags, head, refs, index)
     : null;
+  // Orphan detection needs every object. Staged-only does not: `git add` of a
+  // new or changed path writes a blob no loaded tree names, and that blob is
+  // the first thing the tutorial has to show — on a large repo too.
+  const stagedOnly =
+    reach?.stagedOnly ??
+    stagedOnlyFromIndex(index, objects, commits, trees, tags, changedPaths, headHeld);
 
   // A ref pointing outside the window is left out and counted, never drawn as
   // an edge to a node that isn't there.
@@ -504,7 +544,7 @@ export async function snapshot(
     index: view.showIndex ? index : [],
     indexElided,
     unreachable: reach?.unreachable ?? null,
-    stagedOnly: reach?.stagedOnly ?? null,
+    stagedOnly,
     caps,
     window: {
       commits: windowCommits,
@@ -585,6 +625,39 @@ export function findUnreachable(
   };
 }
 
+/**
+ * What `git add` wrote that no commit names yet. Cheap enough for a large
+ * repo: the index and `diff-index` already know which shas HEAD holds, and
+ * walking HEAD's tree is exactly the cost bounded mode refused. A path can
+ * change (mode-only, or a new name) without writing a new blob.
+ */
+function stagedOnlyFromIndex(
+  index: IndexEntry[],
+  objects: Record<Oid, GitObject>,
+  commits: Record<Oid, Commit>,
+  trees: Record<Oid, TreeEntry[]>,
+  tags: Record<Oid, TagObject>,
+  changedPaths: Set<string> | null,
+  headHeld: Set<Oid>,
+): Oid[] {
+  const named = new Set<Oid>([
+    ...Object.keys(commits),
+    ...Object.keys(trees),
+    ...Object.keys(tags),
+    ...headHeld,
+  ]);
+  for (const entries of Object.values(trees)) for (const e of entries) named.add(e.oid);
+  const out: Oid[] = [];
+  const seen = new Set<Oid>();
+  for (const e of index) {
+    if (changedPaths && !changedPaths.has(e.path) && e.stage === 0) continue;
+    if (named.has(e.oid) || !(e.oid in objects) || seen.has(e.oid)) continue;
+    seen.add(e.oid);
+    out.push(e.oid);
+  }
+  return out;
+}
+
 function notesFor(
   caps: Capabilities,
   ctx: {
@@ -598,7 +671,7 @@ function notesFor(
   const notes: string[] = [];
   if (!caps.fullLoad) {
     notes.push(
-      `Orphan detection is off: ${caps.objectCount.toLocaleString()} objects, and finding an orphan means reading every one. Everything drawn here is reachable by construction.`,
+      `Orphan detection is off: ${caps.objectCount.toLocaleString()} objects, and finding an orphan means reading every one. Unreachable objects are not marked. Blobs only the index holds are still drawn.`,
     );
     notes.push('Trees load only for the commits you open — nothing walks the object database.');
   }

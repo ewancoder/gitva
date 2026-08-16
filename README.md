@@ -110,7 +110,7 @@ follows from that — and says so, in the notes strip, when something is off:
 
 | Above the limit | What you get instead |
 |---|---|
-| 12,000 objects | No orphan detection — finding one means reading every object. Everything drawn is reachable by construction, and trees load only for the commits you open. |
+| 12,000 objects | No orphan detection — finding one means reading every object. Unreachable objects are not marked. Blobs only the index holds are still drawn; trees load only for the commits you open. |
 | 400 staged paths | The index entries that **differ from HEAD**, plus a count for the rest. |
 
 Both limits come from measurement, and from the *expensive* step: listing every object is

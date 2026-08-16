@@ -6,6 +6,7 @@ import {
   open,
   parseBatch,
   parseCommit,
+  parseDiffIndex,
   parseTag,
   parseTree,
   readBody,
@@ -13,8 +14,19 @@ import {
   snapshot,
   type RepoHandle,
 } from '../src/git.js';
+import { layout } from '../src/layout.js';
 import { DEFAULT_VIEW, type Capabilities, type Snapshot } from '../src/types.js';
 import { plumbedRepo, type Repo } from './fixture.js';
+
+const BIG: Capabilities = {
+  objectCount: 9_000_000,
+  looseCount: 12,
+  refCount: 3,
+  fullLoad: false,
+  indexNodes: false,
+  commitGraph: false,
+  limits: { fullLoad: 60_000, indexNodes: 400 },
+};
 
 describe('parsing what git hands back', () => {
   it('splits a --batch stream into objects', () => {
@@ -83,6 +95,14 @@ describe('parsing what git hands back', () => {
     assert.equal(t.target, '4444');
     assert.equal(t.name, 'v1');
     assert.equal(t.message, 'why');
+  });
+
+  it('reads diff-index -z: meta NUL path, not a tab', () => {
+    const sha = '4a58007052a65fbc2fc3f910f2855f45a4058e74';
+    const raw = `:100644 100755 ${sha} ${sha} M\0a.txt\0:000000 100644 ${'0'.repeat(40)} abcdef0000000000000000000000000000000000 A\0fresh.txt\0`;
+    const { changedPaths, headOids } = parseDiffIndex(raw);
+    assert.deepEqual([...changedPaths].sort(), ['a.txt', 'fresh.txt']);
+    assert.deepEqual([...headOids], [sha]);
   });
 });
 
@@ -201,6 +221,14 @@ describe('a repository read through its own plumbing', () => {
     repo.git('hash-object', '-w', 'e.txt'); // a bare object nothing points at
     assert.notEqual(before, await changeSignal(handle.repo, handle.gitDir));
   });
+
+  it('the cheap question notices an index rewrite with no new object', async () => {
+    // Same blob, new path: count-objects is still, the index mtime is not.
+    repo.write('a-again.txt', 'alpha\n');
+    const before = await changeSignal(handle.repo, handle.gitDir);
+    repo.git('update-index', '--add', 'a-again.txt');
+    assert.notEqual(before, await changeSignal(handle.repo, handle.gitDir));
+  });
 });
 
 describe('degrading the documented way above a limit', () => {
@@ -213,16 +241,7 @@ describe('degrading the documented way above a limit', () => {
     handle = await open(repo.dir);
     // Fake the measurement rather than building an enormous repository: this is
     // the same switch the measurement flips.
-    const caps: Capabilities = {
-      objectCount: 9_000_000,
-      looseCount: 12,
-      refCount: 3,
-      fullLoad: false,
-      indexNodes: false,
-      commitGraph: false,
-      limits: { fullLoad: 60_000, indexNodes: 400 },
-    };
-    snap = await snapshot(handle, DEFAULT_VIEW, caps, 1);
+    snap = await snapshot(handle, DEFAULT_VIEW, BIG, 1);
   });
   after(() => repo.dispose());
 
@@ -252,5 +271,76 @@ describe('degrading the documented way above a limit', () => {
       2,
     );
     assert.ok(Object.keys(opened.trees).length > 0);
+  });
+
+  it('still shows a blob only the index holds, without walking the object database', async () => {
+    repo.write('fresh.txt', 'brand new\n');
+    repo.git('add', 'fresh.txt');
+    const blob = repo.git('hash-object', 'fresh.txt');
+    const a = repo.git('hash-object', 'a.txt');
+    const s = await snapshot(handle, DEFAULT_VIEW, { ...snap.caps }, 3);
+    assert.equal(s.unreachable, null, 'orphans stay off');
+    assert.ok(s.stagedOnly?.includes(blob), 'the added blob is staged-only');
+    assert.ok(!s.stagedOnly?.includes(a), 'a blob HEAD already names is not');
+    assert.ok(s.notes.some((n) => /Blobs only the index holds/.test(n)));
+  });
+});
+
+describe('bounded mode does not steal blobs HEAD already names', () => {
+  const setup = async () => {
+    const repo = plumbedRepo();
+    const handle = await open(repo.dir);
+    return { repo, handle };
+  };
+
+  it('a mode-only stage is not a blob only the index holds', async () => {
+    const { repo, handle } = await setup();
+    try {
+      const blob = repo.git('hash-object', 'a.txt');
+      repo.git('update-index', '--chmod=+x', 'a.txt');
+      const s = await snapshot(handle, DEFAULT_VIEW, BIG, 1);
+      assert.ok(s.index.some((e) => e.path === 'a.txt'), 'the mode change is in the delta');
+      assert.ok(!s.stagedOnly?.includes(blob), 'HEAD still names this blob');
+    } finally {
+      repo.dispose();
+    }
+  });
+
+  it('a new path that reuses a blob HEAD already names is not staged-only', async () => {
+    const { repo, handle } = await setup();
+    try {
+      repo.write('copy-of-a.txt', 'alpha\n');
+      repo.git('add', 'copy-of-a.txt');
+      const blob = repo.git('hash-object', 'a.txt');
+      const s = await snapshot(handle, DEFAULT_VIEW, BIG, 1);
+      assert.ok(s.index.some((e) => e.path === 'copy-of-a.txt'));
+      assert.ok(!s.stagedOnly?.includes(blob), 'the blob is a.txt, which HEAD already holds');
+    } finally {
+      repo.dispose();
+    }
+  });
+
+  it('unfolding a commit still places that blob in the tree, not above it', async () => {
+    const { repo, handle } = await setup();
+    try {
+      repo.git('update-index', '--chmod=+x', 'a.txt');
+      repo.write('copy-of-a.txt', 'alpha\n');
+      repo.git('add', 'copy-of-a.txt');
+      const blob = repo.git('hash-object', 'a.txt');
+      const folded = await snapshot(handle, DEFAULT_VIEW, BIG, 1);
+      const head = folded.window.commits[0];
+      const opened = await snapshot(handle, { ...DEFAULT_VIEW, expanded: [head] }, BIG, 2);
+      assert.ok(!opened.stagedOnly?.includes(blob));
+      const scene = layout(opened, { ...DEFAULT_VIEW, expanded: [head] });
+      const node = scene.nodes.find((n) => n.id === blob);
+      assert.ok(node, 'the blob is drawn');
+      assert.notEqual(node!.staged, true, 'in the tree, not as an index-only ghost');
+      assert.ok(
+        scene.edges.some((e) => e.kind === 'entry' && e.to === blob),
+        'the unfolded tree still points at it',
+      );
+    } finally {
+      repo.dispose();
+    }
   });
 });
