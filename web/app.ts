@@ -52,6 +52,9 @@ let hover: string | null = null;
 let selected: string | null = null;
 let exhausted = false;
 
+/** Objects marked by right-click, kept by sha until right-clicked again. */
+const marked = new Set<string>();
+
 /** A pin belongs to the moment it was made in, and is keyed to the object. */
 const pins: { seq: number; id: string; x: number; y: number }[] = [];
 function pinsAt(seq: number): Record<string, { x: number; y: number }> {
@@ -87,6 +90,7 @@ function paint() {
     flash,
     hover,
     selected,
+    marked,
     enter,
     ghosts,
     motion: !reduceMotion,
@@ -496,9 +500,17 @@ canvas.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   const w = world(e);
   const hit = scene ? hitTest(scene, w.x, w.y) : null;
-  if (!hit || hit.kind !== 'commit') return;
-  tape.toggle(hit.id);
-  pushView();
+  if (!hit) return;
+  if (hit.kind === 'commit') {
+    tape.toggle(hit.id);
+    pushView();
+    return;
+  }
+  // Everything else that is an object gets a mark instead: an object moves
+  // around as history is filtered and folded, and a mark is how you follow it.
+  if (hit.kind !== 'tree' && hit.kind !== 'blob' && hit.kind !== 'tag' && hit.kind !== 'submodule') return;
+  if (!marked.delete(hit.id)) marked.add(hit.id);
+  schedule();
 });
 
 canvas.addEventListener(

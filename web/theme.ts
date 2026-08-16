@@ -45,6 +45,11 @@ export const theme = {
   refTag: '#e0c74f',
   tagObject: '#8fb0ff',
 
+  // A mark the reader put there by hand, to follow one object as the graph
+  // moves. Not a hue on a node and not the accent: an outline outside the
+  // silhouette, in the one colour nothing else on this surface uses.
+  mark: '#e5484d',
+
   ghost: '#6b7488',
 
   sans: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',

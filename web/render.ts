@@ -30,6 +30,8 @@ export interface Paint {
   flash: number;
   hover: string | null;
   selected: string | null;
+  /** Objects the reader marked, to keep an eye on them as the graph moves. */
+  marked: Set<string>;
   /** 0→1 while new things grow out of where they came from. */
   enter: number;
   /** Nodes that have gone, drawn at their old place while they fade. */
@@ -390,11 +392,21 @@ function drawNode(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, lit: Se
     ctx.stroke();
   }
 
+  const marked = p.marked.has(n.id);
+  if (marked) {
+    ctx.setLineDash([]);
+    ctx.strokeStyle = theme.mark;
+    ctx.lineWidth = 2;
+    shape(ctx, n, 3);
+    ctx.stroke();
+  }
   if (n.id === p.selected) {
     ctx.setLineDash([]);
     ctx.strokeStyle = theme.ink;
     ctx.lineWidth = 2;
-    shape(ctx, n, 3);
+    // Outside the mark when there is one, so selecting a marked object does
+    // not paint over the thing you asked to keep watching.
+    shape(ctx, n, marked ? 7 : 3);
     ctx.stroke();
   }
   if (changed) {

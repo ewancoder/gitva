@@ -71,6 +71,7 @@ the one line inside a ref.
 | click | select: read what it is, and light the whole path through it |
 | hover | light what it connects to |
 | right-click a commit | fold or unfold what it contains (a commit git just made arrives unfolded, unless you turn that off in the legend) |
+| right-click a tree, blob or tag | mark it with a red outline, so you can follow that sha as the graph moves; right-click again to unmark |
 | double-click a node | unpin it, wherever the layout wants it |
 | double-click background | fit to width again, centred on the point you clicked |
 | click *load more history* | load another thousand commits (*load all* in the toolbar loads the lot) |
