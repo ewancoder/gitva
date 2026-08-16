@@ -23,13 +23,16 @@ const repo = positional[0] ?? '.';
 
 try {
   const server = await serve(repo, port, host);
-  const url = `http://127.0.0.1:${server.port}/`;
-  process.stdout.write(`gitva watching ${repo}\n${url}\n`);
+  const local = `http://127.0.0.1:${server.port}/`;
+  process.stdout.write(`gitva watching ${repo}\n${local}\n`);
   // Reaching other machines has no authentication: whoever reaches the port
-  // reads the whole repository.
+  // reads the whole repository. The loopback URL above is what this machine
+  // opens; the bind address is what everyone else has to hit.
   if (host !== '127.0.0.1')
-    process.stdout.write(`serving ${host}:${server.port} to the network — no auth\n`);
-  if (!args.includes('--no-open')) openBrowser(url);
+    process.stdout.write(
+      `listening on ${host}:${server.port} — no auth; anyone who can reach this port reads the repository\n`,
+    );
+  if (!args.includes('--no-open')) openBrowser(local);
   process.on('SIGINT', () => void server.close().then(() => process.exit(0)));
 } catch (err) {
   process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
