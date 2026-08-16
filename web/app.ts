@@ -115,6 +115,19 @@ function relayout(animate: boolean, repoChanged: boolean) {
 // ---------------------------------------------------------------------------
 
 function record(s: Snapshot) {
+  // A step is a state of the repository. Asking the same repository a different
+  // question — folding, filtering, paging — replaces the state in place, so
+  // stepping back and forth only ever walks over things git actually did.
+  const top = tape.length - 1;
+  if (top >= 0 && tape[top].seq === s.seq) {
+    tape[top] = s;
+    if (cursor !== top) return;
+    snap = s;
+    relayout(true, false);
+    updateHeader();
+    if (selected) renderPanel(panel, snap, scene?.nodes.find((n) => n.id === selected) ?? null);
+    return;
+  }
   tape.push(s);
   if (tape.length > TAPE_CAP) {
     tape.shift();

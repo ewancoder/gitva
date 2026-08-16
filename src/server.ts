@@ -40,18 +40,22 @@ export async function serve(repoPath: string, port = 0): Promise<Server> {
   let building = false;
   const clients = new Set<ServerResponse>();
 
-  async function build(force: boolean) {
+  /**
+   * `seq` counts states of the *repository*, not broadcasts. Asking a different
+   * question of the same repository is not a moment to step back to, so a
+   * view rebuild reuses the number and the client redraws in place.
+   */
+  async function build(repoMoved: boolean) {
     if (building) return;
     building = true;
     try {
-      const s = await snapshot(handle, view, caps, ++seq);
+      const s = await snapshot(handle, view, caps, repoMoved ? ++seq : seq);
       last = s;
       const frame = `event: snapshot\ndata: ${JSON.stringify(s)}\n\n`;
       for (const c of clients) c.write(frame);
     } catch (err) {
       const frame = `event: trouble\ndata: ${JSON.stringify({ message: String(err) })}\n\n`;
       for (const c of clients) c.write(frame);
-      if (force) throw err;
     } finally {
       building = false;
     }
@@ -65,7 +69,7 @@ export async function serve(repoPath: string, port = 0): Promise<Server> {
       const next = await changeSignal(handle.repo, handle.gitDir);
       if (next === signal) return;
       signal = next;
-      await build(false);
+      await build(true);
     } catch {
       /* a repo mid-rewrite: try again on the next tick */
     }
@@ -94,7 +98,13 @@ export async function serve(repoPath: string, port = 0): Promise<Server> {
     clients.add(res);
     req.on('close', () => clients.delete(res));
     if (last) res.write(`event: snapshot\ndata: ${JSON.stringify(last)}\n\n`);
-    else void build(false);
+    else void first();
+  }
+
+  /** The first client pays for the first state; the poller must not repeat it. */
+  async function first() {
+    signal = await changeSignal(handle.repo, handle.gitDir).catch(() => signal);
+    await build(true);
   }
 
   async function setView(req: IncomingMessage, res: ServerResponse) {

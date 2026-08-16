@@ -21,6 +21,23 @@ describe('the view arriving from the browser', () => {
   });
 });
 
+/** The snapshots off an event stream, one frame at a time. */
+async function* snapshots(res: Response) {
+  const reader = res.body!.getReader();
+  let buf = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buf += new TextDecoder().decode(value);
+    let end: number;
+    while ((end = buf.indexOf('\n\n')) >= 0) {
+      const frame = buf.slice(0, end);
+      buf = buf.slice(end + 2);
+      if (frame.startsWith('event: snapshot')) yield JSON.parse(frame.split('\ndata: ')[1]);
+    }
+  }
+}
+
 describe('the server', () => {
   let repo: Repo;
   let server: Server;
@@ -68,6 +85,25 @@ describe('the server', () => {
     const body = await (await fetch(`${base}object?oid=${a}`)).json();
     assert.equal(body.text, 'alpha\n');
     assert.equal((await fetch(`${base}object?oid=../../etc/passwd`)).status, 400);
+  });
+
+  it('numbers states of the repository, not answers to questions', async () => {
+    const res = await fetch(base + 'events');
+    const stream = snapshots(res);
+    const a = (await stream.next()).value;
+
+    // A different question of the same repository is not a step.
+    await fetch(base + 'view', { method: 'POST', body: JSON.stringify({ limit: 3 }) });
+    const b = (await stream.next()).value;
+    assert.equal(b.seq, a.seq);
+    assert.equal(b.view.limit, 3);
+
+    // A new object is.
+    repo.write('e.txt', 'epsilon\n');
+    repo.git('hash-object', '-w', 'e.txt');
+    const c = (await stream.next()).value;
+    assert.equal(c.seq, a.seq + 1);
+    await stream.return(undefined);
   });
 
   it('takes a new view', async () => {

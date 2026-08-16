@@ -108,6 +108,8 @@ export const DEFAULT_VIEW: View = {
 };
 
 export interface Snapshot {
+  /** Which state of the repository this is. Two answers to the same state — a
+   *  fold, a filter, a wider window — share a number, and are not a step. */
   seq: number;
   time: number;
   repo: string;
