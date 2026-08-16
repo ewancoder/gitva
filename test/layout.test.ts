@@ -196,6 +196,18 @@ describe('the scene', () => {
     assert.ok(scene.edges.some((e) => e.from === ref.id && e.to === oid('c')));
   });
 
+  it('writes a remote as origin/branch, not remotes/origin/branch', () => {
+    // 72px chips cannot hold the longer form, and "remotes/" is already the band.
+    const s = fakeSnapshot({ a: [] });
+    s.refs = [
+      { name: 'refs/heads/main', oid: oid('a'), objectType: 'commit', packed: false },
+      { name: 'refs/remotes/origin/main', oid: oid('a'), objectType: 'commit', packed: false },
+    ];
+    const scene = layout(s, DEFAULT_VIEW);
+    const labels = scene.nodes.filter((n) => n.kind === 'ref').map((n) => n.label).sort();
+    assert.deepEqual(labels, ['main', 'origin/main']);
+  });
+
   it('points a detached HEAD straight at the commit', () => {
     const s = fakeSnapshot({ c: ['b'], b: [] }, {});
     s.head = { oid: oid('c'), detached: true, unborn: false };

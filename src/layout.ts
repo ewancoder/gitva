@@ -101,7 +101,11 @@ const short = (oid: Oid) => oid.slice(0, 7);
 const entryLabel = (e: { name: string; mode: string }) =>
   `${e.name}${e.mode === '100755' ? ' +x' : e.mode === '120000' ? ' ->' : ''}`;
 const refLabel = (name: string) =>
-  name.replace(/^refs\/heads\//, '').replace(/^refs\/tags\//, 'tag: ').replace(/^refs\//, '');
+  name
+    .replace(/^refs\/heads\//, '')
+    .replace(/^refs\/remotes\//, '')
+    .replace(/^refs\/tags\//, 'tag: ')
+    .replace(/^refs\//, '');
 
 // ---------------------------------------------------------------------------
 // Lanes
