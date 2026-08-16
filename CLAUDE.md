@@ -134,8 +134,6 @@ git reset b.txt       → the index entry goes; the blob survives, now marked un
 
 ## Known open work
 
-- **The visual pass has never been looked at by a human.** It was built to the brief but no
-  screenshot has been taken. `INITIAL_DESIGN.md` §12 sets the bar: screenshot it on a real repo
-  with a couple of hundred commits and ask whether you would put that image at the top of the
-  README. Whatever is wrong with it is the next task.
-- No README screenshot yet, for the same reason.
+- The visual pass has been looked at on a real ~150-commit repo and a screenshot
+  sits at the top of the README. Further visual work is whatever that image still
+  fails to make obvious.
