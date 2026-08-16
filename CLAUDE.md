@@ -34,7 +34,7 @@ dependency passes the one-sentence test in `INITIAL_DESIGN.md` §14.
 | `src/explain.ts` | the teaching text, per node kind. Pure. |
 | `src/server.ts` | `node:http`: static files, SSE `/events`, `POST /view`, `GET /object`. |
 | `src/cli.ts` | arg parsing, opens the browser. |
-| `web/` | `index.html` (all CSS), `app.ts` (state, tape, input), `render.ts` (canvas), `panel.ts`, `theme.ts`. |
+| `web/` | `index.html` (all CSS), `tape.ts` (states, cursor, view — no DOM, tested), `app.ts` (DOM, input, painting), `render.ts` (canvas), `panel.ts`, `theme.ts`. |
 | `test/` | `fixture.ts` builds real repos with real plumbing; the rest are `node:test`. |
 
 `src/*` is compiled to `dist/src` and served to the browser too — `web/app.ts` imports

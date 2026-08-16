@@ -9,12 +9,12 @@
 
 import { diffScenes, describe, EMPTY_CHANGE, type Change } from '../src/diff.js';
 import { layout, type Scene, type SceneNode } from '../src/layout.js';
-import { DEFAULT_VIEW, type Snapshot, type View } from '../src/types.js';
+import { type Snapshot, type View } from '../src/types.js';
 import { renderPanel } from './panel.js';
 import { draw, fit, hitTest, type Camera } from './render.js';
+import { Tape } from './tape.js';
 import { theme } from './theme.js';
 
-const TAPE_CAP = 400;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -36,16 +36,12 @@ const prefs: Prefs = {
 };
 const savePrefs = () => localStorage.setItem('gitva.prefs', JSON.stringify(prefs));
 
-let view: View = { ...DEFAULT_VIEW, showIndex: prefs.showIndex };
-
-// --- the tape
-const tape: Snapshot[] = [];
-let dropped = 0;
-let cursor = -1;
-let following = true;
+// --- the tape: every state seen, where we stand in it, and the view we ask
+// with. It owns all three, so nothing here keeps a second copy to drift.
+const tape = new Tape();
+tape.view = { ...tape.view, showIndex: prefs.showIndex };
 
 // --- what is on screen
-let snap: Snapshot | null = null;
 let scene: Scene | null = null;
 let ghosts: SceneNode[] = [];
 let change: Change = EMPTY_CHANGE;
@@ -137,8 +133,11 @@ const isObject = (n: SceneNode) =>
   n.oid !== undefined && n.kind !== 'index';
 
 function relayout(animate: boolean, repoChanged: boolean) {
-  if (!snap) return;
-  let next = layout(snap, view, pinsAt(snap.seq));
+  // Every tree the tape has ever read, not only the ones this state came with:
+  // a commit opened now has to draw open on a state recorded before it was.
+  const state = tape.world;
+  if (!state) return;
+  let next = layout(state, tape.view, pinsAt(state.seq));
   // Losing your last arrow is the lesson — being teleported to the bottom of the
   // page is not. An object drawn somewhere new because its relations changed —
   // into the orphanage, or back out of it, or from a gutter chip to a node —
@@ -158,7 +157,7 @@ function relayout(animate: boolean, repoChanged: boolean) {
       pins.push({ seq: 0, id: n.id, x: was.x, y: was.y });
       stuck = true;
     }
-    if (stuck) next = layout(snap, view, pinsAt(snap.seq));
+    if (stuck) next = layout(state, tape.view, pinsAt(state.seq));
   }
   change = diffScenes(scene, next);
   ghosts = scene ? scene.nodes.filter((n) => change.removed.has(n.id)) : [];
@@ -177,45 +176,20 @@ function relayout(animate: boolean, repoChanged: boolean) {
 // The tape
 // ---------------------------------------------------------------------------
 
-function record(s: Snapshot) {
-  // A step is a state of the repository. Asking the same repository a different
-  // question — folding, filtering, paging — replaces the state in place, so
-  // stepping back and forth only ever walks over things git actually did.
-  const top = tape.length - 1;
-  if (top >= 0 && tape[top].seq === s.seq) {
-    tape[top] = s;
-    if (cursor !== top) return;
-    snap = s;
-    relayout(true, false);
-    updateHeader();
-    if (selected) renderPanel(panel, snap, scene?.nodes.find((n) => n.id === selected) ?? null);
-    return;
-  }
-  tape.push(s);
-  if (tape.length > TAPE_CAP) {
-    tape.shift();
-    dropped++;
-  }
-  if (following) show(tape.length - 1, true);
-  else updateHeader();
-}
-
-function show(i: number, live: boolean) {
-  const next = tape[i];
-  if (!next) return;
-  const prev = snap;
-  cursor = i;
-  snap = next;
-  // Each state was a state *of a view*, so going back to one puts its view
-  // back. While live the local view wins: it is ahead of what the server has
-  // answered with yet.
-  if (!live) view = next.view;
-  const changed = describe(prev, next);
+/** The tape moved: draw where it stands now, having come from `prev`. */
+function shown(prev: Snapshot | null) {
+  const changed = describe(prev, tape.current!);
   renderHeaderChange(prev ? changed : 'first read');
   relayout(true, prev !== null && changed !== 'no visible change');
+  redressed();
+}
+
+/** Same state, drawn again — a fold, a filter, a wider window. */
+function redressed() {
   updateHeader();
-  if (!live) following = false;
-  if (selected) renderPanel(panel, snap, scene?.nodes.find((n) => n.id === selected) ?? null);
+  if (selected) {
+    renderPanel(panel, tape.current, scene?.nodes.find((n) => n.id === selected) ?? null);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -223,54 +197,44 @@ function show(i: number, live: boolean) {
 // ---------------------------------------------------------------------------
 
 let postTimer: number | undefined;
-function pushView() {
-  prefs.showIndex = view.showIndex;
-  savePrefs();
-  relayout(true, false);
-  updateHeader();
+function postView(v: View) {
   clearTimeout(postTimer);
   postTimer = setTimeout(() => {
     void fetch('/view', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(view),
+      body: JSON.stringify(v),
     });
   }, 60) as unknown as number;
+}
+
+function pushView() {
+  prefs.showIndex = tape.view.showIndex;
+  savePrefs();
+  relayout(true, false);
+  updateHeader();
+  postView(tape.view);
 }
 
 const source = new EventSource('/events');
 source.addEventListener('snapshot', (e) => {
   live(true);
   const s: Snapshot = JSON.parse((e as MessageEvent).data);
-  const firstEver = snap === null;
-  const last = tape[tape.length - 1];
-  if (firstEver) {
-    view = { ...s.view, showIndex: prefs.showIndex };
-    // Anything past a handful of commits starts folded.
-    if (s.window.commits.length <= 6 && view.expanded.length === 0) {
-      view = { ...view, expanded: s.window.commits };
-      pushView();
-    }
-  } else if (prefs.openNewCommits && following && last && s.seq !== last.seq) {
-    // A commit git just made opens itself: the lesson is that it points at the
-    // trees and blobs already on screen, which folding it away would hide.
-    // Only on a new state — paging in older commits is not something that
-    // just happened.
-    const had = new Set([...last.window.commits, ...view.expanded]);
-    const fresh = s.window.commits.filter((c) => !had.has(c));
-    if (fresh.length > 0) {
-      view = { ...view, expanded: [...view.expanded, ...fresh] };
-      pushView();
-    }
-  }
   fillBranches(s);
   if (s.window.commits.length < s.view.limit) exhausted = true;
-  record(s);
-  if (firstEver && scene) {
-    camera = fit(scene, canvas.clientWidth);
-    glide = null;
-    schedule();
-  }
+  const a = tape.arrive(s, prefs);
+  if (a.post) postView(a.post);
+  if (a.kind === 'shown') {
+    shown(a.prev);
+    if (a.first && scene) {
+      camera = fit(scene, canvas.clientWidth);
+      glide = null;
+      schedule();
+    }
+  } else if (a.kind === 'inplace') {
+    relayout(true, false);
+    redressed();
+  } else updateHeader();
 });
 source.addEventListener('trouble', (e) => {
   renderHeaderChange(JSON.parse((e as MessageEvent).data).message);
@@ -280,8 +244,8 @@ source.onopen = () => live(true);
 
 function live(ok: boolean) {
   const dot = $('live-dot');
-  dot.className = 'dot' + (ok ? (following ? '' : ' paused') : ' off');
-  $('live-text').textContent = ok ? (following ? 'live' : 'paused') : 'connection lost';
+  dot.className = 'dot' + (ok ? (tape.following ? '' : ' paused') : ' off');
+  $('live-text').textContent = ok ? (tape.following ? 'live' : 'paused') : 'connection lost';
 }
 
 // ---------------------------------------------------------------------------
@@ -289,6 +253,7 @@ function live(ok: boolean) {
 // ---------------------------------------------------------------------------
 
 function updateHeader() {
+  const snap = tape.current;
   if (!snap) return;
   $('repo-name').textContent = snap.repo;
   $('repo-dir').textContent = snap.gitDir;
@@ -307,20 +272,23 @@ function updateHeader() {
   const list = $('notes-list');
   list.replaceChildren();
   const notes = [...snap.notes];
-  if (dropped > 0) notes.push(`Tape: ${tape.length} states kept, ${dropped} older ones dropped.`);
+  if (tape.dropped > 0) {
+    notes.push(`Tape: ${tape.states.length} states kept, ${tape.dropped} older ones dropped.`);
+  }
   for (const n of notes) {
     const li = document.createElement('li');
     li.textContent = n;
     list.append(li);
   }
 
+  const n = tape.states.length;
   const scrub = $<HTMLInputElement>('scrub');
-  scrub.max = String(Math.max(0, tape.length - 1));
-  scrub.value = String(Math.max(0, cursor));
-  $('tape-pos').textContent = tape.length ? `${cursor + 1}/${tape.length}` : '';
-  $('play').textContent = following ? 'pause' : 'go live';
-  $('play').setAttribute('aria-pressed', String(!following));
-  $('toggle-index').setAttribute('aria-pressed', String(view.showIndex));
+  scrub.max = String(Math.max(0, n - 1));
+  scrub.value = String(Math.max(0, tape.cursor));
+  $('tape-pos').textContent = n ? `${tape.cursor + 1}/${n}` : '';
+  $('play').textContent = tape.following ? 'pause' : 'go live';
+  $('play').setAttribute('aria-pressed', String(!tape.following));
+  $('toggle-index').setAttribute('aria-pressed', String(tape.view.showIndex));
   $<HTMLButtonElement>('load-all').disabled = !canLoadMore();
   live(source.readyState !== 2);
 }
@@ -354,38 +322,39 @@ $('question').addEventListener('change', () => {
   search.hidden = kind === 'all' || kind === 'branches';
   branches.hidden = kind !== 'branches';
   exhausted = false;
-  if (kind === 'all') view = { ...view, question: { kind: 'all' } };
+  if (kind === 'all') tape.view = { ...tape.view, question: { kind: 'all' } };
   else if (kind === 'branches')
-    view = { ...view, question: { kind: 'refs', refs: [...branches.selectedOptions].map((o) => o.value) } };
-  else view = { ...view, question: { kind: 'search', text: search.value, in: kind as 'message' } };
+    tape.view = { ...tape.view, question: { kind: 'refs', refs: [...branches.selectedOptions].map((o) => o.value) } };
+  else tape.view = { ...tape.view, question: { kind: 'search', text: search.value, in: kind as 'message' } };
   pushView();
 });
 $('search').addEventListener('input', () => {
   const kind = $<HTMLSelectElement>('question').value;
   if (kind === 'all' || kind === 'branches') return;
   exhausted = false;
-  view = { ...view, question: { kind: 'search', text: $<HTMLInputElement>('search').value, in: kind as 'message' } };
+  const text = $<HTMLInputElement>('search').value;
+  tape.view = { ...tape.view, question: { kind: 'search', text, in: kind as 'message' } };
   pushView();
 });
 $('branches').addEventListener('change', () => {
   exhausted = false;
-  view = {
-    ...view,
+  tape.view = {
+    ...tape.view,
     question: { kind: 'refs', refs: [...$<HTMLSelectElement>('branches').selectedOptions].map((o) => o.value) },
   };
   pushView();
 });
 $('toggle-index').addEventListener('click', () => {
-  view = { ...view, showIndex: !view.showIndex };
+  tape.view = { ...tape.view, showIndex: !tape.view.showIndex };
   pushView();
 });
 $('load-all').addEventListener('click', loadAllHistory);
 $('unfold').addEventListener('click', () => {
-  view = { ...view, expanded: snap ? [...snap.window.commits] : [] };
+  tape.unfoldAll();
   pushView();
 });
 $('fold').addEventListener('click', () => {
-  view = { ...view, expanded: [] };
+  tape.foldAll();
   pushView();
 });
 // Dropping every pin, at every moment of the tape: a pin is a thing you put
@@ -408,22 +377,18 @@ openNew.addEventListener('change', () => {
   savePrefs();
 });
 $('play').addEventListener('click', () => {
-  following = !following;
-  if (following) show(tape.length - 1, true);
-  updateHeader();
+  if (tape.following) {
+    tape.following = false;
+    updateHeader();
+  } else moved(tape.goLive());
 });
-$('step-back').addEventListener('click', () => step(-1));
-$('step-fwd').addEventListener('click', () => step(1));
+$('step-back').addEventListener('click', () => moved(tape.step(-1)));
+$('step-fwd').addEventListener('click', () => moved(tape.step(1)));
 $('scrub').addEventListener('input', () => {
-  following = false;
-  show(Number($<HTMLInputElement>('scrub').value), false);
+  moved(tape.scrubTo(Number($<HTMLInputElement>('scrub').value)));
 });
 
-function step(d: number) {
-  const i = Math.min(tape.length - 1, Math.max(0, cursor + d));
-  following = i === tape.length - 1;
-  show(i, following);
-}
+const moved = (j: { prev: Snapshot | null } | null) => (j ? shown(j.prev) : updateHeader());
 
 addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
@@ -431,8 +396,8 @@ addEventListener('keydown', (e) => {
     camera = fit(scene, canvas.clientWidth);
     glide = null;
     schedule();
-  } else if (e.key === '[') step(-1);
-  else if (e.key === ']') step(1);
+  } else if (e.key === '[') moved(tape.step(-1));
+  else if (e.key === ']') moved(tape.step(1));
   else if (e.key === ' ') {
     e.preventDefault();
     $('play').click();
@@ -482,7 +447,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
   if (drag.id && drag.moved) {
     const w = world(e);
-    const seq = snap?.seq ?? 0;
+    const seq = tape.current?.seq ?? 0;
     const existing = pins.find((p) => p.id === drag!.id && p.seq === seq);
     if (existing) {
       existing.x = w.x - drag.dx;
@@ -509,7 +474,7 @@ canvas.addEventListener('pointerup', (e) => {
     }
     selected = drag.id;
     const node = scene?.nodes.find((n) => n.id === selected) ?? null;
-    renderPanel(panel, snap, node);
+    renderPanel(panel, tape.current, node);
     if (node && prefs.centreOnClick) {
       glide = null;
       camera = {
@@ -550,8 +515,7 @@ canvas.addEventListener('contextmenu', (e) => {
   const w = world(e);
   const hit = scene ? hitTest(scene, w.x, w.y) : null;
   if (!hit || hit.kind !== 'commit') return;
-  const on = view.expanded.includes(hit.id);
-  view = { ...view, expanded: on ? view.expanded.filter((o) => o !== hit.id) : [...view.expanded, hit.id] };
+  tape.toggle(hit.id);
   pushView();
 });
 
@@ -576,13 +540,13 @@ canvas.addEventListener(
 );
 
 function canLoadMore() {
-  return !!snap && !exhausted && snap.window.more && following;
+  return !exhausted && !!tape.current?.window.more && tape.following;
 }
 
 /** Clicking "load more history" pages — scrolling never loads anything. */
 function loadMoreHistory() {
   if (!canLoadMore()) return;
-  view = { ...view, limit: view.limit + 1000 };
+  tape.view = { ...tape.view, limit: tape.view.limit + 1000 };
   pushView();
 }
 
@@ -593,7 +557,7 @@ function loadMoreHistory() {
  */
 function loadAllHistory() {
   if (!canLoadMore()) return;
-  view = { ...view, limit: Number.MAX_SAFE_INTEGER };
+  tape.view = { ...tape.view, limit: Number.MAX_SAFE_INTEGER };
   pushView();
 }
 

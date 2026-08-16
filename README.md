@@ -81,7 +81,9 @@ the repository is.
 
 Every state is kept. Pause and the tape keeps recording behind you, so a demo can be
 **replayed instead of redone**; stepping backwards highlights the change in reverse, which is
-how you show a reset twice without doing it twice.
+how you show a reset twice without doing it twice. Going back to a state asks the question that
+was being asked then — except for folding: a commit you opened stays open wherever you stand in
+the tape, and one you folded stays folded, until you say otherwise.
 
 The legend dialog also holds preferences, which survive a reload — whether clicking a node centres
 the view on it, and whether a commit git just made arrives unfolded.

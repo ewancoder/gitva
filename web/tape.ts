@@ -1,0 +1,152 @@
+/**
+ * The tape: every state the browser has been shown, where the person is
+ * standing in it, and the view they are asking with.
+ *
+ * No browser in here — the rules about what is recorded, what is shown and
+ * what stays folded are the ones that got quietly broken by hand, so they are
+ * a plain object with tests (`test/tape.test.ts`) rather than something you can
+ * only check by scrubbing and squinting.
+ */
+
+import { DEFAULT_VIEW, type Oid, type Snapshot, type TreeEntry, type View } from '../src/types.js';
+
+export const TAPE_CAP = 400;
+
+/** What the caller has to repaint after a state arrived. */
+export type Arrival =
+  | { kind: 'none'; post: View | null }
+  /** The same state, answered again — nothing happened in git. */
+  | { kind: 'inplace'; post: View | null }
+  | { kind: 'shown'; prev: Snapshot | null; first: boolean; post: View | null };
+
+export interface Prefs {
+  showIndex: boolean;
+  openNewCommits: boolean;
+}
+
+export class Tape {
+  readonly states: Snapshot[] = [];
+  dropped = 0;
+  cursor = -1;
+  following = true;
+  view: View = { ...DEFAULT_VIEW };
+
+  /** Every tree ever read, across every state. An object *is* its contents, so
+   *  a tree read at any moment is that tree at every moment — which is what
+   *  lets a commit opened now be drawn open on a state recorded before. */
+  private readonly trees: Record<Oid, TreeEntry[]> = {};
+
+  get current(): Snapshot | null {
+    return this.states[this.cursor] ?? null;
+  }
+  get last(): Snapshot | null {
+    return this.states[this.states.length - 1] ?? null;
+  }
+  /** The state on screen, told everything the tape knows about trees. */
+  get world(): Snapshot | null {
+    const s = this.current;
+    return s && { ...s, trees: { ...this.trees, ...s.trees } };
+  }
+
+  /** A state off the wire. `post` is a view the server has to be told about. */
+  arrive(s: Snapshot, prefs: Prefs): Arrival {
+    Object.assign(this.trees, s.trees);
+    const first = this.states.length === 0;
+    const last = this.last;
+    let post: View | null = null;
+
+    if (first) {
+      this.view = { ...s.view, showIndex: prefs.showIndex };
+      // Anything past a handful of commits starts folded.
+      if (s.window.commits.length <= 6 && this.view.expanded.length === 0) {
+        this.view = { ...this.view, expanded: [...s.window.commits] };
+        post = this.view;
+      }
+    } else if (prefs.openNewCommits && last && s.seq !== last.seq) {
+      // A commit git just made opens itself: the lesson is that it points at
+      // the trees and blobs already on screen, which folding it away would
+      // hide. Only on a new state — paging in older commits is not something
+      // that just happened. Once, too: folding it afterwards is an answer, and
+      // it does not get asked again.
+      const had = new Set([...last.window.commits, ...this.view.expanded]);
+      const fresh = s.window.commits.filter((c) => !had.has(c));
+      if (fresh.length > 0) {
+        this.view = { ...this.view, expanded: [...this.view.expanded, ...fresh] };
+        // Paused, the question on screen belongs to an older state while the
+        // server is still on its own: only the folds travel.
+        post = this.following ? this.view : { ...s.view, expanded: this.view.expanded };
+      }
+    }
+
+    // A step is a state of the repository. Asking the same repository a
+    // different question — folding, filtering, paging — replaces the state in
+    // place, so stepping back and forth only ever walks over things git did.
+    const top = this.states.length - 1;
+    if (top >= 0 && this.states[top].seq === s.seq) {
+      this.states[top] = s;
+      return { kind: this.cursor === top ? 'inplace' : 'none', post };
+    }
+
+    this.states.push(s);
+    if (this.states.length > TAPE_CAP) {
+      this.states.shift();
+      this.dropped++;
+      // The oldest state fell off the end; standing still means standing on
+      // the same state, not on the same number.
+      this.cursor = Math.max(0, this.cursor - 1);
+    }
+    if (!this.following) return { kind: 'none', post };
+    const prev = this.current;
+    this.cursor = this.states.length - 1;
+    return { kind: 'shown', prev, first, post };
+  }
+
+  /** Show state `i`; returns what was on screen before, or null if it can't. */
+  jump(i: number): { prev: Snapshot | null } | null {
+    if (!this.states[i]) return null;
+    const prev = this.current;
+    this.cursor = i;
+    // Each state was a state *of a view*, so going back to one puts its view
+    // back — every part of it except which commits are open. That one is held
+    // in the head of the person watching, across the whole tape: a commit they
+    // opened stays open wherever they stand, and one they folded stays folded,
+    // until they say otherwise.
+    this.view = { ...this.states[i].view, expanded: this.view.expanded };
+    return { prev };
+  }
+
+  step(d: number) {
+    const i = Math.min(this.states.length - 1, Math.max(0, this.cursor + d));
+    this.following = i === this.states.length - 1;
+    return this.jump(i);
+  }
+
+  scrubTo(i: number) {
+    this.following = false;
+    return this.jump(i);
+  }
+
+  goLive() {
+    this.following = true;
+    return this.jump(this.states.length - 1);
+  }
+
+  /** The three fold gestures — the only things that own `expanded`. */
+  toggle(oid: Oid) {
+    const on = this.view.expanded.includes(oid);
+    this.view = {
+      ...this.view,
+      expanded: on ? this.view.expanded.filter((o) => o !== oid) : [...this.view.expanded, oid],
+    };
+  }
+  /** Both act on what is on screen: folds made elsewhere in the tape are not
+   *  something this gesture said anything about. */
+  unfoldAll() {
+    const on = new Set([...this.view.expanded, ...(this.current?.window.commits ?? [])]);
+    this.view = { ...this.view, expanded: [...on] };
+  }
+  foldAll() {
+    const off = new Set(this.current?.window.commits ?? []);
+    this.view = { ...this.view, expanded: this.view.expanded.filter((o) => !off.has(o)) };
+  }
+}
