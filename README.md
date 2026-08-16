@@ -62,11 +62,11 @@ the one line inside a ref.
 | hover | light what it connects to |
 | right-click a commit | fold or unfold what it contains |
 | double-click background | fit to width again, centred on the point you clicked |
-| click *load more history* | load the rest of the commits |
+| click *load more history* | load another thousand commits (*load all* in the toolbar loads the lot) |
 | <kbd>f</kbd> <kbd>[</kbd> <kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |
 
 In the toolbar: ask for everything, for chosen branches, or search by message, author, path or
-content; fold or unfold every commit at once; hide the index. Every one of those is the same
+content; load the whole history; fold or unfold every commit at once; hide the index. Every one of those is the same
 mechanism — a change to the *view* the browser holds, which is why none of them care how big
 the repository is.
 

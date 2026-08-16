@@ -144,6 +144,7 @@
         </select>
         <input id="search" placeholder="search" size="14" hidden />
         <select id="branches" multiple size="1" hidden></select>
+        <button id="load-all" title="Load the whole history, not just the first page">load all</button>
         <button id="unfold" title="Open every commit (right-click one commit for just it)">unfold all</button>
         <button id="fold" title="Fold everything back to the commit DAG">fold all</button>
         <button id="toggle-index" aria-pressed="true" title="The index is the sandbox beside the object graph">index</button>
@@ -199,7 +200,7 @@
         <code>drag a node</code><span>pin it where you put it</span>
         <code>click</code><span>select, and read what it is</span>
         <code>right-click commit</code><span>fold or open what it contains</span>
-        <code>click "load more history"</code><span>load the rest of the history</span>
+        <code>click "load more history"</code><span>another thousand commits ("load all" loads the lot)</span>
         <code>f / [ / ] / space</code><span>fit &middot; step back &middot; step forward &middot; pause</span>
       </div>
       <h2 style="margin-top: 16px">Preferences</h2>

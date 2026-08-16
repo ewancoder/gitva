@@ -181,7 +181,9 @@ export function sanitise(raw: unknown): View {
         : { kind: 'all' };
   return {
     question,
-    limit: Math.min(Math.max(Math.trunc(Number(v.limit) || DEFAULT_VIEW.limit), 1), 20_000),
+    // The ceiling is only there to keep a hostile number out of `rev-list -n`;
+    // "load all" sends something huge on purpose and lands here.
+    limit: Math.min(Math.max(Math.trunc(Number(v.limit) || DEFAULT_VIEW.limit), 1), 1_000_000),
     expanded: (v.expanded ?? []).filter((o) => /^[0-9a-f]{4,64}$/.test(o)).slice(0, 5_000),
     showIndex: v.showIndex !== false,
   };

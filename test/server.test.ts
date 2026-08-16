@@ -16,7 +16,8 @@ describe('the view arriving from the browser', () => {
   });
   it('refuses an oid that is not one, and clamps the window', () => {
     assert.deepEqual(sanitise({ expanded: ['abc123', 'not an oid'] }).expanded, ['abc123']);
-    assert.equal(sanitise({ limit: 1e9 }).limit, 20_000);
+    assert.equal(sanitise({ limit: 1e9 }).limit, 1_000_000);
+    assert.equal(sanitise({ limit: Number.MAX_SAFE_INTEGER }).limit, 1_000_000);
     assert.equal(sanitise({ limit: -4 }).limit, 1);
   });
 });

@@ -307,6 +307,7 @@ function updateHeader() {
   $('play').textContent = following ? 'pause' : 'go live';
   $('play').setAttribute('aria-pressed', String(!following));
   $('toggle-index').setAttribute('aria-pressed', String(view.showIndex));
+  $<HTMLButtonElement>('load-all').disabled = !canLoadMore();
   live(source.readyState !== 2);
 }
 
@@ -364,6 +365,7 @@ $('toggle-index').addEventListener('click', () => {
   view = { ...view, showIndex: !view.showIndex };
   pushView();
 });
+$('load-all').addEventListener('click', loadAllHistory);
 $('unfold').addEventListener('click', () => {
   view = { ...view, expanded: snap ? [...snap.window.commits] : [] };
   pushView();
@@ -538,10 +540,25 @@ canvas.addEventListener(
   { passive: false },
 );
 
-/** Clicking "load more history" asks for all of it — scrolling never loads anything. */
+function canLoadMore() {
+  return !!snap && !exhausted && snap.window.more && following;
+}
+
+/** Clicking "load more history" pages — scrolling never loads anything. */
 function loadMoreHistory() {
-  if (!snap || exhausted || !snap.window.more || !following) return;
-  view = { ...view, limit: snap.window.totalCommits ?? view.limit + 1000 };
+  if (!canLoadMore()) return;
+  view = { ...view, limit: view.limit + 1000 };
+  pushView();
+}
+
+/**
+ * "load all" asks for no limit at all and lets the server's ceiling be the only
+ * bound. Not `totalCommits`: that is null on a big repo, and counts the whole
+ * repository rather than the matches under a search.
+ */
+function loadAllHistory() {
+  if (!canLoadMore()) return;
+  view = { ...view, limit: Number.MAX_SAFE_INTEGER };
   pushView();
 }
 
