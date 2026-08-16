@@ -31,11 +31,14 @@ export function renderPanel(el: HTMLElement, snap: Snapshot | null, node: SceneN
     el.append(dl);
   }
 
-  if (node.oid && (node.kind === 'blob' || node.kind === 'tree' || node.kind === 'index')) {
-    const oid = node.kind === 'index' ? node.oid : node.oid;
+  // A commit is an object like any other: the parsed facts are above, this is
+  // what git actually stored.
+  if (node.oid && (node.kind === 'blob' || node.kind === 'tree' || node.kind === 'index' || node.kind === 'commit')) {
+    const oid = node.oid;
     const pre = document.createElement('pre');
     pre.textContent = 'reading…';
-    el.append(el2('dt', '', node.kind === 'tree' ? 'entries' : 'contents'), pre);
+    const heading = node.kind === 'tree' ? 'entries' : node.kind === 'commit' ? 'raw object' : 'contents';
+    el.append(el2('dt', '', heading), pre);
     void fetch(`/object?oid=${oid}`)
       .then((r) => r.json())
       .then((body) => {

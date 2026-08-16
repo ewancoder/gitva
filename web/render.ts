@@ -10,7 +10,7 @@
  * Hidden means absent: culled nodes are not drawn *and* not walked.
  */
 
-import type { Scene, SceneEdge, SceneNode } from '../src/layout.js';
+import { M, type Scene, type SceneEdge, type SceneNode } from '../src/layout.js';
 import type { Change } from '../src/diff.js';
 import { hueFor, theme } from './theme.js';
 
@@ -289,9 +289,14 @@ function shape(ctx: CanvasRenderingContext2D, n: SceneNode, grow = 0) {
   const h = n.h + grow * 2;
   ctx.beginPath();
   switch (n.kind) {
-    case 'commit':
-      ctx.arc(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2);
+    case 'commit': {
+      // Always the same dot, wherever it sits: a stray unreachable commit is
+      // placed in the wide object box, and a commit that changed size with its
+      // box would read as a different kind of thing.
+      const r = Math.min(w, h, M.dot + grow * 2) / 2;
+      ctx.arc(x + r, y + h / 2, r, 0, Math.PI * 2);
       break;
+    }
     case 'blob':
       // A pill: the roundest thing on screen, because a blob is the leaf.
       ctx.roundRect(x, y, w, h, h / 2);
@@ -330,9 +335,9 @@ function label(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, dim: boole
   ctx.save();
   ctx.globalAlpha *= dim ? 0.2 : 1;
 
-  if (n.kind === 'commit') {
+  if (n.kind === 'commit' && n.w <= M.dot) {
     ctx.restore();
-    return; // the commit's text lives out in the row, not across the dot
+    return; // a commit in a lane has its text out in the row, not across the dot
   }
   if (n.kind === 'ref' || n.kind === 'head' || n.kind === 'more' || n.kind === 'index' || n.kind === 'tag') {
     ctx.font = `${n.kind === 'head' ? '600 ' : ''}11px ${theme.sans}`;
@@ -346,7 +351,8 @@ function label(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, dim: boole
   } else if (s >= TIER.sha) {
     ctx.font = `11px ${theme.mono}`;
     ctx.fillStyle = ghost ? theme.ghost : 'rgba(10,12,16,0.9)';
-    ctx.fillText(n.label, n.x + 10, n.y + n.h / 2 + 4);
+    // A stray commit's dot sits at the left of its box; its sha goes beside it.
+    ctx.fillText(n.label, n.x + (n.kind === 'commit' ? M.dot + 8 : 10), n.y + n.h / 2 + 4);
     if (s >= TIER.kind && n.sub) {
       ctx.font = `10px ${theme.sans}`;
       ctx.fillStyle = ghost ? theme.faint : 'rgba(10,12,16,0.6)';
