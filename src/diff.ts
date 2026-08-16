@@ -42,7 +42,15 @@ export function diffScenes(prev: Scene | null, next: Scene): Change {
       continue;
     }
     if (b.x !== n.x || b.y !== n.y) moved.add(id);
-    if (b.label !== n.label || b.sub !== n.sub || b.unreachable !== n.unreachable) updated.add(id);
+    if (
+      b.label !== n.label ||
+      b.sub !== n.sub ||
+      b.unreachable !== n.unreachable ||
+      b.conflict !== n.conflict ||
+      b.staged !== n.staged ||
+      b.stray !== n.stray
+    )
+      updated.add(id);
   }
   for (const id of before.keys()) if (!after.has(id)) removed.add(id);
 

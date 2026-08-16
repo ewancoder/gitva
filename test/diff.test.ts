@@ -2,19 +2,20 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { describe as describeChange, diffScenes } from '../src/diff.js';
 import { explain, explainKind } from '../src/explain.js';
-import type { Scene } from '../src/layout.js';
+import type { Scene, SceneNode } from '../src/layout.js';
 import type { Snapshot } from '../src/types.js';
 
-const node = (id: string, x = 0, y = 0, label = id) => ({
+const node = (id: string, x = 0, y = 0, label = id, extra: Partial<SceneNode> = {}): SceneNode => ({
   id,
-  kind: 'blob' as const,
+  kind: 'blob',
   x,
   y,
   w: 10,
   h: 10,
   label,
+  ...extra,
 });
-const scene = (nodes: ReturnType<typeof node>[]): Scene => ({
+const scene = (nodes: SceneNode[]): Scene => ({
   nodes,
   edges: [],
   bands: [],
@@ -40,6 +41,13 @@ describe('diffing whole states', () => {
     const d = diffScenes(scene([node('a', 0, 0, 'old')]), scene([node('a', 0, 0, 'new')]));
     assert.deepEqual([...d.updated], ['a']);
     assert.equal(d.moved.size, 0);
+  });
+
+  it('notices a conflict, a staged flag and a stray without the node moving', () => {
+    const before = scene([node('a')]);
+    const after = scene([node('a', 0, 0, 'a', { conflict: true, staged: true, stray: true })]);
+    assert.deepEqual([...diffScenes(before, after).updated], ['a']);
+    assert.equal(diffScenes(before, after).moved.size, 0);
   });
 
   it('runs backwards, which is how a reset is shown twice without doing it twice', () => {
@@ -110,6 +118,21 @@ describe('saying what just happened', () => {
 
   it('says nothing loudly when nothing happened', () => {
     assert.equal(describeChange(snap({}), snap({})), 'no visible change');
+  });
+
+  it('names index entries appearing and disappearing', () => {
+    const after = snap({ index: [{ path: 'a.txt', oid: 'b1', mode: '100644', stage: 0 }] });
+    assert.match(describeChange(snap({}), after), /1 index entry added/);
+    assert.match(describeChange(after, snap({})), /1 index entry gone/);
+  });
+
+  it('says when something became unreachable', () => {
+    assert.match(describeChange(snap({ unreachable: [] }), snap({ unreachable: ['x'] })), /1 now unreachable/);
+  });
+
+  it('reports HEAD moving while attached', () => {
+    const moved = snap({ head: { ref: 'refs/heads/side', oid: 'bbb', detached: false, unborn: false } });
+    assert.match(describeChange(snap({}), moved), /HEAD → side/);
   });
 });
 
