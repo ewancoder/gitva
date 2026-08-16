@@ -157,11 +157,14 @@ function drawBands(
 ) {
   ctx.save();
   for (const band of scene.bands) {
+    // The band fills the whole viewport, not just the content it holds, so a
+    // short history still reads as a column running edge to edge — and so the
+    // caption below has color under it everywhere it might be pinned.
     ctx.fillStyle = band.key === 'index' ? theme.panel : 'rgba(255,255,255,0.014)';
-    ctx.fillRect(band.x - 10, 0, band.w + 20, scene.height);
+    ctx.fillRect(band.x - 10, v.y0, band.w + 20, v.y1 - v.y0);
     ctx.font = `500 11px ${theme.sans}`;
     ctx.fillStyle = theme.faint;
-    ctx.fillText(band.label, band.x - 4, Math.max(12, v.y0 + 14));
+    ctx.fillText(band.label, band.x - 4, v.y0 + 14);
   }
   ctx.restore();
   void p;
