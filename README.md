@@ -62,7 +62,7 @@ the one line inside a ref.
 | drag a node | pin it where you put it |
 | click | select: read what it is, and light the whole path through it |
 | hover | light what it connects to |
-| right-click a commit | fold or unfold what it contains |
+| right-click a commit | fold or unfold what it contains (a commit git just made arrives unfolded) |
 | double-click background | fit to width again, centred on the point you clicked |
 | click *load more history* | load another thousand commits (*load all* in the toolbar loads the lot) |
 | <kbd>f</kbd> <kbd>[</kbd> <kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |

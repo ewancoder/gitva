@@ -241,11 +241,23 @@ source.addEventListener('snapshot', (e) => {
   live(true);
   const s: Snapshot = JSON.parse((e as MessageEvent).data);
   const firstEver = snap === null;
+  const last = tape[tape.length - 1];
   if (firstEver) {
     view = { ...s.view, showIndex: prefs.showIndex };
     // Anything past a handful of commits starts folded.
     if (s.window.commits.length <= 6 && view.expanded.length === 0) {
       view = { ...view, expanded: s.window.commits };
+      pushView();
+    }
+  } else if (following && last && s.seq !== last.seq) {
+    // A commit git just made opens itself: the lesson is that it points at the
+    // trees and blobs already on screen, which folding it away would hide.
+    // Only on a new state — paging in older commits is not something that
+    // just happened.
+    const had = new Set([...last.window.commits, ...view.expanded]);
+    const fresh = s.window.commits.filter((c) => !had.has(c));
+    if (fresh.length > 0) {
+      view = { ...view, expanded: [...view.expanded, ...fresh] };
       pushView();
     }
   }
