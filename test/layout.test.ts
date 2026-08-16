@@ -7,6 +7,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { assignLanes, layout, objectGraph, M } from '../src/layout.js';
+import { explain } from '../src/explain.js';
 import { DEFAULT_VIEW, type Commit, type Snapshot, type View } from '../src/types.js';
 
 // The separator matters: without it `c1`, `c10` and `c100` all pad to the same
@@ -161,6 +162,13 @@ describe('the scene', () => {
     const grew = open.rows[0].h - folded.rows[0].h;
     assert.equal(open.rows[1].y - folded.rows[1].y, grew, 'and the row below shifted by exactly that');
     assert.ok(open.nodes.some((n) => n.id === oid('blob1')));
+  });
+
+  it('explains the ref chips it draws — the scene keys them, the panel looks them up', () => {
+    const chip = layout(snap, DEFAULT_VIEW).nodes.find((n) => n.kind === 'ref')!;
+    const facts = explain(snap, 'ref', chip.id).facts;
+    assert.deepEqual(facts.find(([k]) => k === 'name'), ['name', 'refs/heads/main']);
+    assert.ok(facts.some(([k, v]) => k === 'contains' && v === oid('c')));
   });
 
   it('draws a parent outside the window as an arrow into "history continues"', () => {

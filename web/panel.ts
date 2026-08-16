@@ -4,7 +4,7 @@
  * for reading one thing, not for shipping with every state update.
  */
 
-import { explain } from '../src/explain.js';
+import { explain, refName } from '../src/explain.js';
 import type { Snapshot } from '../src/types.js';
 import type { SceneNode } from '../src/layout.js';
 
@@ -31,13 +31,22 @@ export function renderPanel(el: HTMLElement, snap: Snapshot | null, node: SceneN
     el.append(dl);
   }
 
+  // A ref is a file with a sha in it, and HEAD is a file with a ref in it —
+  // so show those bytes too. No fetch: the snapshot already carries them.
+  const file = node.kind === 'ref' ? refFile(snap, node.id) : node.kind === 'head' ? headFile(snap) : null;
+  if (file !== null) {
+    el.append(el2('dt', '', 'raw content'), el2('pre', '', file));
+    return;
+  }
+
   // A commit is an object like any other: the parsed facts are above, this is
   // what git actually stored.
-  if (node.oid && (node.kind === 'blob' || node.kind === 'tree' || node.kind === 'index' || node.kind === 'commit')) {
+  if (node.oid && (node.kind === 'blob' || node.kind === 'tree' || node.kind === 'index' || node.kind === 'commit' || node.kind === 'tag')) {
     const oid = node.oid;
     const pre = document.createElement('pre');
     pre.textContent = 'reading…';
-    const heading = node.kind === 'tree' ? 'entries' : node.kind === 'commit' ? 'raw object' : 'contents';
+    const heading =
+      node.kind === 'tree' ? 'entries' : node.kind === 'commit' || node.kind === 'tag' ? 'raw object' : 'contents';
     el.append(el2('dt', '', heading), pre);
     void fetch(`/object?oid=${oid}`)
       .then((r) => r.json())
@@ -59,6 +68,17 @@ export function renderPanel(el: HTMLElement, snap: Snapshot | null, node: SceneN
         if (mine === token) pre.textContent = 'could not read it';
       });
   }
+}
+
+/** What is in .git/<name> — or, once packed, the line that replaced the file. */
+function refFile(snap: Snapshot, name: string): string {
+  const r = snap.refs.find((x) => x.name === refName(name));
+  if (!r) return '';
+  return r.packed ? `${r.oid} ${r.name}\n` : `${r.oid}\n`;
+}
+
+function headFile(snap: Snapshot): string {
+  return snap.head.detached ? `${snap.head.oid ?? ''}\n` : `ref: ${snap.head.ref ?? ''}\n`;
 }
 
 function el2(tag: string, cls: string, text: string): HTMLElement {

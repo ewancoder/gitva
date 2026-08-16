@@ -103,8 +103,11 @@ export function explain(snap: Snapshot, kind: string, id: string): Explanation {
       facts.push(['message', t.message.trim()]);
     }
   } else if (kind === 'ref') {
-    const r = snap.refs.find((x) => x.name === id);
+    const r = snap.refs.find((x) => x.name === refName(id));
     if (r) {
+      // The chip in the gutter can only ever show a shortened name, so the
+      // full one has to live here.
+      facts.push(['name', r.name]);
       facts.push(['file', `${snap.gitDir}/${r.name}`]);
       facts.push(['contains', r.oid]);
       if (r.target) facts.push(['peels to', r.target]);
@@ -147,6 +150,9 @@ export function explain(snap: Snapshot, kind: string, id: string): Explanation {
 }
 
 export const entryId = (path: string, stage: number) => `index:${stage}:${path}`;
+
+/** Scene nodes for refs are keyed `ref:<full name>`; the lookups want the name. */
+export const refName = (id: string) => id.replace(/^ref:/, '');
 
 /** One line for the header: what just changed. */
 export function describeChange(counts: {
