@@ -84,22 +84,28 @@ export function draw(ctx: CanvasRenderingContext2D, scene: Scene, p: Paint): boo
   drawBands(ctx, scene, view, p);
 
   // Hover lights up a node and its arrows and dims the rest: seeing what
-  // connects to what without committing to a click.
+  // connects to what without committing to a click. Clicking commits to it and
+  // follows the whole path — every object that reaches this one, and everything
+  // it reaches — which is the question "what is this blob part of?".
   const lit = new Set<string>();
+  const litEdges = new Set<string>();
   if (p.hover) {
     lit.add(p.hover);
     for (const e of scene.edges) {
-      if (e.from === p.hover) lit.add(e.to);
-      if (e.to === p.hover) lit.add(e.from);
+      if (e.from !== p.hover && e.to !== p.hover) continue;
+      lit.add(e.from);
+      lit.add(e.to);
+      litEdges.add(e.id);
     }
   }
+  if (p.selected) path(scene, p.selected, lit, litEdges);
 
   for (const e of scene.edges) {
     const a = nodes.get(e.from);
     const b = nodes.get(e.to);
     if (!a || !b) continue;
     if (!overlaps(a, b, view)) continue;
-    drawEdge(ctx, e, a, b, p, lit);
+    drawEdge(ctx, e, a, b, p, lit, litEdges);
   }
 
   for (const n of nodes.values()) {
@@ -165,6 +171,42 @@ function drawBands(
 // Arrows
 // ---------------------------------------------------------------------------
 
+/**
+ * Everything on the selected node's path: walk up through what points at it and
+ * down through what it points at, each direction on its own so siblings sharing
+ * a parent tree stay dark. `parent` edges are skipped — a commit's history is a
+ * different question from what a commit contains.
+ */
+function path(scene: Scene, start: string, lit: Set<string>, litEdges: Set<string>) {
+  const out = new Map<string, SceneEdge[]>();
+  const into = new Map<string, SceneEdge[]>();
+  for (const e of scene.edges) {
+    if (e.kind === 'parent') continue;
+    (out.get(e.from) ?? out.set(e.from, []).get(e.from)!).push(e);
+    (into.get(e.to) ?? into.set(e.to, []).get(e.to)!).push(e);
+  }
+
+  lit.add(start);
+  // Staging is identity, not containment: an index entry *is* its blob, so the
+  // upward walk carries on from the blob and finds the trees holding it too.
+  const up = [start];
+  for (const [side, at, seeds] of [[out, 'to', [start]], [into, 'from', up]] as const) {
+    const queue = [...seeds];
+    const seen = new Set(queue);
+    while (queue.length) {
+      for (const e of side.get(queue.pop()!) ?? []) {
+        const next = e[at];
+        litEdges.add(e.id);
+        lit.add(next);
+        if (e.kind === 'stage') up.push(next);
+        if (seen.has(next)) continue;
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+  }
+}
+
 function drawEdge(
   ctx: CanvasRenderingContext2D,
   e: SceneEdge,
@@ -172,8 +214,9 @@ function drawEdge(
   b: SceneNode,
   p: Paint,
   lit: Set<string>,
+  litEdges: Set<string>,
 ) {
-  const dim = dimmed(`${e.kind}:${e.from}>${e.to}`, lit.size > 0 && !(lit.has(e.from) && lit.has(e.to)) ? 1 : 0);
+  const dim = dimmed(`${e.kind}:${e.from}>${e.to}`, lit.size > 0 && !litEdges.has(e.id) ? 1 : 0);
   ctx.save();
   ctx.globalAlpha *= 1 - dim * 0.88;
   ctx.setLineDash([]);
