@@ -26,6 +26,11 @@
         --blob: #5aa7ea;
         --staged: #8f86e6;
         --accent: #ff5ea8;
+        --mark: #e5484d;
+        --head: #b98cff;
+        --ref-local: #4fd1c5;
+        --ref-remote: #f08c5a;
+        --ref-tag: #e0c74f;
         --sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
         --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
       }
@@ -44,7 +49,8 @@
       /* Chrome: grouped, separated controls — what repo, what you're looking
          at, what state it's in. Not a flat run of unrelated buttons. */
       header {
-        display: flex; align-items: center; gap: calc(var(--u) * 2);
+        display: flex; align-items: center; flex-wrap: wrap; gap: var(--u) calc(var(--u) * 2);
+        row-gap: var(--u);
         padding: var(--u) calc(var(--u) * 1.5);
         background: var(--panel);
         border-bottom: 1px solid var(--line);
@@ -68,7 +74,7 @@
 
       .live { display: flex; align-items: center; gap: 6px; color: var(--muted); }
       .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tree); }
-      .dot.off { background: var(--accent); }
+      .dot.off { background: var(--mark); }
       .dot.paused { background: var(--commit); }
       .tally { color: var(--muted); font-family: var(--mono); font-size: 11px; }
       .change { color: var(--accent); font-family: var(--mono); font-size: 11px; min-width: 8ch; }
@@ -122,11 +128,15 @@
       .swatch.tree { background: var(--tree); clip-path: polygon(30% 0, 100% 0, 100% 100%, 30% 100%, 0 70%, 0 30%); }
       .swatch.blob { border-radius: 8px; background: var(--blob); }
       .swatch.staged { border-radius: 8px; background: var(--staged); }
-      .swatch.ref { border: 1px solid var(--muted); border-radius: var(--r); }
-      .swatch.tag { border: 1px solid var(--muted); clip-path: polygon(0 50%, 35% 0, 100% 0, 100% 100%, 35% 100%); }
+      .swatch.ref { border: 1.5px solid var(--ref-local); border-radius: var(--r); }
+      .swatch.ref.remote { border-color: var(--ref-remote); }
+      .swatch.ref.tag { border-color: var(--ref-tag); }
+      .swatch.head { border: 2px solid var(--head); border-radius: var(--r); }
+      .swatch.tag { border: 1px solid var(--ref-tag); clip-path: polygon(0 50%, 35% 0, 100% 0, 100% 100%, 35% 100%); }
       .swatch.index { border: 1px dashed var(--muted); border-radius: var(--r); }
       .swatch.ghost { border: 1px dashed var(--faint); border-radius: 8px; }
       .swatch.changed { box-shadow: 0 0 0 2px var(--accent); border-radius: var(--r); }
+      .swatch.mark { box-shadow: 0 0 0 2px var(--mark); border-radius: 8px; }
     </style>
   </head>
   <body>
@@ -184,30 +194,36 @@
       <h2>What the shapes mean</h2>
       <p style="color: var(--muted)">
         Identity is never colour alone: shape first, then the label, then hue. Three hues carry the
-        three things you look at constantly; everything else is an outline shape in plain ink.
+        three things you look at constantly. Pointers are outline chips, coloured by what they are.
       </p>
       <div class="legend">
         <span class="swatch commit"></span><span><b>commit</b> — a tree, some parents, a message</span>
         <span class="swatch tree"></span><span><b>tree</b> — one directory: names, modes, shas</span>
         <span class="swatch blob"></span><span><b>blob</b> — file contents, with no name of its own</span>
         <span class="swatch staged"></span><span><b>staged blob</b> — written by <code>git add</code>, held only by the index: no commit names it, and nothing collects it while the entry lasts</span>
-        <span class="swatch ref"></span><span><b>ref / HEAD</b> — a file with a sha in it</span>
+        <span class="swatch head"></span><span><b>HEAD</b> — a pointer to a pointer (or a raw sha, when detached)</span>
+        <span class="swatch ref"></span><span><b>branch</b> — a file with a sha in it</span>
+        <span class="swatch ref remote"></span><span><b>remote</b> — the same, under <code>refs/remotes</code></span>
+        <span class="swatch ref tag"></span><span><b>lightweight tag</b> — a ref under <code>refs/tags</code> that does not move</span>
         <span class="swatch tag"></span><span><b>annotated tag</b> — a name and a message pointing at an object</span>
         <span class="swatch index"></span><span><b>index entry</b> — a staged path; dashed border means a conflict stage</span>
         <span class="swatch ghost"></span><span><b>unreachable</b> — a state, not a kind. Still there; still rescuable</span>
         <span class="swatch changed"></span><span><b>just changed</b> — the one reserved accent, spent on nothing else</span>
+        <span class="swatch mark"></span><span><b>marked</b> — you put this here, to follow the sha as the graph moves</span>
       </div>
       <h2 style="margin-top: 16px">Gestures</h2>
       <div class="legend" style="grid-template-columns: 140px 1fr">
         <code>wheel</code><span>pan &middot; hold <kbd>ctrl</kbd> to zoom</span>
         <code>drag background</code><span>pan</span>
+        <code>hover</code><span>light what it connects to, dim the rest</span>
+        <code>click</code><span>select, and read what it is</span>
+        <code>drag a node</code><span>pin it where you put it (&ldquo;unpin all&rdquo; drops every pin)</span>
         <code>double-click a node</code><span>unpin it again</span>
         <code>double-click background</code><span>fit the graph to the width again</span>
-        <code>drag a node</code><span>pin it where you put it (&ldquo;unpin all&rdquo; drops every pin)</span>
-        <code>click</code><span>select, and read what it is</span>
         <code>right-click commit</code><span>fold or open what it contains</span>
+        <code>right-click object</code><span>mark it with a red outline, so you can follow that sha</span>
         <code>click "load more history"</code><span>another thousand commits ("load all" loads the lot)</span>
-        <code>f / [ / ] / space</code><span>fit &middot; step back &middot; step forward &middot; pause</span>
+        <code>f [ ] space i</code><span>fit &middot; step back &middot; step forward &middot; pause &middot; index</span>
       </div>
       <h2 style="margin-top: 16px">Preferences</h2>
       <p style="color: var(--muted)">

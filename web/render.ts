@@ -188,11 +188,15 @@ function drawBands(
     // The band fills the whole viewport, not just the content it holds, so a
     // short history still reads as a column running edge to edge — and so the
     // caption below has color under it everywhere it might be pinned.
-    ctx.fillStyle = band.key === 'index' ? theme.panel : 'rgba(255,255,255,0.014)';
+    ctx.fillStyle = band.key === 'index' ? theme.panel : 'rgba(255,255,255,0.04)';
     ctx.fillRect(band.x - 10, v.y0, band.w + 20, v.y1 - v.y0);
-    ctx.font = `500 11px ${theme.sans}`;
-    ctx.fillStyle = theme.faint;
-    ctx.fillText(band.label, band.x - 4, v.y0 + 14);
+    ctx.font = `600 11px ${theme.sans}`;
+    const caption = band.label;
+    const tw = ctx.measureText(caption).width;
+    ctx.fillStyle = theme.ground;
+    ctx.fillRect(band.x - 6, v.y0 + 4, tw + 10, 16);
+    ctx.fillStyle = theme.muted;
+    ctx.fillText(caption, band.x - 2, v.y0 + 16);
   }
   ctx.restore();
   void p;
