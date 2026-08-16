@@ -38,6 +38,8 @@ export interface SceneNode {
   sub?: string;
   unreachable?: boolean;
   conflict?: boolean;
+  /** Put down here because nothing on screen points at it, not beside anything. */
+  stray?: boolean;
   /** Where this node came from, so it can grow out of it rather than fly in. */
   origin?: string;
 }
@@ -390,23 +392,27 @@ export function layout(
   const strays = [...unreachable].filter((oid) => !at.has(oid));
   if (strays.length > 0) {
     const perRow = Math.max(1, Math.floor(objectsW / M.objColW));
-    y += 24;
+    const top = y + 24;
+    // A pinned stray stays where it was drawn, so it reserves no room down here.
+    let bottom = y;
     strays.forEach((oid, i) => {
       const type = snap.objects[oid]?.type ?? 'blob';
-      put({
+      const n = put({
         id: oid,
         kind: type === 'tree' ? 'tree' : type === 'commit' ? 'commit' : type === 'tag' ? 'tag' : 'blob',
         oid,
         x: objectsX + (i % perRow) * M.objColW,
-        y: y + Math.floor(i / perRow) * M.objRowH,
+        y: top + Math.floor(i / perRow) * M.objRowH,
         w: M.objW,
         h: M.objH,
         label: short(oid),
         sub: type,
         unreachable: true,
+        stray: true,
       });
+      bottom = Math.max(bottom, n.y + n.h);
     });
-    y += Math.ceil(strays.length / perRow) * M.objRowH + 16;
+    y = Math.max(y, bottom + 16);
   }
 
   // --- the index, apart, at the far right ---

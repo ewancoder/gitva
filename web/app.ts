@@ -112,9 +112,34 @@ function glideStep() {
   if (done) glide = null;
 }
 
+/** Nodes that *are* an object; an index chip only names one. */
+const isObject = (n: SceneNode) =>
+  n.oid !== undefined && n.kind !== 'index';
+
 function relayout(animate: boolean, repoChanged: boolean) {
   if (!snap) return;
-  const next = layout(snap, view, pinsAt(snap.seq));
+  let next = layout(snap, view, pinsAt(snap.seq));
+  // Losing your last arrow is the lesson — being teleported to the bottom of the
+  // page is not. An object drawn somewhere new because its relations changed —
+  // into the orphanage, or back out of it, or from a gutter chip to a node —
+  // keeps the spot it already had, so what changed is the arrow, and only the
+  // arrow. Keyed by oid, because the same object is a different node id in the
+  // gutter than it is in the object band.
+  if (scene) {
+    const before = new Map<string, SceneNode>();
+    for (const n of scene.nodes) if (isObject(n) && !before.has(n.oid!)) before.set(n.oid!, n);
+    let stuck = false;
+    for (const n of next.nodes) {
+      const was = isObject(n) ? before.get(n.oid!) : undefined;
+      // Same node, same place in its band: rows shifting under it is not a
+      // change of relation, and freezing those would peg the whole graph.
+      if (!was || (was.id === n.id && !!was.stray === !!n.stray)) continue;
+      if ((was.x === n.x && was.y === n.y) || pins.some((p) => p.id === n.id)) continue;
+      pins.push({ seq: 0, id: n.id, x: was.x, y: was.y });
+      stuck = true;
+    }
+    if (stuck) next = layout(snap, view, pinsAt(snap.seq));
+  }
   change = diffScenes(scene, next);
   ghosts = scene ? scene.nodes.filter((n) => change.removed.has(n.id)) : [];
   scene = next;

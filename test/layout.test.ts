@@ -233,6 +233,18 @@ describe('the scene', () => {
     assert.equal(lost.unreachable, true);
   });
 
+  it('lets a pinned orphan stay where it was drawn, reserving no room below', () => {
+    const s = fakeSnapshot({ a: ['b'], b: ['c'], c: ['d'], d: ['e'], e: [] });
+    s.objects[oid('lost')] = { oid: oid('lost'), type: 'blob', size: 7 };
+    s.unreachable = [oid('lost')];
+    const dropped = layout(s, DEFAULT_VIEW);
+    const kept = layout(s, DEFAULT_VIEW, { [oid('lost')]: { x: 300, y: 20 } });
+    const lost = kept.nodes.find((n) => n.id === oid('lost'))!;
+    assert.deepEqual([lost.x, lost.y], [300, 20]);
+    assert.equal(lost.stray, true);
+    assert.ok(kept.height < dropped.height);
+  });
+
   it('lets a pin override a position without disturbing anything else', () => {
     const free = layout(snap, DEFAULT_VIEW);
     const pinned = layout(snap, DEFAULT_VIEW, { [oid('b')]: { x: 999, y: 888 } });
