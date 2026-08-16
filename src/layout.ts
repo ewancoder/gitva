@@ -61,9 +61,6 @@ export interface Scene {
   nodes: SceneNode[];
   edges: SceneEdge[];
   bands: Band[];
-  /** Where a commit's subject line is written; the lanes end before it. */
-  commitTextX: number;
-  commitTextW: number;
   width: number;
   height: number;
   /** Rows, for the renderer's culling and for the hover backdrop. */
@@ -77,11 +74,13 @@ export const M = {
   chipW: 72,
   chipH: 20,
   chipPitch: 80,
-  laneW: 26,
-  dot: 22,
+  // A commit is a pill wide enough for its own sha, so the lane pitch has to
+  // clear it: the sha is written in the node, not in a column beside it.
+  laneW: 88,
+  commitW: 76,
+  commitH: 24,
   rowH: 44,
   rowPad: 10,
-  textW: 300,
   objColW: 190,
   objRowH: 34,
   objW: 148,
@@ -202,8 +201,7 @@ export function layout(
 
   const lanesX = M.gutterX + M.gutterW + M.bandGap;
   const lanesW = laneCount * M.laneW;
-  const commitTextX = lanesX + lanesW + 16;
-  const objectsX = commitTextX + M.textW + M.bandGap;
+  const objectsX = lanesX + lanesW + M.bandGap;
 
   // --- what each row holds, so we know how tall it is ---
   const graphs = new Map<Oid, ObjectGraph>();
@@ -273,7 +271,6 @@ export function layout(
 
   // --- commits, as dots in lanes ---
   for (const row of rows) {
-    const c = snap.commits[row.oid];
     const l = lane.get(row.oid) ?? 0;
     put({
       id: row.oid,
@@ -281,10 +278,9 @@ export function layout(
       oid: row.oid,
       x: lanesX + l * M.laneW,
       y: row.y + M.rowPad,
-      w: M.dot,
-      h: M.dot,
+      w: M.commitW,
+      h: M.commitH,
       label: short(row.oid),
-      sub: c?.subject ?? '',
       unreachable: unreachable.has(row.oid),
     });
   }
@@ -439,14 +435,12 @@ export function layout(
     edges: edges.filter((e) => at.has(e.from) && at.has(e.to)),
     bands: [
       { key: 'pointers', label: 'pointers', x: M.gutterX, w: M.gutterW },
-      { key: 'commits', label: 'commits', x: lanesX, w: lanesW + 16 + M.textW },
+      { key: 'commits', label: 'commits', x: lanesX, w: lanesW },
       { key: 'objects', label: 'objects', x: objectsX, w: objectsW },
       ...(view.showIndex
         ? [{ key: 'index' as const, label: 'index', x: indexX, w: M.indexW }]
         : []),
     ],
-    commitTextX,
-    commitTextW: M.textW,
     width: (view.showIndex ? indexX + M.indexW : objectsX + objectsW) + 40,
     height,
     rows,

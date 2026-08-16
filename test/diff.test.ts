@@ -18,8 +18,6 @@ const scene = (nodes: ReturnType<typeof node>[]): Scene => ({
   nodes,
   edges: [],
   bands: [],
-  commitTextX: 0,
-  commitTextW: 0,
   width: 0,
   height: 0,
   rows: [],

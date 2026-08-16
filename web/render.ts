@@ -10,7 +10,7 @@
  * Hidden means absent: culled nodes are not drawn *and* not walked.
  */
 
-import { M, type Scene, type SceneEdge, type SceneNode } from '../src/layout.js';
+import type { Scene, SceneEdge, SceneNode } from '../src/layout.js';
 import type { Change } from '../src/diff.js';
 import { hueFor, theme } from './theme.js';
 
@@ -106,7 +106,6 @@ export function draw(ctx: CanvasRenderingContext2D, scene: Scene, p: Paint) {
     ctx.restore();
   }
 
-  if (cam.scale >= TIER.sha) drawRowText(ctx, scene, nodes, view, p);
   ctx.restore();
 }
 
@@ -289,16 +288,10 @@ function shape(ctx: CanvasRenderingContext2D, n: SceneNode, grow = 0) {
   const h = n.h + grow * 2;
   ctx.beginPath();
   switch (n.kind) {
-    case 'commit': {
-      // Always the same dot, wherever it sits: a stray unreachable commit is
-      // placed in the wide object box, and a commit that changed size with its
-      // box would read as a different kind of thing.
-      const r = Math.min(w, h, M.dot + grow * 2) / 2;
-      ctx.arc(x + r, y + h / 2, r, 0, Math.PI * 2);
-      break;
-    }
+    case 'commit':
     case 'blob':
-      // A pill: the roundest thing on screen, because a blob is the leaf.
+      // A pill, wide enough for the sha written inside it. Reachable or not,
+      // a commit is the same shape — unreachable is the dashed outline.
       ctx.roundRect(x, y, w, h, h / 2);
       break;
     case 'tree': {
@@ -335,10 +328,6 @@ function label(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, dim: boole
   ctx.save();
   ctx.globalAlpha *= dim ? 0.2 : 1;
 
-  if (n.kind === 'commit' && n.w <= M.dot) {
-    ctx.restore();
-    return; // a commit in a lane has its text out in the row, not across the dot
-  }
   if (n.kind === 'ref' || n.kind === 'head' || n.kind === 'more' || n.kind === 'index' || n.kind === 'tag') {
     ctx.font = `${n.kind === 'head' ? '600 ' : ''}11px ${theme.sans}`;
     ctx.fillStyle = ghost ? theme.ghost : theme.ink;
@@ -351,42 +340,13 @@ function label(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, dim: boole
   } else if (s >= TIER.sha) {
     ctx.font = `11px ${theme.mono}`;
     ctx.fillStyle = ghost ? theme.ghost : 'rgba(10,12,16,0.9)';
-    // A stray commit's dot sits at the left of its box; its sha goes beside it.
-    ctx.fillText(n.label, n.x + (n.kind === 'commit' ? M.dot + 8 : 10), n.y + n.h / 2 + 4);
+    ctx.fillText(n.label, n.x + 10, n.y + n.h / 2 + 4);
     if (s >= TIER.kind && n.sub) {
       ctx.font = `10px ${theme.sans}`;
       ctx.fillStyle = ghost ? theme.faint : 'rgba(10,12,16,0.6)';
       ctx.textAlign = 'right';
       ctx.fillText(n.sub, n.x + n.w - 8, n.y + n.h / 2 + 4);
       ctx.textAlign = 'left';
-    }
-  }
-  ctx.restore();
-}
-
-/** The short sha on the node, always; the full forty live in the panel. */
-function drawRowText(
-  ctx: CanvasRenderingContext2D,
-  scene: Scene,
-  nodes: Map<string, SceneNode>,
-  v: { y0: number; y1: number },
-  p: Paint,
-) {
-  ctx.save();
-  for (const row of scene.rows) {
-    if (row.y > v.y1 || row.y + row.h < v.y0) continue;
-    const n = nodes.get(row.oid);
-    if (!n) continue;
-    const dim = p.hover !== null && p.hover !== row.oid;
-    ctx.globalAlpha = dim ? 0.3 : 1;
-    const y = n.y + n.h / 2 + 4;
-    ctx.font = `11px ${theme.mono}`;
-    ctx.fillStyle = n.unreachable ? theme.ghost : theme.commit;
-    ctx.fillText(n.label, scene.commitTextX, y);
-    if (p.camera.scale >= TIER.kind && n.sub) {
-      ctx.font = `12px ${theme.sans}`;
-      ctx.fillStyle = n.unreachable ? theme.faint : theme.ink;
-      ctx.fillText(clip(ctx, n.sub, scene.commitTextW - 70), scene.commitTextX + 62, y);
     }
   }
   ctx.restore();
