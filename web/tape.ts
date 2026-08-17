@@ -8,7 +8,7 @@
  * only check by scrubbing and squinting.
  */
 
-import { DEFAULT_VIEW, type Oid, type Snapshot, type TreeEntry, type View } from '../src/types.js';
+import { DEFAULT_VIEW, type Oid, type Question, type Snapshot, type TreeEntry, type View } from '../src/types.js';
 
 export const TAPE_CAP = 400;
 
@@ -30,6 +30,8 @@ export class Tape {
   cursor = -1;
   following = true;
   view: View = { ...DEFAULT_VIEW };
+  /** The server answered with less than was asked for: this is all there is. */
+  exhausted = false;
 
   /** Every tree ever read, across every state. An object *is* its contents, so
    *  a tree read at any moment is that tree at every moment — which is what
@@ -51,6 +53,7 @@ export class Tape {
   /** A state off the wire. `post` is a view the server has to be told about. */
   arrive(s: Snapshot, prefs: Prefs): Arrival {
     Object.assign(this.trees, s.trees);
+    if (s.window.commits.length < s.view.limit) this.exhausted = true;
     const first = this.states.length === 0;
     const last = this.last;
     let post: View | null = null;
@@ -145,5 +148,106 @@ export class Tape {
   foldAll() {
     const off = new Set(this.current?.window.commits ?? []);
     this.view = { ...this.view, expanded: this.view.expanded.filter((o) => !off.has(o)) };
+  }
+
+  /** A different question is a different window, so what was exhausted is not. */
+  ask(q: Question) {
+    this.exhausted = false;
+    this.view = { ...this.view, question: q };
+  }
+
+  /** Paging is offered only when there is more, and only on the live end: a
+   *  state further back is a state of a window that already happened. */
+  get canLoadMore(): boolean {
+    return !this.exhausted && !!this.current?.window.more && this.following;
+  }
+
+  /** Clicking "load more history" pages — scrolling never loads anything. */
+  loadMore(): boolean {
+    if (!this.canLoadMore) return false;
+    this.view = { ...this.view, limit: this.view.limit + 1000 };
+    return true;
+  }
+
+  /**
+   * "load all" asks for no limit at all and lets the server's ceiling be the
+   * only bound. Not `totalCommits`: that is null on a big repo, and counts the
+   * whole repository rather than the matches under a search.
+   */
+  loadAll(): boolean {
+    if (!this.canLoadMore) return false;
+    this.view = { ...this.view, limit: Number.MAX_SAFE_INTEGER };
+    return true;
+  }
+
+  /** The counts line: what is on screen, and what the repository holds. */
+  tally(drawn: number): string {
+    const snap = this.current;
+    if (!snap) return '';
+    const kinds = { commit: 0, tree: 0, blob: 0, tag: 0 };
+    for (const o of Object.values(snap.objects)) kinds[o.type]++;
+    return (
+      `${drawn} on screen · ${snap.window.commits.length} commits` +
+      (snap.caps.fullLoad
+        ? ` · ${kinds.commit}c ${kinds.tree}t ${kinds.blob}b${kinds.tag ? ` ${kinds.tag}g` : ''}` +
+          ` · ${(snap.unreachable ?? []).length} unreachable`
+        : ` · ${snap.caps.objectCount.toLocaleString()} objects`) +
+      ` · ${snap.index.length} index`
+    );
+  }
+
+  /** What this picture is not showing — the server's reasons, plus our own. */
+  notes(): string[] {
+    const notes = [...(this.current?.notes ?? [])];
+    if (this.dropped > 0) {
+      notes.push(`Tape: ${this.states.length} states kept, ${this.dropped} older ones dropped.`);
+    }
+    return notes;
+  }
+}
+
+/** The toolbar's questions are one object, not three features. */
+export function questionFor(kind: string, text: string, refs: string[]): Question {
+  if (kind === 'all') return { kind: 'all' };
+  if (kind === 'branches') return { kind: 'refs', refs };
+  return { kind: 'search', text, in: kind as 'message' };
+}
+
+/**
+ * Pins: objects put somewhere by hand. A pin belongs to the moment it was made
+ * in — drag a blob on today's state and yesterday's picture is untouched — so
+ * they live with the tape rather than with the camera.
+ */
+export class Pins {
+  private readonly list: { seq: number; id: Oid; x: number; y: number }[] = [];
+
+  get count(): number {
+    return this.list.length;
+  }
+
+  /** Where things are pinned as of state `seq`: a pin holds from then on. */
+  at(seq: number): Record<Oid, { x: number; y: number }> {
+    const out: Record<Oid, { x: number; y: number }> = {};
+    for (const p of this.list) if (p.seq <= seq) out[p.id] = { x: p.x, y: p.y };
+    return out;
+  }
+
+  put(seq: number, id: Oid, x: number, y: number) {
+    const at = this.list.find((p) => p.id === id && p.seq === seq);
+    if (at) {
+      at.x = x;
+      at.y = y;
+    } else this.list.push({ seq, id, x, y });
+  }
+
+  /** Double-clicking a node is the undo of dragging it, at every moment. */
+  drop(id: Oid): boolean {
+    const n = this.list.length;
+    for (let i = n - 1; i >= 0; i--) if (this.list[i].id === id) this.list.splice(i, 1);
+    return n !== this.list.length;
+  }
+
+  clear() {
+    this.list.length = 0;
   }
 }

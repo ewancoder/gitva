@@ -158,16 +158,3 @@ export const entryId = (path: string, stage: number) => `index:${stage}:${path}`
 
 /** Scene nodes for refs are keyed `ref:<full name>`; the lookups want the name. */
 export const refName = (id: string) => id.replace(/^ref:/, '');
-
-/** One line for the header: what just changed. */
-export function describeChange(counts: {
-  added: number;
-  removed: number;
-  moved: number;
-}): string {
-  const parts: string[] = [];
-  if (counts.added) parts.push(`+${counts.added}`);
-  if (counts.removed) parts.push(`-${counts.removed}`);
-  if (counts.moved) parts.push(`${counts.moved} moved`);
-  return parts.length ? parts.join('  ') : 'no change';
-}

@@ -14,6 +14,12 @@ describe('the view arriving from the browser', () => {
       refs: ['refs/heads/ok'],
     });
   });
+  it('keeps a search inside what the plumbing will take', () => {
+    const q = sanitise({ question: { kind: 'search', text: 'x'.repeat(500), in: 'sausage' } }).question;
+    assert.deepEqual(q, { kind: 'search', text: 'x'.repeat(200), in: 'message' });
+    assert.equal(sanitise({ question: { kind: 'search', text: 'a', in: 'content' } }).question.kind, 'search');
+  });
+
   it('refuses an oid that is not one, and clamps the window', () => {
     assert.deepEqual(sanitise({ expanded: ['abc123', 'not an oid'] }).expanded, ['abc123']);
     assert.equal(sanitise({ limit: 1e9 }).limit, 1_000_000);
@@ -113,5 +119,60 @@ describe('the server', () => {
       body: JSON.stringify({ question: { kind: 'all' }, limit: 2, expanded: [], showIndex: false }),
     });
     assert.equal(res.status, 204);
+  });
+
+  it('404s a file that is inside a served root but is not there', async () => {
+    assert.equal((await fetch(base + 'web/nothing-like-this.js')).status, 404);
+  });
+
+  it('says so rather than dying when the browser posts nonsense', async () => {
+    const res = await fetch(base + 'view', { method: 'POST', body: 'not json' });
+    assert.equal(res.status, 500);
+    // And it is still serving afterwards.
+    assert.equal((await fetch(base)).status, 200);
+  });
+});
+
+describe('a repository that moves under the server', () => {
+  it('tells the browser what went wrong rather than going quiet', async () => {
+    const repo = plumbedRepo();
+    const server = await serve(repo.dir, 0);
+    // Measured at startup, gone before the first browser arrives: the first
+    // state cannot be built, and saying so out loud is the whole answer.
+    repo.dispose();
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}/events`);
+      const reader = res.body!.getReader();
+      let buf = '';
+      while (!buf.includes('event: trouble')) {
+        const { value, done } = await reader.read();
+        if (done) assert.fail('the stream ended without saying anything');
+        buf += new TextDecoder().decode(value);
+      }
+      await reader.cancel();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('keeps serving while git is mid-rewrite, and says what went wrong', async () => {
+    const repo = plumbedRepo();
+    const server = await serve(repo.dir, 0);
+    const base = `http://127.0.0.1:${server.port}/`;
+    try {
+      const res = await fetch(base + 'events');
+      const stream = snapshots(res);
+      await stream.next(); // the first state, off a repository that exists
+      // The poller now asks a repository that has gone. It must not take the
+      // process with it: a repo mid-rewrite is a normal thing to catch a git
+      // command in, and the next tick is the answer.
+      repo.dispose();
+      await new Promise((r) => setTimeout(r, 1200));
+      assert.equal((await fetch(base)).status, 200);
+      await stream.return(undefined);
+    } finally {
+      await server.close();
+      repo.dispose();
+    }
   });
 });

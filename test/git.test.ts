@@ -194,12 +194,56 @@ describe('a repository read through its own plumbing', () => {
     assert.ok(root.entries!.some((e) => e.name === 'lib'));
   });
 
+  it('reads a tag object that no ref hands it, and follows what it points at', async () => {
+    // An annotated tag whose ref was deleted. The object is still in the
+    // database, and the walk out from every object is the only thing that
+    // meets it — refs are what usually hand tags over.
+    repo.git('tag', '-a', 'v2', '-m', 'a tag that lost its ref', 'HEAD');
+    const oid = repo.git('rev-parse', 'refs/tags/v2');
+    repo.git('update-ref', '-d', 'refs/tags/v2');
+    const s = await snapshot(handle, { ...DEFAULT_VIEW, expanded: [] }, caps, 2);
+    assert.equal(s.tags[oid].name, 'v2');
+    assert.equal(s.tags[oid].target, s.head.oid);
+    assert.ok(s.unreachable!.includes(oid), 'nothing points at it any more');
+  });
+
   it('the cheap question moves only when something happened', async () => {
     const before = await changeSignal(handle.repo, handle.gitDir);
     assert.equal(before, await changeSignal(handle.repo, handle.gitDir));
     repo.write('e.txt', 'epsilon\n');
     repo.git('hash-object', '-w', 'e.txt'); // a bare object nothing points at
     assert.notEqual(before, await changeSignal(handle.repo, handle.gitDir));
+  });
+});
+
+describe('what git has already built for itself', () => {
+  it('notices the commit-graph cache, and never builds one', async () => {
+    const repo = plumbedRepo();
+    try {
+      const handle = await open(repo.dir);
+      assert.equal((await measure(handle.repo)).commitGraph, false);
+      repo.git('commit-graph', 'write', '--reachable');
+      assert.equal((await measure(handle.repo)).commitGraph, true);
+    } finally {
+      repo.dispose();
+    }
+  });
+
+  it('sees a branch whose file has been folded away into packed-refs', async () => {
+    const repo = plumbedRepo();
+    try {
+      const handle = await open(repo.dir);
+      repo.git('pack-refs', '--all');
+      const caps = await measure(handle.repo);
+      const snap = await snapshot(handle, { ...DEFAULT_VIEW, expanded: [] }, caps, 1);
+      assert.ok(snap.refs.length > 0);
+      assert.ok(
+        snap.refs.every((r) => r.packed),
+        'the files are gone; the shas are in one file instead',
+      );
+    } finally {
+      repo.dispose();
+    }
   });
 });
 
@@ -241,6 +285,18 @@ describe('degrading the documented way above a limit', () => {
   it('still draws the commits it was asked for', () => {
     assert.ok(snap.window.commits.length >= 3);
     assert.equal(snap.window.totalCommits, null);
+  });
+
+  it('draws the paths that differ from HEAD, and leaves the rest to the count', async () => {
+    repo.write('new.txt', 'new\n');
+    repo.git('add', 'new.txt');
+    const s = await snapshot(handle, DEFAULT_VIEW, snap.caps, 3);
+    assert.deepEqual(
+      s.index.map((e) => e.path),
+      ['new.txt'],
+      'only the staged difference is drawn',
+    );
+    assert.equal(s.indexElided!.total, 5);
   });
 
   it('loads no trees until a commit is opened', async () => {

@@ -377,6 +377,23 @@ describe('the scene', () => {
     assert.ok(kept.height < dropped.height);
   });
 
+  it('puts lost commits newest first, and settles a tie by sha', () => {
+    const s = fakeSnapshot({ a: ['b'], b: [] });
+    const [old, recent, tied] = ['lost1', 'lost2', 'lost3'].map(oid);
+    for (const [o, when] of [
+      [old, 1],
+      [recent, 9],
+      [tied, 9],
+    ] as const) {
+      s.commits[o] = { ...s.commits[oid('a')], oid: o, parents: [], authorDate: when };
+    }
+    s.unreachable = [old, recent, tied];
+    const scene = layout(s, DEFAULT_VIEW);
+    const y = (o: string) => scene.nodes.find((n) => n.id === o)!.y;
+    assert.ok(y(recent) < y(old), 'the most recent thing you lost is the one you are looking for');
+    assert.ok(y(recent) < y(tied), 'two at the same moment go in sha order, so the picture is stable');
+  });
+
   it('lets a pin override a position without disturbing anything else', () => {
     const free = layout(snap, DEFAULT_VIEW);
     const pinned = layout(snap, DEFAULT_VIEW, { [oid('b')]: { x: 999, y: 888 } });

@@ -12,13 +12,8 @@
 
 import type { Scene, SceneEdge, SceneNode } from '../src/layout.js';
 import type { Change } from '../src/diff.js';
+import type { Camera } from './camera.js';
 import { chipHue, hueFor, theme } from './theme.js';
-
-export interface Camera {
-  x: number;
-  y: number;
-  scale: number;
-}
 
 export interface Paint {
   camera: Camera;
@@ -509,14 +504,4 @@ export function hitTest(scene: Scene, wx: number, wy: number): SceneNode | null 
     if (wx >= n.x - 3 && wx <= n.x + n.w + 3 && wy >= n.y - 3 && wy <= n.y + n.h + 3) return n;
   }
   return null;
-}
-
-/**
- * Fit the width and let history run off the bottom. A repository is tall and
- * narrow, so a scale that fits its height too is a scale at which nothing can
- * be read — the graph is meant to be scrolled, not squinted at.
- */
-export function fit(scene: Scene, width: number): Camera {
-  const scale = Math.min(2, Math.max(0.15, (width - 40) / scene.width));
-  return { x: 20, y: 20, scale };
 }

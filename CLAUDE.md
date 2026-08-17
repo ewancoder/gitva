@@ -15,7 +15,7 @@ file as a replacement for it.
 ## Commands
 
 ```
-npm test                    # tsc, then node:test over dist/test/*.test.js
+npm test                    # tsc, then node:test over dist/test/*.test.js, with a coverage table
 npm run build               # tsc
 node dist/src/cli.js <repo> [--port N] [--no-open]
 ```
@@ -33,9 +33,9 @@ dependency passes the one-sentence test in `INITIAL_DESIGN.md` §14.
 | `src/diff.ts` | `diffScenes` (what to flash), `describe` (the header sentence). Pure. |
 | `src/explain.ts` | the teaching text, per node kind. Pure. |
 | `src/server.ts` | `node:http`: static files, SSE `/events`, `POST /view`, `GET /object`. |
-| `src/cli.ts` | arg parsing, opens the browser. |
-| `web/` | `index.html` (all CSS), `tape.ts` (states, cursor, view — no DOM, tested), `app.ts` (DOM, input, painting), `render.ts` (canvas), `panel.ts`, `theme.ts`. |
-| `test/` | `fixture.ts` builds real repos with real plumbing; the rest are `node:test`. |
+| `src/cli.ts` | `parseArgs` (pure), `main`; opens the browser. Runs only when it *is* the command, so importing it for a test starts nothing. |
+| `web/` | `index.html` (all CSS), `tape.ts` (states, cursor, view, pins, paging — no DOM), `camera.ts` (where the graph sits under the window — arithmetic only), `panel.ts` (`panelModel` pure, then the elements), `render.ts` (canvas), `theme.ts`, `app.ts` (DOM, events, painting — and nothing else). |
+| `test/` | `fixture.ts` builds real repos with real plumbing, and `fakeState` for what is said rather than what git did; the rest are `node:test`. |
 
 `src/*` is compiled to `dist/src` and served to the browser too — `web/app.ts` imports
 `../src/{diff,layout,types,explain}.js`. **Nothing under `src/` that the browser imports may
@@ -103,14 +103,24 @@ first two things the tutorial teaches.
 - Small, obvious code — the codebase is part of the teaching material. If an optimisation stops
   reading as an explanation of how git works, it has to justify itself.
 - Comments explain *why* (usually citing the design brief), not what.
-- Unit tests cover every branch: each branch exists because some git situation demanded it, so
-  an untested branch is a git situation nobody checked. Rendering is exempt — check it by
-  looking at it.
+- **Everything is covered, and the whole suite is run before any change is called finished.**
+  `npm test` builds, runs every test and prints a coverage table; every file in it is at 100%
+  of lines bar the three exemptions below, and it stays that way. Each branch exists because some git situation demanded it,
+  so an untested branch is a git situation nobody checked. A new feature is not done when it
+  works — it is done when it has tests and `npm test` is green with nothing newly uncovered.
+- **If a thing cannot be tested, split it until it can.** That is what `web/app.ts` is: DOM,
+  events and painting, with every decision it makes moved into `tape.ts` (states, folds, pins,
+  paging, what the header says), `camera.ts` (bounds, gliding, zooming, fitting) and
+  `panel.ts`'s `panelModel`, all of which are pure and all of which are tested. Painting is
+  checked by looking at it, but *what* to paint is not: `path()` and `hitTest()` decide things,
+  so they have tests, and `draw()` is walked over every kind and every zoom tier with a stub
+  canvas so a shape nobody drew in anger cannot throw.
+- Three things are deliberately not covered, and are the only three: `openBrowser` in `cli.ts`
+  (it launches the reader's browser), the entry-point guard beside it, and the `stdin` error
+  swallow in `git.ts`. Anything else uncovered is an oversight, not a policy.
 - **Every edge case found by hand gets a test in the same pass** — a bug that reached the screen
   is a case nobody thought of, so the fix is not done until something fails when it comes back.
-  Name the test after the situation, not the function. This overrides the rendering exemption
-  where the logic is pure: `path()` in `render.ts` decides which nodes a selection lights and is
-  tested in `test/render.test.ts`; only actual painting is checked by looking.
+  Name the test after the situation, not the function.
 - Tests run against real fixture repos built with real plumbing, including a deliberate orphan.
   Fixtures set `GIT_CONFIG_GLOBAL=/dev/null` and `GIT_CONFIG_SYSTEM=/dev/null` — the author's
   global config signs commits and tags, and a signing prompt hangs the suite. **Never touch the

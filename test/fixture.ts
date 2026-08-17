@@ -10,6 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DEFAULT_VIEW, type Snapshot } from '../src/types.js';
 
 const ENV = {
   ...process.env,
@@ -88,4 +89,39 @@ export function plumbedRepo(): Repo {
   r.git('hash-object', '-w', 'orphan.txt');
 
   return r;
+}
+
+/**
+ * An empty but valid state, for the tests that are about what gitva *says*
+ * rather than about what git did — the panel, the counts, the explanations.
+ * Fill in only the part being asked about.
+ */
+export function fakeState(extra: Partial<Snapshot> = {}): Snapshot {
+  return {
+    seq: 1,
+    time: 0,
+    repo: 'fake',
+    gitDir: '/tmp/fake/.git',
+    head: { ref: 'refs/heads/main', oid: 'a'.repeat(40), detached: false, unborn: false },
+    refs: [],
+    objects: {},
+    commits: {},
+    trees: {},
+    tags: {},
+    index: [],
+    unreachable: [],
+    caps: {
+      objectCount: 10,
+      looseCount: 10,
+      refCount: 1,
+      fullLoad: true,
+      indexNodes: true,
+      commitGraph: false,
+      limits: { fullLoad: 60_000, indexNodes: 400 },
+    },
+    window: { commits: [], totalCommits: 0, more: false, refsOutside: 0 },
+    view: DEFAULT_VIEW,
+    notes: [],
+    ...extra,
+  };
 }

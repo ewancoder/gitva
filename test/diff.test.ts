@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { describe as describeChange, diffScenes } from '../src/diff.js';
-import { explain, explainKind } from '../src/explain.js';
 import type { Scene } from '../src/layout.js';
 import type { Snapshot } from '../src/types.js';
 
@@ -113,36 +112,5 @@ describe('saying what just happened', () => {
   });
 });
 
-describe('the teaching', () => {
-  it('has plain language and a command for every kind it draws', () => {
-    for (const kind of ['blob', 'tree', 'commit', 'tag', 'ref', 'head', 'index', 'more']) {
-      const e = explainKind(kind);
-      assert.ok(e.what.length > 40, `${kind} is explained`);
-      assert.ok(e.made.length > 0, `${kind} names the command that makes it`);
-    }
-  });
-
-  it('says a branch is a file with a sha in it, and where', () => {
-    const e = explain(snap({}), 'ref', 'refs/heads/main');
-    assert.match(e.what, /a file with a sha in it/);
-    assert.deepEqual(e.facts.find(([k]) => k === 'file'), ['file', '/g/refs/heads/main']);
-    assert.match(e.facts.find(([k]) => k === 'stored')![1], /loose/);
-  });
-
-  it('explains what an unborn HEAD is', () => {
-    const e = explain(snap({ head: { ref: 'refs/heads/main', detached: false, unborn: true } }), 'head', 'HEAD');
-    assert.match(e.facts.find(([k]) => k === 'contains')![1], /does not exist yet/);
-  });
-
-  it('says an unreachable object is still rescuable', () => {
-    const s = snap({ objects: { b1: { oid: 'b1', type: 'blob', size: 5 } }, unreachable: ['b1'] });
-    const e = explain(s, 'blob', 'b1');
-    assert.match(e.facts.find(([k]) => k === 'reachable')![1], /rescued/);
-  });
-
-  it('explains the three sides of a conflict', () => {
-    const s = snap({ index: [{ path: 'a.txt', oid: 'b1', mode: '100644', stage: 2 }] });
-    const e = explain(s, 'index', 'index:2:a.txt');
-    assert.match(e.facts.find(([k]) => k === 'stage')![1], /ours/);
-  });
-});
+// The teaching text has moved out to `explain.test.ts`, next to the module it
+// is testing.

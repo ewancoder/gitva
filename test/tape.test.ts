@@ -9,7 +9,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Tape, TAPE_CAP, type Prefs } from '../web/tape.js';
+import { Pins, questionFor, Tape, TAPE_CAP, type Prefs } from '../web/tape.js';
 import { layout } from '../src/layout.js';
 import { DEFAULT_VIEW, type Snapshot, type View } from '../src/types.js';
 
@@ -205,5 +205,148 @@ describe('what is folded', () => {
     s.view = { ...s.view, expanded: [...s.window.commits] }; // another viewer had opened them
     small.arrive(s, SHUT);
     assert.deepEqual(small.view.expanded, []);
+  });
+});
+
+/** A state whose window is full and has history behind it. */
+function paged(seq: number) {
+  const s = state(seq, ['a'], { limit: 8 }); // eight commits, eight asked for
+  s.window.more = true;
+  return s;
+}
+
+describe('paging', () => {
+  it('offers more history only when there is more of it', () => {
+    const t = new Tape();
+    t.arrive(paged(1), SHUT);
+    assert.equal(t.canLoadMore, true);
+    assert.equal(t.loadMore(), true);
+    assert.equal(t.view.limit, 1008);
+  });
+
+  it('stops offering it once the answer came back smaller than the question', () => {
+    const t = new Tape();
+    const s = paged(1);
+    s.view = { ...s.view, limit: 500 }; // asked for 500, got eight
+    t.arrive(s, SHUT);
+    assert.equal(t.canLoadMore, false, 'there is nothing more to ask for');
+    assert.equal(t.loadMore(), false);
+    assert.equal(t.loadAll(), false);
+    assert.equal(t.view.limit, 500, 'a refused page still moved the question');
+  });
+
+  it('does not page while the tape is standing further back', () => {
+    const t = new Tape();
+    t.arrive(paged(1), SHUT);
+    t.arrive(paged(2), SHUT);
+    t.step(-1);
+    assert.equal(t.canLoadMore, false, 'that window happened, and is not being asked again');
+    t.goLive();
+    assert.equal(t.canLoadMore, true);
+  });
+
+  it('lets the server’s own ceiling be the only bound on "load all"', () => {
+    const t = new Tape();
+    t.arrive(paged(1), SHUT);
+    assert.equal(t.loadAll(), true);
+    assert.equal(t.view.limit, Number.MAX_SAFE_INTEGER);
+  });
+
+  it('starts paging over when the question changes', () => {
+    const t = new Tape();
+    const s = paged(1);
+    s.view = { ...s.view, limit: 500 };
+    t.arrive(s, SHUT);
+    t.ask({ kind: 'search', text: 'x', in: 'message' });
+    assert.deepEqual(t.view.question, { kind: 'search', text: 'x', in: 'message' });
+    assert.equal(t.canLoadMore, true, 'a different question has its own window');
+  });
+
+  it('turns whichever control was touched into the one question', () => {
+    assert.deepEqual(questionFor('all', 'ignored', ['ignored']), { kind: 'all' });
+    assert.deepEqual(questionFor('branches', 'ignored', ['refs/heads/main']), {
+      kind: 'refs',
+      refs: ['refs/heads/main'],
+    });
+    assert.deepEqual(questionFor('author', 'ada', []), { kind: 'search', text: 'ada', in: 'author' });
+  });
+});
+
+describe('what the header says', () => {
+  it('counts what is on screen, and what the repository holds', () => {
+    const t = new Tape();
+    const s = state(1, ['a']);
+    s.objects = {
+      b1: { oid: 'b1', type: 'blob', size: 1 },
+      t1: { oid: 't1', type: 'tree', size: 1 },
+      c1: { oid: 'c1', type: 'commit', size: 1 },
+      g1: { oid: 'g1', type: 'tag', size: 1 },
+    };
+    s.unreachable = ['b1'];
+    t.arrive(s, SHUT);
+    assert.equal(t.tally(12), '12 on screen · 8 commits · 1c 1t 1b 1g · 1 unreachable · 0 index');
+  });
+
+  it('says how many objects there are instead, when it was too big to read them', () => {
+    const t = new Tape();
+    const s = state(1, ['a']);
+    s.caps = { ...s.caps, fullLoad: false, objectCount: 12_000 };
+    s.unreachable = null;
+    t.arrive(s, SHUT);
+    assert.match(t.tally(3), /· 12,000 objects · 0 index$/);
+  });
+
+  it('has nothing to say before the first state arrives', () => {
+    assert.equal(new Tape().tally(0), '');
+    assert.deepEqual(new Tape().notes(), []);
+  });
+
+  it('passes on the server’s reasons, and owns up to what the tape itself dropped', () => {
+    const t = new Tape();
+    for (let i = 1; i <= TAPE_CAP + 1; i++) {
+      const s = state(i, ['c' + i]);
+      s.notes = ['Orphan detection is off in a repository this size.'];
+      t.arrive(s, SHUT);
+    }
+    const notes = t.notes();
+    assert.equal(notes[0], 'Orphan detection is off in a repository this size.');
+    assert.match(notes[1], /400 states kept, 1 older ones dropped/);
+  });
+});
+
+describe('pins', () => {
+  it('holds an object where it was put, from that moment onwards', () => {
+    const pins = new Pins();
+    pins.put(2, 'b1', 10, 20);
+    assert.deepEqual(pins.at(1), {}, 'a pin does not reach back before it was made');
+    assert.deepEqual(pins.at(3), { b1: { x: 10, y: 20 } });
+  });
+
+  it('moves the pin rather than stacking them up while one object is dragged', () => {
+    const pins = new Pins();
+    pins.put(2, 'b1', 10, 20);
+    pins.put(2, 'b1', 11, 21);
+    assert.equal(pins.count, 1);
+    assert.deepEqual(pins.at(2), { b1: { x: 11, y: 21 } });
+  });
+
+  it('lets a later moment put the same object somewhere else', () => {
+    const pins = new Pins();
+    pins.put(1, 'b1', 10, 20);
+    pins.put(3, 'b1', 90, 90);
+    assert.deepEqual(pins.at(2), { b1: { x: 10, y: 20 } });
+    assert.deepEqual(pins.at(3), { b1: { x: 90, y: 90 } });
+  });
+
+  it('takes every pin of one object out at once, and says whether there were any', () => {
+    const pins = new Pins();
+    pins.put(1, 'b1', 10, 20);
+    pins.put(3, 'b1', 90, 90);
+    pins.put(1, 'b2', 5, 5);
+    assert.equal(pins.drop('b1'), true);
+    assert.equal(pins.drop('b1'), false, 'nothing to undo the second time');
+    assert.deepEqual(pins.at(9), { b2: { x: 5, y: 5 } });
+    pins.clear();
+    assert.equal(pins.count, 0);
   });
 });
