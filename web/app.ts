@@ -13,7 +13,7 @@
 import { diffScenes, describe, EMPTY_CHANGE, type Change } from '../src/diff.js';
 import { layout, type Scene, type SceneNode } from '../src/layout.js';
 import { type Snapshot, type View } from '../src/types.js';
-import { bounded, centre, fit, glideStep, toWorld, zoom, zoomOut, type Camera } from './camera.js';
+import { bounded, centre, fit, glideStep, refit, toWorld, zoom, zoomOut, type Camera } from './camera.js';
 import { renderPanel } from './panel.js';
 import { draw, hitTest, snapPositions } from './render.js';
 import { Pins, questionFor, Tape } from './tape.js';
@@ -32,11 +32,13 @@ interface Prefs {
   showIndex: boolean;
   centreOnClick: boolean;
   openNewCommits: boolean;
+  refitOnChange: boolean;
 }
 const prefs: Prefs = {
   showIndex: true,
   centreOnClick: false,
   openNewCommits: true,
+  refitOnChange: true,
   ...JSON.parse(localStorage.getItem('gitva.prefs') ?? '{}'),
 };
 const savePrefs = () => localStorage.setItem('gitva.prefs', JSON.stringify(prefs));
@@ -182,8 +184,10 @@ source.addEventListener('snapshot', (e) => {
   if (a.post) postView(a.post);
   if (a.kind === 'shown') {
     shown(a.prev);
-    if (a.first && scene) {
-      camera = fit(scene, canvas.clientWidth);
+    // The first state frames the graph; after that only if asked to, because
+    // history arriving is what makes the graph outgrow the window.
+    if (scene && (a.first || prefs.refitOnChange)) {
+      camera = a.first ? fit(scene, canvas.clientWidth) : refit(scene, port(), camera);
       glide = null;
       schedule();
     }
@@ -309,6 +313,12 @@ const openNew = $<HTMLInputElement>('open-new-commits');
 openNew.checked = prefs.openNewCommits;
 openNew.addEventListener('change', () => {
   prefs.openNewCommits = openNew.checked;
+  savePrefs();
+});
+const refitBox = $<HTMLInputElement>('refit-on-change');
+refitBox.checked = prefs.refitOnChange;
+refitBox.addEventListener('change', () => {
+  prefs.refitOnChange = refitBox.checked;
   savePrefs();
 });
 $('play').addEventListener('click', () => {

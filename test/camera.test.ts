@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { bounded, centre, fit, glideStep, toWorld, zoom, zoomOut } from '../web/camera.js';
+import { bounded, centre, fit, glideStep, refit, toWorld, zoom, zoomOut } from '../web/camera.js';
 import type { Scene } from '../src/layout.js';
 
 const port = { width: 500, height: 400 };
@@ -95,5 +95,16 @@ describe('fitting', () => {
     // The point that was under the middle of the window still is.
     assert.equal(cam.y + 1000 * cam.scale, port.height / 2);
     assert.equal(cam.x, 20);
+  });
+});
+
+describe('refitting when the repository changes', () => {
+  it('takes the fitted width and leaves the height where it was being read', () => {
+    const s = scene(1000, 4000);
+    const before = { x: -300, y: -500, scale: 1 };
+    const middle = (port.height / 2 - before.y) / before.scale;
+    const cam = refit(s, port, before);
+    assert.equal(cam.scale, fit(s, port.width).scale);
+    assert.equal(cam.y + middle * cam.scale, port.height / 2);
   });
 });

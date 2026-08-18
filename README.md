@@ -90,7 +90,8 @@ was being asked then — except for folding: a commit you opened stays open wher
 the tape, and one you folded stays folded, until you say otherwise.
 
 The legend dialog also holds preferences, which survive a reload — whether clicking a node centres
-the view on it, and whether a commit git just made arrives unfolded.
+the view on it, whether a commit git just made arrives unfolded, and whether the graph refits the
+width when the repository changes (on by default; the height stays where you were reading).
 
 ## Two promises
 

@@ -115,3 +115,13 @@ export function zoomOut(scene: Scene, port: Port, worldY: number): Camera {
   const { scale } = fit(scene, port.width);
   return { scale, ...bounded({ x: 20, y: port.height / 2 - worldY * scale }, scale, scene, port) };
 }
+
+/**
+ * Refit the width after the repository grew, without moving vertically: the
+ * graph gets wider as history arrives, and having to reach for "fit" on every
+ * commit is how you stop watching. Whatever was in the middle of the window
+ * stays there.
+ */
+export function refit(scene: Scene, port: Port, cam: Camera): Camera {
+  return zoomOut(scene, port, (port.height / 2 - cam.y) / cam.scale);
+}
