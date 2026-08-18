@@ -538,8 +538,13 @@ export function layout(
     }
 
     // Trees and blobs with no orphaned parent left: they dangle, one root per
-    // row, never in the commit band — only commits live over there.
-    for (const oid of strays) {
+    // row, never in the commit band — only commits live over there. Roots
+    // first, whatever order they arrived in: a blob laid down before the tree
+    // that names it takes the first column and leaves the tree stacked under
+    // it, instead of the tree fanning out rightwards into it.
+    const named = new Set(Object.values(strayTrees).flat().map((e) => e.oid));
+    const roots = [...strays].sort((a, b) => Number(named.has(a)) - Number(named.has(b)));
+    for (const oid of roots) {
       if (at.has(oid) || snap.tags[oid]) continue;
       cursor += objectRow(cursor, objectGraph(oid, strayTrees));
     }

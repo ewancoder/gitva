@@ -305,6 +305,22 @@ describe('the scene', () => {
     assert.ok(node(tree).y > node(oid('a')).y);
   });
 
+  it('fans a dangling tree out to a blob that git happened to list first', () => {
+    // hash-object then mktree: the blob exists before the tree does, and comes
+    // back first. Order of arrival must not decide who gets the first column.
+    const s = fakeSnapshot({ a: [] });
+    const [tree, blob] = ['tlost', 'blost'].map(oid);
+    s.trees[tree] = [{ mode: '100644', name: 'gone.txt', oid: blob, type: 'blob' }];
+    s.objects[tree] = { oid: tree, type: 'tree', size: 1 };
+    s.objects[blob] = { oid: blob, type: 'blob', size: 1 };
+    s.unreachable = [blob, tree];
+
+    const scene = layout(s, DEFAULT_VIEW);
+    const node = (o: string) => scene.nodes.find((n) => n.id === o)!;
+    assert.ok(node(blob).x > node(tree).x, 'the blob is right of the tree, not under it');
+    assert.equal(node(blob).y, node(tree).y, 'on the same row');
+  });
+
   it('puts an orphaned tag in the pointer gutter, beside what it still names', () => {
     const s = fakeSnapshot({ a: [] });
     const [lost, tagged, adrift] = ['lost', 'tagged', 'adrift'].map(oid);
