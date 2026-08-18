@@ -63,8 +63,7 @@ export function entryPath(arg: string): string {
 }
 
 // Run only when this file *is* the command — importing it, which is how the
-// argument rules get tested, must not start a server. A repository that cannot
-// be opened is the one thing that stops here rather than being drawn.
+// argument rules get tested, must not start a server.
 // `npm i -g` puts a symlink on PATH, so argv[1] must be resolved the same way
 // Node resolved import.meta.url — otherwise the installed command does nothing.
 if (process.argv[1] && fileURLToPath(import.meta.url) === entryPath(process.argv[1])) {

@@ -62,8 +62,18 @@ describe('starting up', () => {
     }
   });
 
-  it('refuses a directory that is not a repository', async () => {
-    await assert.rejects(main(['/', '--no-open']));
+  // `git init` is the first thing the tutorial teaches, so gitva has to be
+  // watching before it is run: a directory with no .git in it starts a server
+  // and waits rather than refusing.
+  it('starts in a directory that is not a repository yet', async () => {
+    const empty = mkdtempSync(join(tmpdir(), 'gitva-nogit-'));
+    const server = await main([empty, '--no-open']);
+    try {
+      assert.equal((await fetch(`http://127.0.0.1:${server.port}/`)).status, 200);
+    } finally {
+      await server.close();
+      rmSync(empty, { recursive: true, force: true });
+    }
   });
 
   // `npm i -g gitva` puts a symlink on PATH; running that link must start the

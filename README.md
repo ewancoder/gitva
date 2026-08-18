@@ -23,6 +23,9 @@ gitva
 `gitva [repo] [--port N] [--no-open] [--serve [HOST:PORT]]` — repo defaults to `.`, port to a
 free one, and the browser opens itself. Node ≥20. No runtime dependencies.
 
+The directory need not be a repository yet: start `gitva` in an empty one and it waits, then
+draws the repository the moment you run `git init`.
+
 `--serve` binds every interface instead of loopback, so others can watch the same repository
 from their own browsers — useful for teaching. Bare, it takes `0.0.0.0:4200`; give it
 `HOST:PORT` to choose. There is no authentication: anyone who can reach the port reads the

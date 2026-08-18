@@ -10,7 +10,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { changeSignal, measure, open, readBody, snapshot } from './git.js';
+import { GitError, changeSignal, measure, open, readBody, snapshot, type RepoHandle } from './git.js';
 import type { Capabilities, Snapshot, View } from './types.js';
 import { DEFAULT_VIEW } from './types.js';
 
@@ -30,8 +30,19 @@ export interface Server {
 }
 
 export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Promise<Server> {
-  const handle = await open(repoPath);
-  const caps: Capabilities = await measure(handle.repo, handle.gitDir);
+  // The repository need not exist yet: `gitva` in an empty directory waits for
+  // `git init`, so the very first plumbing command the tutorial teaches can be
+  // watched happening rather than assumed to have happened already.
+  let opened: { handle: RepoHandle; caps: Capabilities } | null = null;
+  async function repository() {
+    if (!opened) {
+      const handle = await open(repoPath).catch(() => {
+        throw new GitError(`no repository at ${repoPath} yet — waiting for \`git init\``);
+      });
+      opened = { handle, caps: await measure(handle.repo, handle.gitDir) };
+    }
+    return opened;
+  }
 
   let view: View = { ...DEFAULT_VIEW };
   let seq = 0;
@@ -49,6 +60,7 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
     if (building) return;
     building = true;
     try {
+      const { handle, caps } = await repository();
       const s = await snapshot(handle, view, caps, repoMoved ? ++seq : seq);
       last = s;
       const frame = `event: snapshot\ndata: ${JSON.stringify(s)}\n\n`;
@@ -66,12 +78,13 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
   const timer = setInterval(async () => {
     if (clients.size === 0) return;
     try {
+      const { handle } = await repository();
       const next = await changeSignal(handle.repo, handle.gitDir);
       if (next === signal) return;
       signal = next;
       await build(true);
     } catch {
-      /* a repo mid-rewrite: try again on the next tick */
+      /* no repository yet, or one mid-rewrite: try again on the next tick */
     }
   }, POLL_MS);
   timer.unref?.();
@@ -103,7 +116,9 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
 
   /** The first client pays for the first state; the poller must not repeat it. */
   async function first() {
-    signal = await changeSignal(handle.repo, handle.gitDir).catch(() => signal);
+    signal = await repository()
+      .then(({ handle }) => changeSignal(handle.repo, handle.gitDir))
+      .catch(() => signal);
     await build(true);
   }
 
@@ -117,7 +132,7 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
   async function object(url: URL, res: ServerResponse) {
     const oid = url.searchParams.get('oid') ?? '';
     if (!/^[0-9a-f]{4,64}$/.test(oid)) return res.writeHead(400).end('bad oid');
-    const body = await readBody(handle, oid);
+    const body = await readBody((await repository()).handle, oid);
     res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(body));
   }
 

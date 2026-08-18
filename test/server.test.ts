@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { sanitise, serve, type Server } from '../src/server.js';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { plumbedRepo, type Repo } from './fixture.js';
 
 describe('the view arriving from the browser', () => {
@@ -173,6 +177,29 @@ describe('a repository that moves under the server', () => {
     } finally {
       await server.close();
       repo.dispose();
+    }
+  });
+});
+
+describe('a directory that is not a repository yet', () => {
+  it('waits for `git init` rather than refusing to start', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gitva-empty-'));
+    const server = await serve(dir, 0);
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}/events`);
+      const stream = snapshots(res);
+      // `git init` is the first plumbing command the tutorial teaches, so the
+      // browser has to be able to watch it happen.
+      execFileSync('git', ['-C', dir, 'init', '-q', '-b', 'main'], {
+        env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' },
+      });
+      const s = (await stream.next()).value;
+      assert.equal(s.head.unborn, true);
+      assert.deepEqual(s.refs, []);
+      await stream.return(undefined);
+    } finally {
+      await server.close();
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });
