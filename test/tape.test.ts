@@ -9,7 +9,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Pins, questionFor, Tape, type Prefs } from '../web/tape.js';
+import { canMark, Pins, questionFor, Tape, type Prefs } from '../web/tape.js';
 import { layout } from '../src/layout.js';
 import { DEFAULT_VIEW, TAPE_CAP, type Snapshot, type View } from '../src/types.js';
 
@@ -367,5 +367,18 @@ describe('history from before this browser arrived', () => {
     // And what happens next is still something happening now.
     t.arrive(state(4, ['d', 'c', 'b', 'a'], { limit: 44 }), OPEN);
     assert.deepEqual(t.view.expanded, [oid('d')], 'the commit git just made stayed folded');
+  });
+});
+
+describe('what the right button can mark', () => {
+  it('marks every node that can get lost in the graph, and nothing else', () => {
+    // One gesture for every kind: a mark is "keep an eye on this", and that is
+    // the same wish for a commit as for a blob or a branch.
+    for (const kind of ['commit', 'tree', 'blob', 'tag', 'submodule', 'ref', 'head'] as const) {
+      assert.equal(canMark(kind), true, `${kind} could not be marked`);
+    }
+    // There is one index and one "load more" button; neither can be mislaid.
+    assert.equal(canMark('index'), false);
+    assert.equal(canMark('more'), false);
   });
 });

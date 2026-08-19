@@ -16,7 +16,7 @@ import { type Snapshot, type View } from '../src/types.js';
 import { bounded, centre, fit, glideStep, refit, toWorld, zoom, zoomOut, type Camera } from './camera.js';
 import { renderPanel } from './panel.js';
 import { draw, hitTest, snapPositions } from './render.js';
-import { Pins, questionFor, Tape } from './tape.js';
+import { canMark, Pins, questionFor, Tape } from './tape.js';
 import { theme } from './theme.js';
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -436,7 +436,7 @@ canvas.addEventListener('pointermove', (e) => {
   }
 });
 
-canvas.addEventListener('pointerup', () => {
+canvas.addEventListener('pointerup', (e) => {
   canvas.classList.remove('dragging');
   if (drag && !drag.moved) {
     // A button, not an object: clicking it loads, it never becomes the thing
@@ -444,6 +444,14 @@ canvas.addEventListener('pointerup', () => {
     if (drag.id === 'more') {
       if (tape.loadMore()) pushView();
       drag = null;
+      return;
+    }
+    // Shift is the undo of dragging: the pin comes out and the layout takes the
+    // node back. Nothing is selected or copied on the way — it is one act.
+    if (e.shiftKey && drag.id) {
+      const id = drag.id;
+      drag = null;
+      if (pins.drop(id)) relayout(true, false);
       return;
     }
     selected = drag.id;
@@ -464,10 +472,13 @@ canvas.addEventListener('pointerup', () => {
 canvas.addEventListener('dblclick', (e) => {
   const w = world(e);
   const hit = scene ? hitTest(scene, w.x, w.y) : null;
-  // Double-clicking a node is the undo of dragging it: the pin comes out and
-  // the layout takes it back.
+  // Double-click opens the thing you double-clicked, the way it opens a folder
+  // everywhere else.
   if (hit) {
-    if (pins.drop(hit.id)) relayout(true, false);
+    if (hit.kind === 'commit') {
+      tape.toggle(hit.id);
+      pushView();
+    }
     return;
   }
   if (!scene) return;
@@ -481,14 +492,9 @@ canvas.addEventListener('contextmenu', (e) => {
   const w = world(e);
   const hit = scene ? hitTest(scene, w.x, w.y) : null;
   if (!hit) return;
-  if (hit.kind === 'commit') {
-    tape.toggle(hit.id);
-    pushView();
-    return;
-  }
-  // Everything else that is an object gets a mark instead: an object moves
-  // around as history is filtered and folded, and a mark is how you follow it.
-  if (hit.kind !== 'tree' && hit.kind !== 'blob' && hit.kind !== 'tag' && hit.kind !== 'submodule') return;
+  // A node moves around as history is filtered and folded, and a mark is how
+  // you follow it.
+  if (!canMark(hit.kind)) return;
   if (!marked.delete(hit.id)) marked.add(hit.id);
   schedule();
 });

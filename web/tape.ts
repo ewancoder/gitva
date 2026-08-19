@@ -8,6 +8,7 @@
  * only check by scrubbing and squinting.
  */
 
+import type { NodeKind } from '../src/layout.js';
 import { DEFAULT_VIEW, TAPE_CAP, type Oid, type Question, type Snapshot, type TreeEntry, type View } from '../src/types.js';
 
 /** What the caller has to repaint after a state arrived. */
@@ -241,7 +242,7 @@ export class Pins {
     } else this.list.push({ seq, id, x, y });
   }
 
-  /** Double-clicking a node is the undo of dragging it, at every moment. */
+  /** Shift-clicking a node is the undo of dragging it, at every moment. */
   drop(id: Oid): boolean {
     const n = this.list.length;
     for (let i = n - 1; i >= 0; i--) if (this.list[i].id === id) this.list.splice(i, 1);
@@ -251,4 +252,14 @@ export class Pins {
   clear() {
     this.list.length = 0;
   }
+}
+
+/**
+ * Whether the right button marks this node. One gesture for every kind: a mark
+ * says "keep an eye on this" and that is the same wish whether the thing is a
+ * commit, a blob or a branch. The index and the "more" button are left out —
+ * there is exactly one of each and neither can get lost in the graph.
+ */
+export function canMark(kind: NodeKind): boolean {
+  return kind !== 'index' && kind !== 'more';
 }
