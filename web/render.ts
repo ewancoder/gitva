@@ -397,6 +397,20 @@ function drawNode(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, lit: Se
     ctx.stroke();
   }
 
+  // A folded tree is drawn like an empty one, so it carries its own handle: a
+  // stub arrow off its right edge, in the tree hue, pointing at the entries
+  // that are not there. "There is more in here" has to be visible at any zoom.
+  if (n.folded) {
+    ctx.setLineDash([]);
+    ctx.strokeStyle = theme.tree;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(n.x + n.w + 4, n.y + n.h / 2);
+    ctx.lineTo(n.x + n.w + 13, n.y + n.h / 2);
+    ctx.stroke();
+    arrowhead(ctx, n.x + n.w + 17, n.y + n.h / 2, 0, theme.tree);
+  }
+
   const marked = p.marked.has(n.id);
   if (marked) {
     ctx.setLineDash([]);
@@ -489,7 +503,10 @@ function label(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, dim: numbe
     ctx.fillStyle = ghost ? theme.ghost : 'rgba(10,12,16,0.9)';
     ctx.fillText(n.label, n.x + 10, n.y + n.h / 2 + 4);
     if (s >= TIER.kind && n.sub) {
-      ctx.font = `10px ${theme.sans}`;
+      // `tree +N` on a folded tree is not a description like the others — it is
+      // the count of what is being held back, so it is said in bold. Bold and
+      // not a colour: red on the tree green is the one pair that reads badly.
+      ctx.font = `${n.folded ? '700 ' : ''}10px ${theme.sans}`;
       ctx.fillStyle = ghost ? theme.faint : 'rgba(10,12,16,0.6)';
       ctx.textAlign = 'right';
       ctx.fillText(n.sub, n.x + n.w - 8, n.y + n.h / 2 + 4);

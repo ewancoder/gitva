@@ -188,6 +188,7 @@ describe('the scene', () => {
 
     const after = layout(open, { ...view, folded: [oid('ta')] });
     assert.equal(after.nodes.find((n) => n.id === oid('ta'))?.sub, 'tree +1');
+    assert.equal(after.nodes.find((n) => n.id === oid('ta'))?.folded, true, 'and says so, for the painter');
     assert.equal(after.nodes.some((n) => n.id === oid('bl')), false, 'hidden means absent');
     assert.equal(after.edges.some((e) => e.to === oid('bl')), false);
   });
@@ -363,6 +364,7 @@ describe('the scene', () => {
     s.unreachable = [oid('lt'), oid('lb')];
     const scene = layout(s, { ...DEFAULT_VIEW, folded: [oid('lt')] });
     assert.equal(scene.nodes.find((n) => n.id === oid('lt'))?.sub, 'tree +1');
+    assert.equal(scene.nodes.find((n) => n.id === oid('lt'))?.folded, true);
     // Folding a ghost does not delete one: an unreachable object nothing draws
     // any more falls through to the dangling band, because "never silently
     // dropped" outranks the fold. It leaves the fold's column, not the picture.

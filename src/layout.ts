@@ -38,6 +38,8 @@ export interface SceneNode {
   sub?: string;
   unreachable?: boolean;
   conflict?: boolean;
+  /** A tree drawn without its entries: the reader folded it shut. */
+  folded?: boolean;
   /** Put down here because nothing on screen points at it, not beside anything. */
   stray?: boolean;
   /** Only the index holds this: written, not committed, and safe from gc while
@@ -463,6 +465,7 @@ export function layout(
           h: M.objH,
           label: short(oid),
           sub: type !== 'tree' ? 'blob' : folded.has(oid) ? heldBack(oid) : 'tree',
+          folded: type === 'tree' && folded.has(oid),
           unreachable: unreachable.has(oid),
           origin: d === 0 ? row.oid : undefined,
         });
@@ -547,6 +550,7 @@ export function layout(
             h: M.objH,
             label: short(oid),
             sub: type === 'tree' && folded.has(oid) ? heldBack(oid) : type,
+            folded: type === 'tree' && folded.has(oid),
             unreachable: unreachable.has(oid),
             staged: stagedOnly.has(oid),
             stray: true,

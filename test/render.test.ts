@@ -213,20 +213,22 @@ describe('painting', () => {
     nodes: [node({ id: 'c1', kind: 'commit', x: 0, y: 900 }), ...s.nodes.slice(1)],
   });
 
-  /** Every strokeStyle the painter set, in order. */
-  function strokes(s: Scene): string[] {
+  /** Every value the painter gave one style property, in order. */
+  function painted(s: Scene, prop: 'strokeStyle' | 'font'): string[] {
     const seen: string[] = [];
     const ctx = new Proxy(
       { measureText: (t: string) => ({ width: t.length * 7 }) } as Record<string, unknown>,
       {
         get: (t, k) => (k in t ? t[k as string] : () => {}),
-        set: (t, k, v) => (k === 'strokeStyle' && seen.push(String(v)), (t[k as string] = v), true),
+        set: (t, k, v) => (k === prop && seen.push(String(v)), (t[k as string] = v), true),
       },
     ) as unknown as CanvasRenderingContext2D;
     snapPositions();
     draw(ctx, s, paint());
     return seen;
   }
+
+  const strokes = (s: Scene) => painted(s, 'strokeStyle');
 
   it('draws a parent line touching an orphan in ghost grey, not in ink', () => {
     const pair = (from: Partial<SceneNode>, to: Partial<SceneNode>): Scene => ({
@@ -241,6 +243,16 @@ describe('painting', () => {
       assert.ok(!seen.includes(theme.ink));
     }
     assert.ok(strokes(pair({}, {})).includes(theme.ink));
+  });
+
+  it('shows a folded tree has more in it: a bold count and an arrow off its edge', () => {
+    const bold = (s: Scene) => painted(s, 'font').some((f) => f.startsWith('700 '));
+    const shut = { ...full, nodes: [node({ id: 't9', kind: 'tree', sub: 'tree +3', folded: true })], edges: [] };
+    assert.ok(strokes(shut).includes(theme.tree), 'the stub arrow, in the tree hue');
+    assert.ok(bold(shut), 'and the count in bold');
+    const open = { ...shut, nodes: [node({ id: 't9', kind: 'tree', sub: 'tree' })] };
+    assert.ok(!strokes(open).includes(theme.tree), 'an open tree gets neither');
+    assert.ok(!bold(open));
   });
 
   it('draws every kind, at every tier of detail, without falling over', () => {
