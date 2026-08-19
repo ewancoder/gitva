@@ -194,9 +194,9 @@ const source = new EventSource('/events');
 
 /** Everything the room walked through before this browser arrived. It is
  *  recorded, not performed: a page opened an hour in would otherwise strobe
- *  through the whole session, expanding every commit and posting a view per
- *  state on the way. One state is painted at the end — the newest — exactly
- *  as the very first state is. */
+ *  through the whole session, painting and posting a view per state on the
+ *  way. One state is painted at the end — the newest — exactly as the very
+ *  first state is. */
 source.addEventListener('history', (e) => {
   live(true);
   const states: Snapshot[] = JSON.parse((e as MessageEvent).data);

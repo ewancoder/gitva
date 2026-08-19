@@ -167,6 +167,17 @@ describe('what is folded', () => {
     assert.ok(t.view.expanded.includes(oid('b')), 'it arrived folded after all');
   });
 
+  it('does not open a commit that only came back into the window', () => {
+    const t = new Tape();
+    // Windows are bounded and questions filter, so a commit leaves and returns.
+    // Only what git has just made opens itself — and this one was already here,
+    // folded, when the watcher last saw it.
+    t.arrive(state(1, ['a', 'b']), OPEN);
+    t.arrive(state(2, ['a']), OPEN);
+    t.arrive(state(3, ['a', 'b']), OPEN);
+    assert.deepEqual(t.view.expanded, [], 'an old commit opened itself on the way back in');
+  });
+
   it('leaves a new commit folded when that is what was asked for', () => {
     const t = new Tape();
     t.arrive(state(1, ['a']), SHUT);
@@ -352,21 +363,65 @@ describe('pins', () => {
 });
 
 describe('history from before this browser arrived', () => {
-  it('replays it whole without opening anything or asking the server for anything', () => {
+  it('replays it whole, standing the session\u2019s commits back up and asking the server nothing', () => {
     const t = new Tape();
     // The room got here without us; replaying it must not repeat what each
     // state did when it was new, or the page strobes through the session and
-    // posts a view per step on the way.
-    const before = [state(1, ['a']), state(2, ['b', 'a']), state(3, ['c', 'b', 'a'], { limit: 44 })];
+    // posts a view per step on the way. What it must not lose either is the
+    // room's answer about the commits git made while it ran — the server
+    // recorded each state with those open, so a reload finds them open.
+    const before = [
+      state(1, ['a']),
+      state(2, ['b', 'a'], { expanded: [oid('b')] }),
+      state(3, ['c', 'b', 'a'], { limit: 44, expanded: [oid('b'), oid('c')] }),
+    ];
     for (const s of before) assert.equal(t.arrive(s, OPEN, true).post, null, 'replay told the server something');
     assert.equal(t.states.length, 3);
     assert.equal(t.cursor, 2, 'a replay leaves you standing on the newest state');
-    assert.deepEqual(t.view.expanded, [], 'replay opened commits nobody asked for');
+    assert.deepEqual(t.view.expanded, [oid('b'), oid('c')], 'a reload folded away the commits the session made');
     assert.equal(t.view.limit, 44, 'the question the room is on is the one to carry on with');
+    assert.ok(t.world?.trees[oid('tb')], 'their trees came with the states, so nothing has to be asked for');
 
     // And what happens next is still something happening now.
     t.arrive(state(4, ['d', 'c', 'b', 'a'], { limit: 44 }), OPEN);
-    assert.deepEqual(t.view.expanded, [oid('d')], 'the commit git just made stayed folded');
+    assert.deepEqual(t.view.expanded, [oid('b'), oid('c'), oid('d')], 'the commit git just made stayed folded');
+  });
+
+  it('leaves folded whatever the session folded by hand, however much later', () => {
+    const t = new Tape();
+    // b opened itself when git made it, and was folded two states later —
+    // folding is an answer, and a reload is not a chance to ask again.
+    t.arrive(state(1, ['a']), OPEN, true);
+    t.arrive(state(2, ['b', 'a'], { expanded: [oid('b')] }), OPEN, true);
+    t.arrive(state(3, ['c', 'b', 'a'], { expanded: [oid('c')] }), OPEN, true);
+    assert.deepEqual(t.view.expanded, [oid('c')], 'the replay re-opened a commit somebody had folded');
+  });
+
+  it('inherits no folds about commits older than this browser', () => {
+    const t = new Tape();
+    // Another viewer had opened `a` — but the folds are the watcher's, and a
+    // repository opens folded whatever the room is looking at.
+    t.arrive(state(1, ['a'], { expanded: [oid('a')] }), OPEN, true);
+    t.arrive(state(2, ['b', 'a'], { expanded: [oid('a'), oid('b')] }), OPEN, true);
+    assert.deepEqual(t.view.expanded, [oid('b')]);
+  });
+
+  it('does not call a commit new because it dropped out of the window and came back', () => {
+    const t = new Tape();
+    // A window is bounded and a question is a filter, so a commit can leave the
+    // states and return. It was there when this browser was not, and coming
+    // back is not git making it.
+    t.arrive(state(1, ['a'], { expanded: [oid('a')] }), OPEN, true);
+    t.arrive(state(2, ['b'], { expanded: [oid('a'), oid('b')] }), OPEN, true);
+    t.arrive(state(3, ['a', 'b'], { expanded: [oid('a'), oid('b')] }), OPEN, true);
+    assert.deepEqual(t.view.expanded, [oid('b')], 'a commit older than this browser was opened');
+  });
+
+  it('leaves the repository as it stood before the session folded', () => {
+    const t = new Tape();
+    const before = [state(1, ['a']), state(2, ['b', 'a'], { expanded: [oid('b')] })];
+    for (const s of before) t.arrive(s, SHUT, true);
+    assert.deepEqual(t.view.expanded, [], 'replay opened commits the setting said to leave folded');
   });
 });
 

@@ -36,6 +36,13 @@ export class Tape {
    *  a tree read at any moment is that tree at every moment — which is what
    *  lets a commit opened now be drawn open on a state recorded before. */
   private readonly trees: Record<Oid, TreeEntry[]> = {};
+  /** Every commit any state has ever shown, and — of those — the ones that
+   *  appeared while the tape was running rather than being there from the
+   *  start. A commit can leave a window and come back (a filter, a page
+   *  boundary, a branch moving), so "new" has to mean new to the whole tape,
+   *  not to the state before. `born` is what a replay may find already open. */
+  private readonly seen = new Set<Oid>();
+  private readonly born = new Set<Oid>();
 
   get current(): Snapshot | null {
     return this.states[this.cursor] ?? null;
@@ -51,8 +58,10 @@ export class Tape {
 
   /** A state off the wire. `post` is a view the server has to be told about.
    *  `replay` is history the room walked before this browser arrived: it is
-   *  recorded, but nothing that only makes sense for something happening now —
-   *  opening the commit git just made, telling the server about it — happens. */
+   *  recorded, and a commit made during it stands as the room left it — open if
+   *  it opened itself and nobody folded it, so a reload does not fold away what
+   *  the session unfolded. Nothing is asked of the server: the room's answer is
+   *  already in the states, trees and all. */
   arrive(s: Snapshot, prefs: Prefs, replay = false): Arrival {
     Object.assign(this.trees, s.trees);
     if (s.window.commits.length < s.view.limit) this.exhausted = true;
@@ -60,17 +69,30 @@ export class Tape {
     const last = this.last;
     let post: View | null = null;
 
-    if (first || replay) {
+    if (first) {
       // Everything starts folded: opening a repository should cost nothing to
       // draw, and unfolding a commit is the gesture the tutorial wants asked.
       this.view = { ...s.view, showIndex: prefs.showIndex, expanded: [], folded: [] };
+    } else if (replay && last) {
+      // A commit born during the replayed session keeps whatever the room last
+      // said about it — opened by the rule below when it was made, or folded by
+      // hand since, which is an answer a reload must not undo. Commits older
+      // than this browser stay folded whatever anyone else opened: those folds
+      // are the watcher's, and this watcher has not said anything yet.
+      if (s.seq !== last.seq) for (const c of s.window.commits) if (!this.seen.has(c)) this.born.add(c);
+      this.view = {
+        ...s.view,
+        showIndex: prefs.showIndex,
+        expanded: prefs.openNewCommits ? s.view.expanded.filter((c) => this.born.has(c)) : [],
+        folded: this.view.folded,
+      };
     } else if (prefs.openNewCommits && last && s.seq !== last.seq) {
       // A commit git just made opens itself: the lesson is that it points at
       // the trees and blobs already on screen, which folding it away would
       // hide. Only on a new state — paging in older commits is not something
       // that just happened. Once, too: folding it afterwards is an answer, and
       // it does not get asked again.
-      const had = new Set([...last.window.commits, ...this.view.expanded]);
+      const had = new Set([...this.seen, ...this.view.expanded]);
       const fresh = s.window.commits.filter((c) => !had.has(c));
       if (fresh.length > 0) {
         this.view = { ...this.view, expanded: [...this.view.expanded, ...fresh] };
@@ -79,6 +101,8 @@ export class Tape {
         post = this.following ? this.view : { ...s.view, expanded: this.view.expanded };
       }
     }
+
+    for (const c of s.window.commits) this.seen.add(c);
 
     // A step is a state of the repository. Asking the same repository a
     // different question — folding, filtering, paging — replaces the state in
