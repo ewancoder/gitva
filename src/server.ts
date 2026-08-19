@@ -203,7 +203,12 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
     try {
       const data = await readFile(ROOT + file);
       res
-        .writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' })
+        // Rebuild, reload, see the change: without this a browser is free to
+        // keep yesterday's module and the edit never reaches the screen.
+        .writeHead(200, {
+          'content-type': MIME[extname(file)] ?? 'application/octet-stream',
+          'cache-control': 'no-cache',
+        })
         .end(data);
     } catch {
       res.writeHead(404).end('not found');
