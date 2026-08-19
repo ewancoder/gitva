@@ -287,7 +287,7 @@ describe('degrading the documented way above a limit', () => {
 
   it('turns orphan detection off and says why', () => {
     assert.equal(snap.unreachable, null);
-    assert.ok(snap.notes.some((n) => /Orphan detection is off/.test(n)));
+    assert.ok(snap.notes.some((n) => /Unreachable detection is off/.test(n)));
   });
 
   it('draws the index as the delta from HEAD, and counts the rest', () => {

@@ -333,12 +333,12 @@ describe('what the header says', () => {
     const t = new Tape();
     for (let i = 1; i <= TAPE_CAP + 1; i++) {
       const s = state(i, ['c' + i]);
-      s.notes = ['Orphan detection is off in a repository this size.'];
+      s.notes = ['Unreachable detection is off in a repository this size.'];
       t.arrive(s, SHUT);
     }
     const notes = t.notes();
-    assert.equal(notes[0], 'Orphan detection is off in a repository this size.');
-    assert.match(notes[1], /400 states kept, 1 older ones dropped/);
+    assert.equal(notes[0], 'Unreachable detection is off in a repository this size.');
+    assert.match(notes[1], /400 steps kept, 1 older ones dropped/);
   });
 });
 

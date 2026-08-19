@@ -691,9 +691,9 @@ export function layout(
     nodes,
     edges: edges.filter((e) => at.has(e.from) && at.has(e.to)),
     bands: [
-      { key: 'pointers', label: 'pointers', x: M.gutterX, w: gutterW },
+      { key: 'pointers', label: 'pointers and tags', x: M.gutterX, w: gutterW },
       { key: 'commits', label: 'commits', x: lanesX, w: lanesW },
-      { key: 'objects', label: 'objects', x: objectsX, w: objectsW },
+      { key: 'objects', label: 'trees and blobs', x: objectsX, w: objectsW },
       ...(view.showIndex
         ? [{ key: 'index' as const, label: 'index', x: indexX, w: indexW }]
         : []),

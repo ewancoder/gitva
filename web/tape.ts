@@ -268,7 +268,7 @@ export class Tape {
   notes(): string[] {
     const notes = [...(this.current?.notes ?? [])];
     if (this.dropped > 0) {
-      notes.push(`Tape: ${this.states.length} states kept, ${this.dropped} older ones dropped.`);
+      notes.push(`Recording: ${this.states.length} steps kept, ${this.dropped} older ones dropped.`);
     }
     return notes;
   }

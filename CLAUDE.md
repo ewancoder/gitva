@@ -131,7 +131,9 @@ across; do not rename a symbol just to match.
 | reader, watcher, person, author | **you** (interface), **viewer(s)** (docs) |
 | room | **viewers** |
 
-The interface still ships the old strings — see Known open work.
+The interface, the README and the teaching text have been brought across. `explain.ts` keeps one
+deliberate "folded" — *"packed — folded into .git/packed-refs"* — because that is git's own use
+of the word, and the reason ours had to give way.
 
 ## Commands
 
@@ -274,11 +276,6 @@ git reset b.txt       → the index entry goes; the blob survives, now marked un
 
 ## Known open work
 
-- **The interface still speaks the old vocabulary.** `fold all`, `unfold all`, `orphans`, `cross
-  links`, `drag a node`, `Previous state`, the column labels, and the `notes[]` strings in
-  `git.ts`. Two are not just stale but wrong: `orphans` borrows a git word that means a *branch
-  with no history*, and *"fold or open what it contains"* teaches that a commit contains its
-  tree.
 - **One viewer can change what every other viewer sees.** The server holds a single `view` and
   broadcasts every rebuild to all clients, so a filter, a search or "load all" applies to
   everyone. Intended behaviour is *the repository is shared, the view is yours* — viewers may
@@ -292,5 +289,7 @@ git reset b.txt       → the index entry goes; the blob survives, now marked un
 - **The visual pass has never been looked at by a human.** It was built to the brief but no
   screenshot has been taken. `INITIAL_DESIGN.md` §12 sets the bar: screenshot it on a real repo
   with a couple of hundred commits and ask whether you would put that image at the top of the
-  README. Whatever is wrong with it is the next task.
+  README. Whatever is wrong with it is the next task. One thing to check while you are there:
+  the column labels roughly doubled in width (`pointers and tags`, `trees and blobs`) and are
+  painted with no clipping, so they should be looked at on a narrow pointer gutter.
 - No README screenshot yet, for the same reason.

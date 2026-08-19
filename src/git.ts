@@ -598,9 +598,9 @@ function notesFor(
   const notes: string[] = [];
   if (!caps.fullLoad) {
     notes.push(
-      `Orphan detection is off: ${caps.objectCount.toLocaleString()} objects, and finding an orphan means reading every one. Everything drawn here is reachable by construction.`,
+      `Unreachable detection is off: ${caps.objectCount.toLocaleString()} objects, and finding an unreachable object means reading every one. Everything drawn here is reachable by construction.`,
     );
-    notes.push('Trees load only for the commits you open — nothing walks the object database.');
+    notes.push('Trees load only for the commits you expand — nothing walks the object database.');
   }
   if (ctx.indexElided) {
     notes.push(
