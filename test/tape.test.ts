@@ -370,6 +370,29 @@ describe('history from before this browser arrived', () => {
   });
 });
 
+describe('folding a tree', () => {
+  it('folds and unfolds one, and travels with the person up and down the tape', () => {
+    const t = new Tape();
+    t.arrive(state(1, ['a']), OPEN);
+    assert.deepEqual(t.view.folded, [], 'a tree arrives open');
+    t.toggleTree(oid('t1'));
+    t.toggleTree(oid('t2'));
+    assert.deepEqual(t.view.folded, [oid('t1'), oid('t2')]);
+    t.toggleTree(oid('t1'));
+    assert.deepEqual(t.view.folded, [oid('t2')], 'the same gesture opens it again');
+
+    // A fold is held by the person watching, not by the state, exactly as an
+    // opened commit is: stepping back must not silently open things.
+    t.arrive(state(2, ['b', 'a']), OPEN);
+    t.step(-1);
+    assert.deepEqual(t.view.folded, [oid('t2')]);
+
+    // "unfold all" means everything open, and a folded tree is not open.
+    t.unfoldAll();
+    assert.deepEqual(t.view.folded, []);
+  });
+});
+
 describe('what the right button can mark', () => {
   it('marks every node that can get lost in the graph, and nothing else', () => {
     // One gesture for every kind: a mark is "keep an eye on this", and that is

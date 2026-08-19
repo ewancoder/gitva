@@ -97,6 +97,10 @@ export interface View {
   question: Question;
   limit: number;
   expanded: Oid[];
+  /** Trees the reader closed. Trees arrive open — a commit you opened is a
+   *  promise to show what is in it — so this is the folded ones, not the open
+   *  ones, and an empty list means the whole tree is on screen. */
+  folded?: Oid[];
   showIndex: boolean;
   /** Orphans are half the lesson, so they are drawn unless asked otherwise. */
   showUnreachable?: boolean;
@@ -110,6 +114,7 @@ export const DEFAULT_VIEW: View = {
   question: { kind: 'all' },
   limit: 120,
   expanded: [],
+  folded: [],
   showIndex: true,
   showUnreachable: true,
 };

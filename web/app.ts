@@ -475,10 +475,10 @@ canvas.addEventListener('dblclick', (e) => {
   // Double-click opens the thing you double-clicked, the way it opens a folder
   // everywhere else.
   if (hit) {
-    if (hit.kind === 'commit') {
-      tape.toggle(hit.id);
-      pushView();
-    }
+    if (hit.kind === 'commit') tape.toggle(hit.id);
+    else if (hit.kind === 'tree') tape.toggleTree(hit.id);
+    else return;
+    pushView();
     return;
   }
   if (!scene) return;

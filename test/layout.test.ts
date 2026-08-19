@@ -118,6 +118,35 @@ describe('a commit\'s objects', () => {
     );
   });
 
+  it('holds back what a folded tree contains, and still draws the tree', () => {
+    // Hidden means absent: folding `lib` takes the blob under it out of the
+    // scene, rather than drawing it somewhere nobody can see.
+    const g = objectGraph('root', { root: trees.root, lib: [{ name: 'c.txt', oid: 'only', mode: '100644', type: 'blob' }] }, new Set(['lib']));
+    assert.equal(g.depth.get('lib'), 1, 'the folded tree is still there');
+    assert.equal(g.depth.has('only'), false, 'what it holds left the scene');
+    assert.deepEqual(
+      g.edges.map((e) => e.label),
+      ['a.txt', 'lib'],
+      'and no arrow points at a node that is not drawn',
+    );
+  });
+
+  it('keeps a blob a folded tree shared with someone still open', () => {
+    // The fold hides a path, not an object: `shared` is a.txt at the root too,
+    // so it stays, and only the arrow from `lib` goes.
+    const g = objectGraph('root', trees, new Set(['lib']));
+    assert.equal(g.depth.get('shared'), 1, 'it moves up to the path still open');
+    assert.equal(g.edges.some((e) => e.from === 'lib'), false);
+  });
+
+  it('holds back everything when the root itself is folded', () => {
+    // The root is a tree like any other: a commit whose own tree is folded
+    // shows the tree and nothing under it.
+    const g = objectGraph('root', trees, new Set(['root']));
+    assert.deepEqual(g.columns, [['root']]);
+    assert.deepEqual(g.edges, []);
+  });
+
   it('marks an executable and a symlink on the arrow', () => {
     const g = objectGraph('r', {
       r: [
@@ -134,6 +163,33 @@ describe('the scene', () => {
 
   it('is the same picture every time it is drawn', () => {
     assert.deepEqual(layout(snap, DEFAULT_VIEW), layout(snap, DEFAULT_VIEW));
+  });
+
+  it('folding a tree removes what it holds from the scene, and says how much', () => {
+    // A folded tree with nothing drawn under it would read as an empty tree, so
+    // it carries the count. And the blob is gone from the scene, not hidden in
+    // it: the node list is what the reader can see.
+    const open = fakeSnapshot(
+      { a: [] },
+      {
+        trees: {
+          [oid('ta')]: [{ name: 'a.txt', oid: oid('bl'), mode: '100644', type: 'blob' }],
+        },
+        objects: {
+          [oid('ta')]: { oid: oid('ta'), type: 'tree', size: 1 },
+          [oid('bl')]: { oid: oid('bl'), type: 'blob', size: 1 },
+        },
+      },
+    );
+    const view = { ...DEFAULT_VIEW, expanded: [oid('a')] };
+    const before = layout(open, view);
+    assert.equal(before.nodes.find((n) => n.id === oid('ta'))?.sub, 'tree');
+    assert.ok(before.nodes.some((n) => n.id === oid('bl')));
+
+    const after = layout(open, { ...view, folded: [oid('ta')] });
+    assert.equal(after.nodes.find((n) => n.id === oid('ta'))?.sub, 'tree +1');
+    assert.equal(after.nodes.some((n) => n.id === oid('bl')), false, 'hidden means absent');
+    assert.equal(after.edges.some((e) => e.to === oid('bl')), false);
   });
 
   it('does not move anything sideways when a commit lands on top', () => {
@@ -239,6 +295,23 @@ describe('the scene', () => {
     const scene = layout(s, DEFAULT_VIEW);
     const entries = scene.nodes.filter((n) => n.kind === 'index');
     assert.deepEqual(entries.map((e) => e.conflict), [false, true]);
+  });
+
+  it('folds an orphaned tree too — a ghost is a tree with entries like any other', () => {
+    const s = fakeSnapshot({ a: [] });
+    s.objects[oid('lt')] = { oid: oid('lt'), type: 'tree', size: 7 };
+    s.objects[oid('lb')] = { oid: oid('lb'), type: 'blob', size: 7 };
+    s.trees[oid('lt')] = [{ name: 'gone.txt', oid: oid('lb'), mode: '100644', type: 'blob' }];
+    s.unreachable = [oid('lt'), oid('lb')];
+    const scene = layout(s, { ...DEFAULT_VIEW, folded: [oid('lt')] });
+    assert.equal(scene.nodes.find((n) => n.id === oid('lt'))?.sub, 'tree +1');
+    // Folding a ghost does not delete one: an unreachable object nothing draws
+    // any more falls through to the dangling band, because "never silently
+    // dropped" outranks the fold. It leaves the fold's column, not the picture.
+    const lost = scene.nodes.find((n) => n.id === oid('lb'))!;
+    assert.ok(lost, 'an orphan is never hidden by a fold');
+    assert.equal(lost.stray, true);
+    assert.equal(scene.edges.some((e) => e.to === oid('lb')), false, 'and no arrow into it from the folded tree');
   });
 
   it('draws an orphan nothing points at, never silently dropping it', () => {

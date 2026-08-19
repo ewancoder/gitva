@@ -166,11 +166,15 @@ interface ObjectGraph {
  * top-level file and a nested one sits at the deeper column and no arrow ever
  * points backwards.
  */
-export function objectGraph(root: Oid, trees: Record<Oid, { name: string; oid: Oid; mode: string; type: string }[]>): ObjectGraph {
+export function objectGraph(
+  root: Oid,
+  trees: Record<Oid, { name: string; oid: Oid; mode: string; type: string }[]>,
+  folded: Set<Oid> = new Set(),
+): ObjectGraph {
   const depth = new Map<Oid, number>([[root, 0]]);
   const order: Oid[] = [root];
   const edges = new Map<string, { from: Oid; to: Oid; label: string }>();
-  const queue: Oid[] = [root];
+  const queue: Oid[] = folded.has(root) ? [] : [root];
   let guard = 20_000;
 
   while (queue.length > 0 && guard-- > 0) {
@@ -181,7 +185,9 @@ export function objectGraph(root: Oid, trees: Record<Oid, { name: string; oid: O
       if (!depth.has(e.oid)) order.push(e.oid);
       if ((depth.get(e.oid) ?? -1) < d + 1) {
         depth.set(e.oid, d + 1);
-        if (e.type === 'tree' && trees[e.oid]) queue.push(e.oid);
+        // A folded tree is drawn, but nothing under it is: hidden means absent,
+        // so what it holds leaves the scene rather than going invisible.
+        if (e.type === 'tree' && trees[e.oid] && !folded.has(e.oid)) queue.push(e.oid);
       }
     }
   }
@@ -208,6 +214,9 @@ export function layout(
   const { lane, laneCount } = assignLanes(commits, (o) => snap.commits[o]?.parents ?? []);
   const inWindow = new Set(commits);
   const expanded = new Set(view.expanded);
+  const folded = new Set(view.folded ?? []);
+  /** A folded tree looks like an empty one, so it says how much it holds. */
+  const heldBack = (oid: Oid) => `tree +${snap.trees[oid]?.length ?? 0}`;
   const unreachable = new Set(snap.unreachable ?? []);
   const stagedOnly = new Set(snap.stagedOnly ?? []);
 
@@ -222,7 +231,7 @@ export function layout(
   for (const oid of commits) {
     const c = snap.commits[oid];
     if (c && expanded.has(oid) && snap.trees[c.tree]) {
-      graphs.set(oid, objectGraph(c.tree, snap.trees));
+      graphs.set(oid, objectGraph(c.tree, snap.trees, folded));
     }
   }
 
@@ -428,7 +437,7 @@ export function layout(
           w: M.objW,
           h: M.objH,
           label: short(oid),
-          sub: type === 'tree' ? 'tree' : 'blob',
+          sub: type !== 'tree' ? 'blob' : folded.has(oid) ? heldBack(oid) : 'tree',
           unreachable: unreachable.has(oid),
           origin: d === 0 ? row.oid : undefined,
         });
@@ -490,7 +499,7 @@ export function layout(
             w: M.objW,
             h: M.objH,
             label: short(oid),
-            sub: type,
+            sub: type === 'tree' && folded.has(oid) ? heldBack(oid) : type,
             unreachable: unreachable.has(oid),
             staged: stagedOnly.has(oid),
             stray: true,
@@ -531,7 +540,7 @@ export function layout(
       let h = M.rowH;
       if (strayed.has(c.tree)) {
         edges.push({ id: `t:${oid}`, from: oid, to: c.tree, kind: 'tree' });
-        h = objectRow(cursor + M.rowPad, objectGraph(c.tree, strayTrees), oid);
+        h = objectRow(cursor + M.rowPad, objectGraph(c.tree, strayTrees, folded), oid);
       }
       // One lane, so a parent arrow is the same straight drop it is above.
       for (const p of c.parents) {
@@ -546,11 +555,14 @@ export function layout(
     // first, whatever order they arrived in: a blob laid down before the tree
     // that names it takes the first column and leaves the tree stacked under
     // it, instead of the tree fanning out rightwards into it.
+    // Whatever a fold above left undrawn turns up here: an unreachable object is
+    // never silently dropped, so folding a ghost tree moves its entries into the
+    // dangling band rather than taking them off the screen.
     const named = new Set(Object.values(strayTrees).flat().map((e) => e.oid));
     const roots = [...strays].sort((a, b) => Number(named.has(a)) - Number(named.has(b)));
     for (const oid of roots) {
       if (at.has(oid) || snap.tags[oid]) continue;
-      cursor += objectRow(cursor, objectGraph(oid, strayTrees));
+      cursor += objectRow(cursor, objectGraph(oid, strayTrees, folded));
     }
 
     // A tag is a pointer, so it goes in the pointer gutter beside the thing it

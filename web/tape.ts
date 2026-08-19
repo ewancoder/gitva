@@ -63,7 +63,7 @@ export class Tape {
     if (first || replay) {
       // Everything starts folded: opening a repository should cost nothing to
       // draw, and unfolding a commit is the gesture the tutorial wants asked.
-      this.view = { ...s.view, showIndex: prefs.showIndex, expanded: [] };
+      this.view = { ...s.view, showIndex: prefs.showIndex, expanded: [], folded: [] };
     } else if (prefs.openNewCommits && last && s.seq !== last.seq) {
       // A commit git just made opens itself: the lesson is that it points at
       // the trees and blobs already on screen, which folding it away would
@@ -113,7 +113,7 @@ export class Tape {
     // in the head of the person watching, across the whole tape: a commit they
     // opened stays open wherever they stand, and one they folded stays folded,
     // until they say otherwise.
-    this.view = { ...this.states[i].view, expanded: this.view.expanded };
+    this.view = { ...this.states[i].view, expanded: this.view.expanded, folded: this.view.folded };
     return { prev };
   }
 
@@ -133,6 +133,13 @@ export class Tape {
     return this.jump(this.states.length - 1);
   }
 
+  /** Fold or unfold a tree. Trees arrive open, so this list is the closed ones
+   *  — the reverse of `expanded`, because the defaults are the reverse too. */
+  toggleTree(oid: Oid) {
+    const off = this.view.folded ?? [];
+    this.view = { ...this.view, folded: off.includes(oid) ? off.filter((o) => o !== oid) : [...off, oid] };
+  }
+
   /** The three fold gestures — the only things that own `expanded`. */
   toggle(oid: Oid) {
     const on = this.view.expanded.includes(oid);
@@ -145,7 +152,7 @@ export class Tape {
    *  something this gesture said anything about. */
   unfoldAll() {
     const on = new Set([...this.view.expanded, ...(this.current?.window.commits ?? [])]);
-    this.view = { ...this.view, expanded: [...on] };
+    this.view = { ...this.view, expanded: [...on], folded: [] };
   }
   foldAll() {
     const off = new Set(this.current?.window.commits ?? []);
