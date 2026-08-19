@@ -36,7 +36,7 @@
         color: var(--ink);
         font: 13px/1.5 var(--sans);
         display: grid;
-        grid-template-rows: auto auto 1fr;
+        grid-template-rows: auto auto auto 1fr;
         overflow: hidden;
       }
       kbd, code, .mono { font-family: var(--mono); }
@@ -75,6 +75,15 @@
       #play { min-width: 5.5em; }
       #tape-pos { min-width: 5ch; }
       .change { color: var(--muted); font-family: var(--mono); font-size: 11px; min-width: 8ch; }
+
+      /* The tape rides on its own row: the toolbar above it resizes as the
+         state changes, and a button that moves is a button you miss. */
+      #transport {
+        display: flex; align-items: center; gap: calc(var(--u) * 2);
+        padding: 6px calc(var(--u) * 1.5);
+        background: var(--panel);
+        border-bottom: 1px solid var(--line);
+      }
 
       #notes {
         padding: 6px calc(var(--u) * 1.5);
@@ -166,23 +175,24 @@
       </div>
 
       <div class="group">
+        <button id="legend-btn">legend</button>
+      </div>
+    </header>
+
+    <div id="transport">
+      <div class="group">
         <button id="step-back" title="Previous state">◀</button>
         <button id="play" aria-pressed="false" title="Pause following the tail">pause</button>
         <button id="step-fwd" title="Next state">▶</button>
         <input type="range" id="scrub" min="0" max="0" value="0" />
         <span class="tally" id="tape-pos"></span>
       </div>
-
-      <div class="group">
-        <button id="legend-btn">legend</button>
-      </div>
-
       <div class="group right">
         <span class="live"><span class="dot" id="live-dot"></span><span id="live-text">connecting</span></span>
         <span class="tally" id="tally"></span>
         <span class="change" id="change"></span>
       </div>
-    </header>
+    </div>
 
     <div id="notes"><ul id="notes-list"></ul></div>
 
