@@ -78,9 +78,8 @@ Everything horizontal across the top is a **toolbar**, each named for its job, n
 
 | region | holds |
 |---|---|
-| **view toolbar** | repo name, load all, expand/collapse, index · links from unreachable · unreachable, help. Every control here is a `View` field. The question — branches and search — is built but hidden behind `QUESTIONS_ENABLED` in `src/types.ts`, because one shared view means one viewer's filter is everyone's. |
-| **recording toolbar** | step back · pause · step forward · scrub · live · tally · what changed |
-| **reset toolbar** | `Reset view`, alone because it is the most-used control and got lost among the others |
+| **view toolbar** | repo name, load all commits (shown only while more remain), expand/collapse, index · unreachable · links from unreachable, help. Every control here is a `View` field. The question — branches and search — is built but hidden behind `QUESTIONS_ENABLED` in `src/types.ts`, because one shared view means one viewer's filter is everyone's. |
+| **recording toolbar** | `reset view` · step back · pause · step forward · scrub · live · tally · what changed. `reset view` leads it, in its own group: it is the most-used control, and one button never earned a row of its own |
 | **notes toolbar** | what the canvas isn't showing, what gitva won't do to your repo, and why |
 | **canvas** | the object graph |
 | **inspector** | what you selected: the full sha, the fields, the teaching text, the body |
@@ -124,7 +123,7 @@ across; do not rename a symbol just to match.
 | cross links | **links from unreachable** |
 | column label "objects" | **trees and blobs** |
 | column label "pointers" | **pointers and tags** |
-| header, `transport`, `reset-row`, `notes` | **view / recording / reset / notes toolbar** |
+| header, `transport`, `notes` | **view / recording / notes toolbar** |
 | `panel` | **inspector** |
 | legend (the dialog) | **help** — legend is one section inside it |
 | Preferences | **settings** |
@@ -277,7 +276,7 @@ git reset b.txt       → the index entry goes; the blob survives, now marked un
 ## Known open work
 
 - **One viewer can change what every other viewer sees.** The server holds a single `view` and
-  broadcasts every rebuild to all clients, so "load all", expanding and the index toggle apply to
+  broadcasts every rebuild to all clients, so "load all commits", expanding and the index toggle apply to
   everyone. Filtering — chosen branches, or a search — is switched off for that reason
   (`QUESTIONS_ENABLED` in `src/types.ts`): the control is hidden and `sanitise` forces
   `{ kind: 'all' }`, so no browser can ask a different question of the server. Turning it back on

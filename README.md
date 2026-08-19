@@ -81,16 +81,16 @@ the one line inside a ref.
 |---|---|
 | wheel | pan; hold <kbd>ctrl</kbd> to zoom |
 | drag background | pan |
-| drag anything | pin it where you put it (*Reset view*, below the recording toolbar, drops every pin) |
-| drag the seam between two columns | widen the left one, for room to arrange pinned things; it never narrows past what it holds, and *Reset view* puts it back. The index is last and has no seam: it grows to hold whatever you drag into it |
+| drag anything | pin it where you put it (*reset view*, at the left of the recording toolbar, drops every pin) |
+| drag the seam between two columns | widen the left one, for room to arrange pinned things; it never narrows past what it holds, and *reset view* puts it back. The index is last and has no seam: it grows to hold whatever you drag into it |
 | click | select: read what it is, and light the whole path through it; anything with a sha copies it to the clipboard |
 | hover | light what it links to |
 | right-click anything | mark it with a red outline — objects, pointers and index entries alike, so you can follow it as the object graph moves; right-click again to unmark |
 | double-click a commit | expand or collapse it, showing what it links to (a commit git just made arrives expanded, unless you turn that off in Settings) |
 | double-click a tree | expand or collapse that subtree; collapsed, it says how many entries it is holding back in bold (`tree +3`) and grows a green arrow off its right edge. Trees arrive expanded |
-| shift+click anything | unpin it, wherever the layout wants it (*Reset view* drops the lot) |
+| shift+click anything | unpin it, wherever the layout wants it (*reset view* drops the lot) |
 | double-click background | fit to width again, keeping the point you clicked in view |
-| click *load more history* | load another thousand commits (*load all* in the view toolbar loads the lot) |
+| click *load more history* | load another thousand commits (*load all commits* in the view toolbar loads the lot, and appears only while there are more) |
 | <kbd>f</kbd> <kbd>←</kbd>/<kbd>[</kbd> <kbd>→</kbd>/<kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |
 
 In the view toolbar: load the whole history; expand or collapse every commit at once; hide the index;
