@@ -92,6 +92,12 @@ describe('the server', () => {
     assert.match(await res.text(), /<canvas id="graph">/);
   });
 
+  it('serves the favicon the page asks for', async () => {
+    const res = await fetch(base + 'favicon.png');
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'image/png');
+  });
+
   it('refuses anything outside the two static roots', async () => {
     assert.equal((await fetch(base + 'etc/passwd')).status, 404);
     assert.equal((await fetch(base + '../package.json')).status, 404);

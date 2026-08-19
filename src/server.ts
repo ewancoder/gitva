@@ -20,6 +20,7 @@ const MIME: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
   '.map': 'application/json',
   '.css': 'text/css; charset=utf-8',
+  '.png': 'image/png',
 };
 
 const POLL_MS = 400;
@@ -203,7 +204,10 @@ export async function serve(
     const file =
       pathname === '/' || pathname === '/index.html'
         ? 'web/index.html'
-        : /^\/(web|src)\/[\w.-]+$/.test(pathname)
+        : // Shipped beside index.html, not compiled, so it is served from source too.
+          pathname === '/favicon.png'
+          ? 'web/favicon.png'
+          : /^\/(web|src)\/[\w.-]+$/.test(pathname)
           ? `dist${pathname}`
           : null;
     if (!file) return res.writeHead(404).end('not found');
