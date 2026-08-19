@@ -250,6 +250,7 @@ function updateHeader() {
   $('play').textContent = tape.following ? 'pause' : 'go live';
   $('play').setAttribute('aria-pressed', String(!tape.following));
   $('toggle-index').setAttribute('aria-pressed', String(tape.view.showIndex));
+  $('toggle-orphans').setAttribute('aria-pressed', String(tape.view.showUnreachable !== false));
   $<HTMLButtonElement>('load-all').disabled = !tape.canLoadMore;
   live(source.readyState !== 2);
 }
@@ -298,6 +299,10 @@ $('search').addEventListener('input', () => {
 $('branches').addEventListener('change', askFromToolbar);
 $('toggle-index').addEventListener('click', () => {
   tape.view = { ...tape.view, showIndex: !tape.view.showIndex };
+  pushView();
+});
+$('toggle-orphans').addEventListener('click', () => {
+  tape.view = { ...tape.view, showUnreachable: tape.view.showUnreachable === false };
   pushView();
 });
 $('load-all').addEventListener('click', () => {

@@ -611,6 +611,8 @@ function notesFor(
   if (ctx.refsOutside > 0)
     notes.push(`${ctx.refsOutside} refs point outside this window and are left out.`);
   if (!ctx.view.showIndex) notes.push('The index is hidden.');
+  if (ctx.view.showUnreachable === false && caps.fullLoad)
+    notes.push('Unreachable objects are hidden — they are still in the object database.');
   if (!caps.commitGraph && caps.objectCount > LIMITS.fullLoad) {
     // Teaching the user about a git internal they didn't know existed is gitva
     // working as designed. Detect it, hint at it, never build it — that would

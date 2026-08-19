@@ -455,7 +455,11 @@ export function layout(
   // A staged object comes down here too, solid rather than a ghost: `git add`
   // wrote a real blob, and the index chip beside it is the only thing holding
   // it. Objects do not vanish because something started pointing at them.
-  const strays = [...unreachable, ...stagedOnly].filter((oid) => !at.has(oid));
+  // Hidden means absent, so switching orphans off takes them out of the scene
+  // the way a fold does. A staged object is held by the index, not orphaned,
+  // and stays.
+  const orphans = view.showUnreachable === false ? [] : unreachable;
+  const strays = [...orphans, ...stagedOnly].filter((oid) => !at.has(oid));
   if (strays.length > 0) {
     const strayed = new Set(strays);
     // The orphaned set's own subgraph, cut once here: entries pointing back

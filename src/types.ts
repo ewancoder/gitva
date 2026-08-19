@@ -98,6 +98,8 @@ export interface View {
   limit: number;
   expanded: Oid[];
   showIndex: boolean;
+  /** Orphans are half the lesson, so they are drawn unless asked otherwise. */
+  showUnreachable?: boolean;
 }
 
 export const DEFAULT_VIEW: View = {
@@ -105,6 +107,7 @@ export const DEFAULT_VIEW: View = {
   limit: 120,
   expanded: [],
   showIndex: true,
+  showUnreachable: true,
 };
 
 export interface Snapshot {

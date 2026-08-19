@@ -84,7 +84,7 @@ the one line inside a ref.
 
 In the toolbar: ask for everything, for chosen branches, or search by message, author, path or
 content; load the whole history; fold or unfold every commit at once; drop every pin; hide the
-index. Every one of those is the same
+index; hide the orphans. Every one of those is the same
 mechanism — a change to the *view* the browser holds, which is why none of them care how big
 the repository is.
 

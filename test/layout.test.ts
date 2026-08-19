@@ -251,6 +251,17 @@ describe('the scene', () => {
     assert.equal(lost.unreachable, true);
   });
 
+  it('hides orphans outright when they are switched off, and keeps staged blobs', () => {
+    const s = fakeSnapshot({ a: [] });
+    s.objects[oid('lost')] = { oid: oid('lost'), type: 'blob', size: 7 };
+    s.objects[oid('stag')] = { oid: oid('stag'), type: 'blob', size: 7 };
+    s.unreachable = [oid('lost')];
+    s.stagedOnly = [oid('stag')];
+    const off = layout(s, { ...DEFAULT_VIEW, showUnreachable: false });
+    assert.ok(!off.nodes.some((n) => n.id === oid('lost')), 'out of the scene, not merely invisible');
+    assert.ok(off.nodes.some((n) => n.id === oid('stag')), 'the index still holds this one');
+  });
+
   it('keeps the arrows between objects that were orphaned together', () => {
     // A discarded commit -> its tree -> its blob, all lost at the same moment,
     // plus one still-reachable blob the lost tree also names.

@@ -172,6 +172,12 @@ describe('a repository read through its own plumbing', () => {
     assert.ok(!snap.unreachable.includes(snap.head.oid!), 'HEAD is not');
   });
 
+  it('says out loud when orphans are switched off, and still counts them', async () => {
+    const s = await snapshot(handle, { ...DEFAULT_VIEW, showUnreachable: false }, caps, 4);
+    assert.ok(s.unreachable!.length > 0, 'hiding is a drawing decision, not a lie about the repo');
+    assert.ok(s.notes.some((n) => /Unreachable objects are hidden/.test(n)));
+  });
+
   it('stores one blob for two names, because names live in trees', () => {
     const a = repo.git('hash-object', 'a.txt');
     const root = snap.commits[snap.head.oid!].tree;
