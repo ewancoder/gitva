@@ -9,7 +9,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { canMark, Pins, questionFor, Tape, type Prefs } from '../web/tape.js';
+import { canMark, isDouble, Pins, questionFor, Tape, type Prefs } from '../web/tape.js';
 import { layout } from '../src/layout.js';
 import { DEFAULT_VIEW, TAPE_CAP, type Snapshot, type View } from '../src/types.js';
 
@@ -461,5 +461,22 @@ describe('what the right button can mark', () => {
     }
     // There is one "load more" button, and it cannot be mislaid.
     assert.equal(canMark('more'), false);
+  });
+});
+
+describe('telling a double-click from two clicks', () => {
+  it('pairs clicks by when and where the pointer was, not by what is under it', () => {
+    const first = { at: 1000, x: 200, y: 100, id: 'a' };
+    // The gesture that was missed by hand: centring on the first click slid the
+    // node away, so the second click landed on nothing — the browser's own
+    // `dblclick` then had nothing to fold, and nothing folded.
+    assert.equal(isDouble(first, { at: 1180, x: 200, y: 100, id: null }), true);
+    // A slip of a pixel or two between the two presses is still one gesture.
+    assert.equal(isDouble(first, { at: 1180, x: 206, y: 104, id: 'a' }), true);
+    // Two deliberate clicks: too slow, or somewhere else entirely.
+    assert.equal(isDouble(first, { at: 1600, x: 200, y: 100, id: 'a' }), false);
+    assert.equal(isDouble(first, { at: 1180, x: 260, y: 100, id: 'a' }), false);
+    // The first click of the day has nothing to pair with.
+    assert.equal(isDouble(null, first), false);
   });
 });

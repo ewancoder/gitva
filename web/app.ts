@@ -16,7 +16,7 @@ import { type Snapshot, type View } from '../src/types.js';
 import { bounded, centre, fit, glideStep, refit, toWorld, zoom, zoomOut, type Camera } from './camera.js';
 import { renderPanel } from './panel.js';
 import { draw, hitTest, snapPositions } from './render.js';
-import { canMark, Pins, questionFor, Tape } from './tape.js';
+import { canMark, isDouble, Pins, questionFor, Tape, type Click } from './tape.js';
 import { theme } from './theme.js';
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -73,6 +73,8 @@ let enterAt = -1e9;
 let camera: Camera = { x: 24, y: 24, scale: 1 };
 let hover: string | null = null;
 let selected: string | null = null;
+/** The last click, waiting to see whether a second one joins it. */
+let lastClick: Click | null = null;
 
 /** Objects marked by right-click, kept by sha until right-clicked again. */
 const marked = new Set<string>();
@@ -438,52 +440,54 @@ canvas.addEventListener('pointermove', (e) => {
 
 canvas.addEventListener('pointerup', (e) => {
   canvas.classList.remove('dragging');
-  if (drag && !drag.moved) {
-    // A button, not an object: clicking it loads, it never becomes the thing
-    // the rest of the graph is dimmed around.
-    if (drag.id === 'more') {
-      if (tape.loadMore()) pushView();
-      drag = null;
-      return;
-    }
-    // Shift is the undo of dragging: the pin comes out and the layout takes the
-    // node back. Nothing is selected or copied on the way — it is one act.
-    if (e.shiftKey && drag.id) {
-      const id = drag.id;
-      drag = null;
-      if (pins.drop(id)) relayout(true, false);
-      return;
-    }
-    selected = drag.id;
-    const node = scene?.nodes.find((n) => n.id === selected) ?? null;
-    renderPanel(panel, tape.current, node);
-    // Anything with a sha is a key in the key-value store, so a click hands you
-    // the key: the whole point is that you can paste it into the next command.
-    if (node?.oid) copied(node.oid);
-    if (node && prefs.centreOnClick) {
-      glide = null;
-      camera = centre(camera, node, port());
-    }
-    schedule();
-  }
+  const click: Click | null =
+    drag && !drag.moved ? { at: e.timeStamp, x: e.clientX, y: e.clientY, id: drag.id } : null;
   drag = null;
-});
+  if (!click) return;
 
-canvas.addEventListener('dblclick', (e) => {
-  const w = world(e);
-  const hit = scene ? hitTest(scene, w.x, w.y) : null;
-  // Double-click opens the thing you double-clicked, the way it opens a folder
-  // everywhere else.
-  if (hit) {
-    if (hit.kind === 'commit') tape.toggle(hit.id);
-    else if (hit.kind === 'tree') tape.toggleTree(hit.id);
-    else return;
+  // The pair acts on what the *first* click hit, because that click may have
+  // centred it and moved it out from under the pointer.
+  const double = isDouble(lastClick, click);
+  const id = double ? lastClick!.id : click.id;
+  lastClick = double ? null : click;
+  const node = id ? (scene?.nodes.find((n) => n.id === id) ?? null) : null;
+
+  if (double) {
+    // Double-click opens the thing you double-clicked, the way it opens a
+    // folder everywhere else — and empty space pulls the whole graph back.
+    if (node?.kind === 'commit') tape.toggle(node.id);
+    else if (node?.kind === 'tree') tape.toggleTree(node.id);
+    else if (!node && scene) {
+      camera = zoomOut(scene, port(), world(e).y);
+      glide = null;
+      schedule();
+      return;
+    } else return;
     pushView();
     return;
   }
-  if (!scene) return;
-  camera = zoomOut(scene, port(), w.y);
-  glide = null;
+
+  // A button, not an object: clicking it loads, it never becomes the thing
+  // the rest of the graph is dimmed around.
+  if (id === 'more') {
+    if (tape.loadMore()) pushView();
+    return;
+  }
+  // Shift is the undo of dragging: the pin comes out and the layout takes the
+  // node back. Nothing is selected or copied on the way — it is one act.
+  if (e.shiftKey && id) {
+    if (pins.drop(id)) relayout(true, false);
+    return;
+  }
+  selected = id;
+  renderPanel(panel, tape.current, node);
+  // Anything with a sha is a key in the key-value store, so a click hands you
+  // the key: the whole point is that you can paste it into the next command.
+  if (node?.oid) copied(node.oid);
+  if (node && prefs.centreOnClick) {
+    glide = null;
+    camera = centre(camera, node, port());
+  }
   schedule();
 });
 

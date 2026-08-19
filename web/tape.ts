@@ -296,3 +296,23 @@ export class Pins {
 export function canMark(kind: NodeKind): boolean {
   return kind !== 'more';
 }
+
+/** One press of the left button, remembered only so the next one can be told
+ *  apart from it. */
+export interface Click {
+  at: number;
+  x: number;
+  y: number;
+  id: string | null;
+}
+
+/**
+ * Whether this click is the second half of a double-click. The browser's own
+ * `dblclick` cannot be used for it: the first click may centre the node it
+ * landed on, and the second click then arrives over whatever the camera moved
+ * into that spot — so the pair is told apart by when and where the pointer
+ * was, and the gesture acts on what the *first* click hit.
+ */
+export function isDouble(prev: Click | null, now: Click): boolean {
+  return !!prev && now.at - prev.at < 500 && Math.abs(now.x - prev.x) < 12 && Math.abs(now.y - prev.y) < 12;
+}
