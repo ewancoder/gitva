@@ -23,7 +23,9 @@ export function parseArgs(args: string[]): Options {
       // `--serve [HOST:PORT]`, bare meaning every interface on 4200. A shared
       // address is no use if the port moves every run, so this one is fixed.
       const at = /^(.*):(\d+)$/.exec(args[i + 1] ?? '');
-      host = at ? at[1] || '0.0.0.0' : '0.0.0.0';
+      const named = at?.[1] ?? '';
+      host =
+        named.startsWith('[') && named.endsWith(']') ? named.slice(1, -1) : named || '0.0.0.0';
       port = at ? Number(at[2]) : 4200;
       if (at) i++;
     } else if (!args[i].startsWith('-')) positional.push(args[i]);
@@ -34,7 +36,7 @@ export function parseArgs(args: string[]): Options {
 export async function main(args: string[]): Promise<Server> {
   const { repo, port, host, open } = parseArgs(args);
   const server = await serve(repo, port, host);
-  const url = `http://127.0.0.1:${server.port}/`;
+  const url = browseUrl(host, server.port);
   process.stdout.write(`gitva watching ${repo}\n${url}\n`);
   // Reaching other machines has no authentication: whoever reaches the port
   // reads the whole repository.
@@ -43,6 +45,12 @@ export async function main(args: string[]): Promise<Server> {
   if (open) openBrowser(url);
   process.on('SIGINT', () => void server.close().then(() => process.exit(0)));
   return server;
+}
+
+/** A wildcard bind is not an address to visit; IPv6 literals need URL brackets. */
+export function browseUrl(host: string, port: number): string {
+  const bound = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
+  return `http://${bound.includes(':') ? `[${bound}]` : bound}:${port}/`;
 }
 
 function openBrowser(url: string) {

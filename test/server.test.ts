@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { sanitise, serve, type Server } from '../src/server.js';
+import { ensureFirstSnapshot, sanitise, serve, type Server } from '../src/server.js';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,6 +13,11 @@ describe('the view arriving from the browser', () => {
     assert.equal(sanitise(null).limit, 120);
   });
   it('refuses a ref name that is not one', () => {
+    // A name beginning with a dash would reach `rev-list` as an option.
+    assert.deepEqual(sanitise({ question: { kind: 'refs', refs: ['--objects', '-n1'] } }).question, {
+      kind: 'refs',
+      refs: [],
+    });
     assert.deepEqual(sanitise({ question: { kind: 'refs', refs: ['refs/heads/ok', '; rm -rf /'] } }).question, {
       kind: 'refs',
       refs: ['refs/heads/ok'],
@@ -117,6 +122,24 @@ describe('the server', () => {
     await stream.return(undefined);
   });
 
+  // Questions that pile up while one is being answered coalesce, so an
+  // intermediate one may never be drawn — but the newest one always is.
+  it('answers the newest question asked while it is busy answering one', async () => {
+    const res = await fetch(base + 'events');
+    const stream = snapshots(res);
+    await stream.next();
+
+    await Promise.all(
+      [7, 9].map((limit) =>
+        fetch(base + 'view', { method: 'POST', body: JSON.stringify({ limit }) }),
+      ),
+    );
+    let frame = (await stream.next()).value;
+    while (frame.view.limit !== 9) frame = (await stream.next()).value;
+    assert.equal(frame.view.limit, 9);
+    await stream.return(undefined);
+  });
+
   it('takes a new view', async () => {
     const res = await fetch(base + 'view', {
       method: 'POST',
@@ -138,6 +161,24 @@ describe('the server', () => {
 });
 
 describe('a repository that moves under the server', () => {
+  it('does not count the first state twice when the poller answers first', async () => {
+    let recorded = false;
+    let finish!: () => void;
+    const active = new Promise<void>((resolve) => {
+      finish = () => {
+        recorded = true;
+        resolve();
+      };
+    });
+    let builds = 0;
+    const first = ensureFirstSnapshot(active, () => recorded, async () => {
+      builds++;
+    });
+    finish();
+    await first;
+    assert.equal(builds, 0);
+  });
+
   it('tells the browser what went wrong rather than going quiet', async () => {
     const repo = plumbedRepo();
     const server = await serve(repo.dir, 0);
@@ -186,17 +227,60 @@ describe('a directory that is not a repository yet', () => {
     const dir = mkdtempSync(join(tmpdir(), 'gitva-empty-'));
     const server = await serve(dir, 0);
     try {
-      const res = await fetch(`http://127.0.0.1:${server.port}/events`);
-      const stream = snapshots(res);
+      // Two viewers arriving together share the first repository read. Without
+      // that, the same state is recorded twice merely because a room joined.
+      const [a, b] = await Promise.all([
+        fetch(`http://127.0.0.1:${server.port}/events`),
+        fetch(`http://127.0.0.1:${server.port}/events`),
+      ]);
+      const streams = [snapshots(a), snapshots(b)];
       // `git init` is the first plumbing command the tutorial teaches, so the
       // browser has to be able to watch it happen.
       execFileSync('git', ['-C', dir, 'init', '-q', '-b', 'main'], {
         env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' },
       });
-      const s = (await stream.next()).value;
+      const [s, same] = await Promise.all(streams.map(async (stream) => (await stream.next()).value));
       assert.equal(s.head.unborn, true);
       assert.deepEqual(s.refs, []);
-      await stream.return(undefined);
+      assert.equal(same.seq, s.seq);
+
+      // The next frame really is the next repository state, not a duplicate
+      // initial build that was waiting behind the first one.
+      const oid = execFileSync('git', ['-C', dir, 'hash-object', '-w', '--stdin'], {
+        env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' },
+        input: 'alpha\n',
+        encoding: 'utf8',
+      }).trim();
+      const next = await Promise.all(streams.map(async (stream) => (await stream.next()).value));
+      assert.ok(next.every((state) => state.seq === s.seq + 1 && state.objects[oid]));
+      await Promise.all(streams.map((stream) => stream.return(undefined)));
+    } finally {
+      await server.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // The first read finds nothing to hand the next arrival, and the poller stays
+  // quiet until the signal moves — so a browser opened second must still be
+  // told what it is waiting for instead of sitting on a blank page.
+  it('tells a browser that joins later that it is still waiting for `git init`', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gitva-empty-'));
+    const server = await serve(dir, 0);
+    const waiting = async () => {
+      const res = await fetch(`http://127.0.0.1:${server.port}/events`);
+      const reader = res.body!.getReader();
+      let buf = '';
+      while (!buf.includes('\n\n') || !buf.includes('event: trouble')) {
+        const { value, done } = await reader.read();
+        if (done) assert.fail('the stream ended without saying anything');
+        buf += new TextDecoder().decode(value);
+      }
+      await reader.cancel();
+      return buf;
+    };
+    try {
+      await waiting();
+      assert.match(await waiting(), /waiting for/);
     } finally {
       await server.close();
       rmSync(dir, { recursive: true, force: true });

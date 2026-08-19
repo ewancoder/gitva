@@ -194,6 +194,15 @@ describe('a repository read through its own plumbing', () => {
     assert.ok(root.entries!.some((e) => e.name === 'lib'));
   });
 
+  it('says when a large text body is only the first 64 KiB', async () => {
+    repo.write('large.txt', 'x'.repeat(64 * 1024 + 1));
+    const oid = repo.git('hash-object', '-w', 'large.txt');
+    const body = await readBody(handle, oid);
+    assert.equal(body.text?.length, 64 * 1024);
+    assert.equal(body.size, 64 * 1024 + 1);
+    assert.equal(body.truncated, true);
+  });
+
   it('reads a tag object that no ref hands it, and follows what it points at', async () => {
     // An annotated tag whose ref was deleted. The object is still in the
     // database, and the walk out from every object is the only thing that

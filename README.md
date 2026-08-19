@@ -29,7 +29,9 @@ draws the repository the moment you run `git init`.
 `--serve` binds every interface instead of loopback, so others can watch the same repository
 from their own browsers — useful for teaching. Bare, it takes `0.0.0.0:4200`; give it
 `HOST:PORT` to choose. There is no authentication: anyone who can reach the port reads the
-whole repository. Pins and folding stay local to each browser.
+whole repository. Pins and folding stay local to each browser. Filtering, searching, paging and
+the index toggle are the server's one question, so whoever changes one changes what every browser
+is looking at — the presenter drives, the room watches.
 
 ## What you see
 

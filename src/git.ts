@@ -632,6 +632,7 @@ export async function readBody(h: RepoHandle, oid: Oid): Promise<{
   type: ObjectType;
   size: number;
   text: string | null;
+  truncated?: boolean;
   entries?: TreeEntry[];
 }> {
   const batch = parseBatch(await run(h.repo, ['cat-file', '--batch'], oid + '\n'));
@@ -646,5 +647,7 @@ export async function readBody(h: RepoHandle, oid: Oid): Promise<{
     type: got.type,
     size: got.body.length,
     text: binary ? null : slice.toString('utf8'),
+    // The panel must not present the first 64 KiB of a blob as the whole blob.
+    truncated: got.body.length > slice.length,
   };
 }

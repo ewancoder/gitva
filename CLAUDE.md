@@ -87,9 +87,11 @@ first two things the tutorial teaches.
 
 ## Visual rules that are load-bearing
 
-- **Three hues only**: commit warm, tree green, blob blue. Everything else is an outline shape in
-  plain ink, separated by silhouette and label. Four hues fail the contrast/colour-vision floors
-  on this surface — this was measured, not felt.
+- **Three hues only** for the three object kinds: commit warm, tree green, blob blue. A fourth
+  fails the contrast/colour-vision floors on this surface — measured, not felt. Object kinds are
+  separated by silhouette and label from there; states are not hues (`staged` is the blob blue
+  tilted, unreachable is a ghost). Pointer chips and the reader's own mark are outlines outside
+  the silhouettes, so they carry their own colours without joining that count — see `web/theme.ts`.
 - **One accent** (`--accent`, magenta) means "this just changed" and nothing else. Not hover,
   not selection, not focus.
 - **Unreachable is a state, not a kind** — a ghost (dashed outline), never a hue.

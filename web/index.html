@@ -68,10 +68,10 @@
 
       .live { display: flex; align-items: center; gap: 6px; color: var(--muted); }
       .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tree); }
-      .dot.off { background: var(--accent); }
+      .dot.off { background: transparent; border: 1px solid var(--muted); }
       .dot.paused { background: var(--commit); }
       .tally { color: var(--muted); font-family: var(--mono); font-size: 11px; }
-      .change { color: var(--accent); font-family: var(--mono); font-size: 11px; min-width: 8ch; }
+      .change { color: var(--muted); font-family: var(--mono); font-size: 11px; min-width: 8ch; }
 
       #notes {
         padding: 6px calc(var(--u) * 1.5);

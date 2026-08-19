@@ -174,6 +174,8 @@ describe('what came back from the server', () => {
 
   it('prints text as it is, including empty text', () => {
     assert.equal(bodyText({ text: 'alpha\n' }), 'alpha\n');
+    // A big blob is read to 64 KiB only, and must not look like the whole thing.
+    assert.match(bodyText({ text: 'alpha', size: 100_000, truncated: true }), /first 64 KiB of 100000 bytes/);
     assert.equal(bodyText({ text: '', size: 0 }), '');
   });
 });

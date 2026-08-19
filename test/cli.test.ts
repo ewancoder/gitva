@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { entryPath, main, parseArgs } from '../src/cli.js';
+import { browseUrl, entryPath, main, parseArgs } from '../src/cli.js';
 import { plumbedRepo } from './fixture.js';
 
 describe('arguments', () => {
@@ -38,12 +38,26 @@ describe('arguments', () => {
     assert.deepEqual(parseArgs(['--serve', '10.0.0.2:9000']).host, '10.0.0.2');
     assert.equal(parseArgs(['--serve', '10.0.0.2:9000']).port, 9000);
     assert.deepEqual(parseArgs(['--serve', ':9000']).host, '0.0.0.0');
+    assert.deepEqual(parseArgs(['--serve', '[::1]:9000']).host, '::1');
   });
 
   it('does not mistake the address it consumed for the repository', () => {
     assert.equal(parseArgs(['--serve', '10.0.0.2:9000', '/tmp/x']).repo, '/tmp/x');
     // Anything that is not an address is not eaten: the repo is still the repo.
     assert.equal(parseArgs(['--serve', '/tmp/x']).repo, '/tmp/x');
+  });
+});
+
+describe('the address it tells you to visit', () => {
+  it('sends you to loopback for a wildcard bind, which is not somewhere to visit', () => {
+    assert.equal(browseUrl('0.0.0.0', 4200), 'http://127.0.0.1:4200/');
+    assert.equal(browseUrl('::', 4200), 'http://127.0.0.1:4200/');
+  });
+
+  // Binding one LAN address means loopback is not listening at all.
+  it('sends you to the one address it bound, when it bound one', () => {
+    assert.equal(browseUrl('10.0.0.2', 9000), 'http://10.0.0.2:9000/');
+    assert.equal(browseUrl('::1', 9000), 'http://[::1]:9000/');
   });
 });
 

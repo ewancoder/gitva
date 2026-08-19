@@ -48,17 +48,41 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
   let seq = 0;
   let last: Snapshot | null = null;
   let signal = '';
-  let building = false;
   const clients = new Set<ServerResponse>();
+
+  /** Rebuilds run one at a time. Anything arriving mid-build asks for one more
+   * pass; further requests join that pass instead of growing an unbounded queue. */
+  let pending = false;
+  let pendingMoved = false;
+  let building: Promise<void> | null = null;
+  function build(repoMoved: boolean): Promise<void> {
+    pending = true;
+    pendingMoved ||= repoMoved;
+    building ??= drain();
+    return building;
+  }
+
+  async function drain() {
+    // A drain that ended without clearing this would be handed to every future
+    // caller, and nothing would ever rebuild again.
+    try {
+      while (pending) {
+        const repoMoved = pendingMoved;
+        pending = false;
+        pendingMoved = false;
+        await rebuild(repoMoved);
+      }
+    } finally {
+      building = null;
+    }
+  }
 
   /**
    * `seq` counts states of the *repository*, not broadcasts. Asking a different
    * question of the same repository is not a moment to step back to, so a
    * view rebuild reuses the number and the client redraws in place.
    */
-  async function build(repoMoved: boolean) {
-    if (building) return;
-    building = true;
+  async function rebuild(repoMoved: boolean) {
     try {
       const { handle, caps } = await repository();
       const s = await snapshot(handle, view, caps, repoMoved ? ++seq : seq);
@@ -68,8 +92,6 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
     } catch (err) {
       const frame = `event: trouble\ndata: ${JSON.stringify({ message: String(err) })}\n\n`;
       for (const c of clients) c.write(frame);
-    } finally {
-      building = false;
     }
   }
 
@@ -114,12 +136,25 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
     else void first();
   }
 
-  /** The first client pays for the first state; the poller must not repeat it. */
-  async function first() {
+  /**
+   * Every client waiting for the first state shares the same read — but only
+   * while it is in flight. A read that found no repository yet leaves nothing
+   * to hand the next arrival, and the poller stays quiet until the signal moves,
+   * so a later browser has to be allowed to ask again and be told the same
+   * thing: `gitva` in an empty directory is waiting for `git init`.
+   */
+  let initial: Promise<void> | null = null;
+  function first(): Promise<void> {
+    return (initial ??= firstBuild().finally(() => {
+      initial = null;
+    }));
+  }
+
+  async function firstBuild() {
     signal = await repository()
       .then(({ handle }) => changeSignal(handle.repo, handle.gitDir))
       .catch(() => signal);
-    await build(true);
+    await ensureFirstSnapshot(building, () => last !== null, () => build(true));
   }
 
   async function setView(req: IncomingMessage, res: ServerResponse) {
@@ -168,6 +203,16 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
   };
 }
 
+/** A poll may answer while the first client is measuring the repository. */
+export async function ensureFirstSnapshot(
+  active: Promise<void> | null,
+  hasSnapshot: () => boolean,
+  build: () => Promise<void>,
+): Promise<void> {
+  if (active) await active;
+  if (!hasSnapshot()) await build();
+}
+
 function text(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let body = '';
@@ -186,7 +231,9 @@ export function sanitise(raw: unknown): View {
   const q = v.question;
   const question: View['question'] =
     q?.kind === 'refs'
-      ? { kind: 'refs', refs: (q.refs ?? []).filter((r) => /^[\w./@^~-]+$/.test(r)).slice(0, 200) }
+      ? // No ref name begins with a dash, and a name that did would reach
+        // `rev-list` as an option rather than as a thing to walk from.
+        { kind: 'refs', refs: (q.refs ?? []).filter((r) => /^[\w./@^~][\w./@^~-]*$/.test(r)).slice(0, 200) }
       : q?.kind === 'search'
         ? {
             kind: 'search',

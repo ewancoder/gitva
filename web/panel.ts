@@ -51,12 +51,13 @@ export function bodyText(body: {
   entries?: { mode: string; type: string; oid: string; name: string }[];
   text?: string | null;
   size?: number;
+  truncated?: boolean;
 }): string {
   if (body.entries) {
     return body.entries.map((x) => `${x.mode} ${x.type} ${x.oid.slice(0, 7)}\t${x.name}`).join('\n');
   }
   if (body.text == null) return `${body.size} bytes, not text.`;
-  return body.text;
+  return body.truncated ? `${body.text}\n\n… first 64 KiB of ${body.size} bytes.` : body.text;
 }
 
 /** What is in .git/<name> — or, once packed, the line that replaced the file. */
