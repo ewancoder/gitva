@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { ensureFirstSnapshot, sanitise, serve, type Server } from '../src/server.js';
+import { ensureFirstSnapshot, record, sanitise, serve, type Server } from '../src/server.js';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { plumbedRepo, type Repo } from './fixture.js';
+import { plumbedRepo, fakeState, type Repo } from './fixture.js';
+import { DEFAULT_VIEW, TAPE_CAP, type Snapshot } from '../src/types.js';
 
 describe('the view arriving from the browser', () => {
   it('falls back to everything when it makes no sense', () => {
@@ -49,7 +50,11 @@ async function* snapshots(res: Response) {
     while ((end = buf.indexOf('\n\n')) >= 0) {
       const frame = buf.slice(0, end);
       buf = buf.slice(end + 2);
-      if (frame.startsWith('event: snapshot')) yield JSON.parse(frame.split('\ndata: ')[1]);
+      const data = frame.split('\ndata: ')[1];
+      // A connect hands over every state at once; the live tail is one at a
+      // time. Either way what a reader wants is states, in order.
+      if (frame.startsWith('event: history')) yield* JSON.parse(data);
+      else if (frame.startsWith('event: snapshot')) yield JSON.parse(data);
     }
   }
 }
@@ -81,19 +86,11 @@ describe('the server', () => {
   });
 
   it('pushes a whole state down the stream', async () => {
-    const res = await fetch(base + 'events');
-    const reader = res.body!.getReader();
-    let buf = '';
-    while (!buf.includes('\n\n') || !buf.includes('event: snapshot')) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += new TextDecoder().decode(value);
-    }
-    const line = buf.split('\n').find((l) => l.startsWith('data: '))!;
-    const snap = JSON.parse(line.slice(6));
+    const stream = snapshots(await fetch(base + 'events'));
+    const snap = (await stream.next()).value;
     assert.equal(snap.repo, repo.dir.split('/').pop());
     assert.ok(snap.window.commits.length >= 3);
-    await reader.cancel();
+    await stream.return(undefined);
   });
 
   it('reads one body only when asked, and checks the oid first', async () => {
@@ -284,6 +281,102 @@ describe('a directory that is not a repository yet', () => {
     } finally {
       await server.close();
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('the history everyone shares', () => {
+  /** States reach the history the way they reach the wire: already serialised. */
+  const state = (seq: number, extra: Partial<Snapshot> = {}) => JSON.stringify(fakeState({ seq, ...extra }));
+  const seqs = (history: string[]) => history.map((s) => JSON.parse(s).seq);
+  /** A state of a repository big enough for the byte ceiling to be the one that bites. */
+  const heavy = (seq: number, mb: number) => state(seq, { notes: ['x'.repeat(mb << 20)] });
+
+  it('replaces the top rather than stepping when the same state is asked a different question', () => {
+    const history: string[] = [];
+    record(history, state(1), true);
+    record(history, state(1, { view: { ...DEFAULT_VIEW, limit: 3 } }), false);
+    assert.equal(history.length, 1);
+    assert.equal(JSON.parse(history[0]).view.limit, 3);
+    record(history, state(2), true);
+    assert.deepEqual(seqs(history), [1, 2]);
+  });
+
+  it('forgets the oldest states at the same cap the browser’s tape uses', () => {
+    const history: string[] = [];
+    for (let seq = 1; seq <= TAPE_CAP + 5; seq++) record(history, state(seq), true);
+    assert.equal(history.length, TAPE_CAP);
+    assert.equal(seqs(history)[0], 6);
+  });
+
+  // Measured: a state of a tutorial repository is ~3 KB and all 400 fit in a
+  // megabyte, but a state of a repository with a few thousand objects is a
+  // third of a megabyte, and 400 of those is not something to hand a browser
+  // that has just opened.
+  it('forgets sooner than that when the states are heavy enough to be unpleasant', () => {
+    const history: string[] = [];
+    for (const seq of [1, 2, 3]) record(history, heavy(seq, 6), true);
+    assert.deepEqual(seqs(history), [2, 3], 'the tail was not trimmed to what fits');
+
+    record(history, heavy(4, 20), true);
+    assert.deepEqual(seqs(history), [4], 'a state too big to fit on its own still has to be sent');
+  });
+
+  // The situation this was found in: `gitva` left running, a handful of
+  // plumbing commands typed, the browser opened afterwards — and one step on
+  // the tape instead of a handful. A state nobody was connected for cannot be
+  // built later, because by then the repository has moved on.
+  it('records what happened while nobody was watching', async () => {
+    const repo = plumbedRepo();
+    const server = await serve(repo.dir, 0);
+    /** Long enough for the poller to have asked, whoever is or is not there. */
+    const polled = () => new Promise((r) => setTimeout(r, 700));
+    try {
+      await polled();
+      for (const name of ['e', 'f']) {
+        repo.write(`${name}.txt`, `${name}\n`);
+        repo.git('hash-object', '-w', `${name}.txt`);
+        await polled();
+      }
+
+      const watching = snapshots(await fetch(`http://127.0.0.1:${server.port}/events`));
+      const seen: Snapshot[] = [];
+      for (let i = 0; i < 3; i++) seen.push((await watching.next()).value);
+      assert.deepEqual(seen.map((s) => s.seq), [1, 2, 3]);
+      assert.ok(seen[2].objects[repo.git('hash-object', 'f.txt')], 'the newest state is the repository now');
+      await watching.return(undefined);
+    } finally {
+      await server.close();
+      repo.dispose();
+    }
+  });
+
+  it('hands a browser opened later every state that happened before it', async () => {
+    const repo = plumbedRepo();
+    const server = await serve(repo.dir, 0);
+    const base = `http://127.0.0.1:${server.port}/`;
+    try {
+      // Somebody has to be watching for the poller to be asking at all.
+      const watching = snapshots(await fetch(base + 'events'));
+      const start = (await watching.next()).value;
+      for (const name of ['e', 'f']) {
+        repo.write(`${name}.txt`, `${name}\n`);
+        repo.git('hash-object', '-w', `${name}.txt`);
+        await watching.next();
+      }
+
+      const late = snapshots(await fetch(base + 'events'));
+      const seen: Snapshot[] = [];
+      for (let i = 0; i < 3; i++) seen.push((await late.next()).value);
+      assert.deepEqual(
+        seen.map((s) => s.seq),
+        [start.seq, start.seq + 1, start.seq + 2],
+        'the second browser started where the first one did, not where it happened to arrive',
+      );
+      await Promise.all([watching.return(undefined), late.return(undefined)]);
+    } finally {
+      await server.close();
+      repo.dispose();
     }
   });
 });

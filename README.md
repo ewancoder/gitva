@@ -88,9 +88,12 @@ index; hide the orphans. Every one of those is the same
 mechanism — a change to the *view* the browser holds, which is why none of them care how big
 the repository is.
 
-Every state is kept. Pause and the tape keeps recording behind you, so a demo can be
-**replayed instead of redone**; stepping backwards highlights the change in reverse, which is
-how you show a reset twice without doing it twice. Going back to a state asks the question that
+Every state is kept, and the tape is the server's: while `gitva` runs it records, watched or
+not, so opening a second browser — or the first one, ten commands in — hands you everything
+that happened before you arrived rather than a blank page. Pause
+and the tape keeps recording behind you, so a demo can be **replayed instead of redone**;
+stepping backwards highlights the change in reverse, which is how you show a reset twice
+without doing it twice. Going back to a state asks the question that
 was being asked then — except for folding: a commit you opened stays open wherever you stand in
 the tape, and one you folded stays folded, until you say otherwise.
 
@@ -133,9 +136,14 @@ Measured on a mid-range laptop against real repositories.
 | Build a whole snapshot, full load | 6.2 ms | 21.8 ms | 394 ms |
 | Build a whole snapshot, bounded | — | 6.9 ms | 38.3 ms |
 | Lay out everything opened | 0.1 ms | 4.5 ms | 16.8 ms |
+| One state, as JSON on the wire | 12 KB | 2.4 MB | 514 KB |
 
 Deciding where 20,000 commits go stays **under 100 ms**, and a test fails if it stops. Sitting
 still costs no CPU at all — the render loop stops when nothing is animating.
+
+The shared tape a browser is handed on connect stops at 400 states or 16 MB, whichever comes
+first: the whole session on a repository this is meant to be taught on, the last few dozen
+states on a large one.
 
 ## Building it
 

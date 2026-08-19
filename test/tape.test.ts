@@ -9,9 +9,9 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Pins, questionFor, Tape, TAPE_CAP, type Prefs } from '../web/tape.js';
+import { Pins, questionFor, Tape, type Prefs } from '../web/tape.js';
 import { layout } from '../src/layout.js';
-import { DEFAULT_VIEW, type Snapshot, type View } from '../src/types.js';
+import { DEFAULT_VIEW, TAPE_CAP, type Snapshot, type View } from '../src/types.js';
 
 const oid = (n: string) => (n + '-').padEnd(40, '0');
 const OPEN: Prefs = { showIndex: true, openNewCommits: true };
@@ -348,5 +348,24 @@ describe('pins', () => {
     assert.deepEqual(pins.at(9), { b2: { x: 5, y: 5 } });
     pins.clear();
     assert.equal(pins.count, 0);
+  });
+});
+
+describe('history from before this browser arrived', () => {
+  it('replays it whole without opening anything or asking the server for anything', () => {
+    const t = new Tape();
+    // The room got here without us; replaying it must not repeat what each
+    // state did when it was new, or the page strobes through the session and
+    // posts a view per step on the way.
+    const before = [state(1, ['a']), state(2, ['b', 'a']), state(3, ['c', 'b', 'a'], { limit: 44 })];
+    for (const s of before) assert.equal(t.arrive(s, OPEN, true).post, null, 'replay told the server something');
+    assert.equal(t.states.length, 3);
+    assert.equal(t.cursor, 2, 'a replay leaves you standing on the newest state');
+    assert.deepEqual(t.view.expanded, [], 'replay opened commits nobody asked for');
+    assert.equal(t.view.limit, 44, 'the question the room is on is the one to carry on with');
+
+    // And what happens next is still something happening now.
+    t.arrive(state(4, ['d', 'c', 'b', 'a'], { limit: 44 }), OPEN);
+    assert.deepEqual(t.view.expanded, [oid('d')], 'the commit git just made stayed folded');
   });
 });

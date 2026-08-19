@@ -59,6 +59,8 @@ touch `node:` builtins.** `git.ts` and `server.ts` are server-only and never imp
    change highlighting stops meaning anything. Tested in `test/layout.test.ts`.
 5. **Idle costs nothing.** The client's rAF loop stops when no animation is running; the server
    polls a signal that costs O(refs), not O(objects), and only builds a snapshot when it moves.
+   It polls whether or not a browser is connected — the history is the room's tape, and a state
+   nobody was watching for cannot be built after the repository has moved on.
 
 ## How it works, briefly
 
@@ -68,7 +70,9 @@ the index is included. Every user action — filtering, search, paging, drill-do
 of that object, posted to `/view`. Everything downstream is bounded by construction, so nothing
 has to care how big the repo is.
 
-**Whole states, never deltas.** The server sends the entire `Snapshot` on every change. That is
+**Whole states, never deltas.** The server sends the entire `Snapshot` on every change, and
+keeps them: a browser connecting gets the whole shared history in one `event: history` frame and
+replays it silently, so a second tab or a late joiner stands where everyone else does. That is
 affordable *because* the view is bounded, and it is what keeps diffing, replay and change
 highlighting simple. If profiling ever argues for deltas, the burden of proof is on the delta.
 

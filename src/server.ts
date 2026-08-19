@@ -11,8 +11,8 @@ import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GitError, changeSignal, measure, open, readBody, snapshot, type RepoHandle } from './git.js';
-import type { Capabilities, Snapshot, View } from './types.js';
-import { DEFAULT_VIEW } from './types.js';
+import type { Capabilities, View } from './types.js';
+import { DEFAULT_VIEW, TAPE_CAP } from './types.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const MIME: Record<string, string> = {
@@ -23,6 +23,16 @@ const MIME: Record<string, string> = {
 };
 
 const POLL_MS = 400;
+
+/**
+ * What the shared history is allowed to weigh. Measured: a state of a repository
+ * small enough to teach on is about 12 KB, so all 400 of them are a few
+ * megabytes; a state of one with a few thousand objects is a couple of
+ * megabytes on its own, and 400 of those is not something to hand a browser
+ * that has just opened. Bytes are the ceiling that bites first, so bytes are
+ * the ceiling — a shorter tail rather than a delta protocol.
+ */
+const HISTORY_BYTES = 16 << 20;
 
 export interface Server {
   port: number;
@@ -46,7 +56,12 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
 
   let view: View = { ...DEFAULT_VIEW };
   let seq = 0;
-  let last: Snapshot | null = null;
+  /** Every state of the repository, oldest first, already serialised — not
+   *  just the newest one. A browser opened halfway through a session gets the
+   *  whole thing on connect, so everyone in the room can walk the same steps.
+   *  Kept as text because that is what it is sent as, and what it is measured
+   *  by. Nothing here ever looks inside a state. */
+  const history: string[] = [];
   let signal = '';
   const clients = new Set<ServerResponse>();
 
@@ -85,9 +100,9 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
   async function rebuild(repoMoved: boolean) {
     try {
       const { handle, caps } = await repository();
-      const s = await snapshot(handle, view, caps, repoMoved ? ++seq : seq);
-      last = s;
-      const frame = `event: snapshot\ndata: ${JSON.stringify(s)}\n\n`;
+      const s = JSON.stringify(await snapshot(handle, view, caps, repoMoved ? ++seq : seq));
+      record(history, s, repoMoved);
+      const frame = `event: snapshot\ndata: ${s}\n\n`;
       for (const c of clients) c.write(frame);
     } catch (err) {
       const frame = `event: trouble\ndata: ${JSON.stringify({ message: String(err) })}\n\n`;
@@ -97,8 +112,12 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
 
   // The overwhelmingly common case is "nothing happened", and it costs one
   // for-each-ref, one count-objects and one stat.
+  //
+  // It is asked whether anyone is watching or not: the history is the room's
+  // tape, and a state nobody was connected for cannot be reconstructed later —
+  // the repository has moved on. Typing ten plumbing commands and *then*
+  // opening the browser has to show ten steps.
   const timer = setInterval(async () => {
-    if (clients.size === 0) return;
     try {
       const { handle } = await repository();
       const next = await changeSignal(handle.repo, handle.gitDir);
@@ -132,7 +151,9 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
     res.write(': hello\n\n');
     clients.add(res);
     req.on('close', () => clients.delete(res));
-    if (last) res.write(`event: snapshot\ndata: ${JSON.stringify(last)}\n\n`);
+    // The whole tape in one frame; `snapshot` stays the live tail, so the
+    // client replays once instead of deciding per state what to animate.
+    if (history.length) res.write(`event: history\ndata: [${history.join(',')}]\n\n`);
     else void first();
   }
 
@@ -154,7 +175,7 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
     signal = await repository()
       .then(({ handle }) => changeSignal(handle.repo, handle.gitDir))
       .catch(() => signal);
-    await ensureFirstSnapshot(building, () => last !== null, () => build(true));
+    await ensureFirstSnapshot(building, () => history.length > 0, () => build(true));
   }
 
   async function setView(req: IncomingMessage, res: ServerResponse) {
@@ -201,6 +222,25 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
       await new Promise<void>((r) => server.close(() => r()));
     },
   };
+}
+
+/**
+ * The shared history. A different question about the same repository replaces
+ * the answer rather than becoming a step of its own — the same dedup the tape
+ * does when a state arrives — and the oldest states fall off the far end, at
+ * the cap the browser's own tape uses or at `HISTORY_BYTES`, whichever the
+ * repository reaches first.
+ */
+export function record(history: string[], state: string, repoMoved: boolean): void {
+  if (!repoMoved) history.pop();
+  history.push(state);
+  let bytes = history.reduce((n, s) => n + s.length, 0);
+  // Whichever ceiling is reached first. The newest state is never dropped: on
+  // a repository big enough to be over the budget on its own, a browser that
+  // joins is still owed the picture everyone else is looking at.
+  while (history.length > 1 && (history.length > TAPE_CAP || bytes > HISTORY_BYTES)) {
+    bytes -= history.shift()!.length;
+  }
 }
 
 /** A poll may answer while the first client is measuring the repository. */

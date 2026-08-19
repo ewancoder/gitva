@@ -8,9 +8,7 @@
  * only check by scrubbing and squinting.
  */
 
-import { DEFAULT_VIEW, type Oid, type Question, type Snapshot, type TreeEntry, type View } from '../src/types.js';
-
-export const TAPE_CAP = 400;
+import { DEFAULT_VIEW, TAPE_CAP, type Oid, type Question, type Snapshot, type TreeEntry, type View } from '../src/types.js';
 
 /** What the caller has to repaint after a state arrived. */
 export type Arrival =
@@ -50,15 +48,18 @@ export class Tape {
     return s && { ...s, trees: { ...this.trees, ...s.trees } };
   }
 
-  /** A state off the wire. `post` is a view the server has to be told about. */
-  arrive(s: Snapshot, prefs: Prefs): Arrival {
+  /** A state off the wire. `post` is a view the server has to be told about.
+   *  `replay` is history the room walked before this browser arrived: it is
+   *  recorded, but nothing that only makes sense for something happening now —
+   *  opening the commit git just made, telling the server about it — happens. */
+  arrive(s: Snapshot, prefs: Prefs, replay = false): Arrival {
     Object.assign(this.trees, s.trees);
     if (s.window.commits.length < s.view.limit) this.exhausted = true;
     const first = this.states.length === 0;
     const last = this.last;
     let post: View | null = null;
 
-    if (first) {
+    if (first || replay) {
       // Everything starts folded: opening a repository should cost nothing to
       // draw, and unfolding a commit is the gesture the tutorial wants asked.
       this.view = { ...s.view, showIndex: prefs.showIndex, expanded: [] };

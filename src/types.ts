@@ -102,6 +102,10 @@ export interface View {
   showUnreachable?: boolean;
 }
 
+/** How many states either side keeps. The server holds the history and the
+ *  browser holds the tape; sharing the number makes them forget together. */
+export const TAPE_CAP = 400;
+
 export const DEFAULT_VIEW: View = {
   question: { kind: 'all' },
   limit: 120,
