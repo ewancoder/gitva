@@ -272,6 +272,7 @@ function updateHeader() {
   $('play').setAttribute('aria-pressed', String(!tape.following));
   $('toggle-index').setAttribute('aria-pressed', String(tape.view.showIndex));
   $('toggle-orphans').setAttribute('aria-pressed', String(tape.view.showUnreachable !== false));
+  $('toggle-cross').setAttribute('aria-pressed', String(tape.view.showCrossLinks === true));
   $<HTMLButtonElement>('load-all').disabled = !tape.canLoadMore;
   live(source.readyState !== 2);
 }
@@ -324,6 +325,10 @@ $('toggle-index').addEventListener('click', () => {
 });
 $('toggle-orphans').addEventListener('click', () => {
   tape.view = { ...tape.view, showUnreachable: tape.view.showUnreachable === false };
+  pushView();
+});
+$('toggle-cross').addEventListener('click', () => {
+  tape.view = { ...tape.view, showCrossLinks: !tape.view.showCrossLinks };
   pushView();
 });
 $('load-all').addEventListener('click', () => {

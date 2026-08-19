@@ -484,6 +484,23 @@ export function layout(
       if (snap.trees[oid]) strayTrees[oid] = snap.trees[oid].filter((e) => strayed.has(e.oid));
     }
 
+    // What that cut throws away, drawn back on request. The arrow crosses the
+    // whole picture, which is why it is off by default — but it is the answer
+    // to "what does gc actually free": a discarded state shares almost every
+    // blob with the live one, and only the objects down here on their own are
+    // its own. The node is already on screen where something reachable names
+    // it, so this adds an arrow and moves nothing. A folded tree says nothing
+    // about its entries, here as anywhere.
+    if (view.showCrossLinks) {
+      for (const oid of strays) {
+        if (folded.has(oid)) continue;
+        for (const e of snap.trees[oid] ?? []) {
+          if (strayed.has(e.oid)) continue;
+          edges.push({ id: `x:${oid}:${e.oid}:${e.name}`, from: oid, to: e.oid, kind: 'entry', label: e.name });
+        }
+      }
+    }
+
     let cursor = y + 24;
     // A pinned stray stays where it was drawn, so it reserves no room down here.
     let bottom = y;

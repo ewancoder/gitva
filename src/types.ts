@@ -104,6 +104,9 @@ export interface View {
   showIndex: boolean;
   /** Orphans are half the lesson, so they are drawn unless asked otherwise. */
   showUnreachable?: boolean;
+  /** Arrows from an orphaned tree to objects that are still reachable. They
+   *  cross the picture, so they are asked for rather than assumed. */
+  showCrossLinks?: boolean;
 }
 
 /** How many states either side keeps. The server holds the history and the
@@ -117,6 +120,7 @@ export const DEFAULT_VIEW: View = {
   folded: [],
   showIndex: true,
   showUnreachable: true,
+  showCrossLinks: false,
 };
 
 export interface Snapshot {

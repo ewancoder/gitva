@@ -503,6 +503,50 @@ describe('the scene', () => {
     assert.ok(node(blob).y < node(oid('a')).y, 'so the blob goes back up beside the newest commit');
   });
 
+  it('draws an orphaned tree\u2019s arrows into live territory only when asked', () => {
+    // The whole point of the switch: the ghost tree names the very blob the
+    // live commit names, so gc would free the tree and nothing else. Off, the
+    // arrow is not there; on, it is, and not one node has moved.
+    const s = fakeSnapshot({ a: [] });
+    const [live, lost, own] = ['bl', 'tlost', 'bown'].map(oid);
+    s.trees[oid('ta')] = [{ mode: '100644', name: 'a.txt', oid: live, type: 'blob' }];
+    s.trees[lost] = [
+      { mode: '100644', name: 'a.txt', oid: live, type: 'blob' },
+      { mode: '100644', name: 'gone.txt', oid: own, type: 'blob' },
+    ];
+    for (const [o, t] of [[oid('ta'), 'tree'], [lost, 'tree'], [live, 'blob'], [own, 'blob']] as const)
+      s.objects[o] = { oid: o, type: t, size: 1 };
+    s.unreachable = [lost, own];
+
+    const crosses = (sc: ReturnType<typeof layout>) =>
+      sc.edges.filter((e) => e.from === lost && e.to === live);
+    const open = { ...DEFAULT_VIEW, expanded: [oid('a')] };
+    const off = layout(s, open);
+    const on = layout(s, { ...open, showCrossLinks: true });
+    assert.equal(crosses(off).length, 0);
+    assert.equal(crosses(on).length, 1, 'one arrow, labelled with the name it is under');
+    assert.equal(crosses(on)[0].label, 'a.txt');
+    assert.equal(on.nodes.filter((n) => n.id === live).length, 1, 'the blob is not drawn twice');
+    assert.deepEqual(on.nodes, off.nodes, 'an arrow is added, nothing is moved');
+    assert.ok(on.edges.some((e) => e.from === lost && e.to === own), 'its own blob still fans out');
+    // Fold the commit away and the blob is off the screen; an arrow to a node
+    // nobody can see is not an arrow.
+    assert.equal(crosses(layout(s, { ...DEFAULT_VIEW, showCrossLinks: true })).length, 0);
+  });
+
+  it('says nothing about the entries of a folded orphan, cross links or not', () => {
+    const s = fakeSnapshot({ a: [] });
+    const [live, lost] = ['bl', 'tlost'].map(oid);
+    s.trees[oid('ta')] = [{ mode: '100644', name: 'a.txt', oid: live, type: 'blob' }];
+    s.trees[lost] = [{ mode: '100644', name: 'a.txt', oid: live, type: 'blob' }];
+    for (const o of [oid('ta'), lost]) s.objects[o] = { oid: o, type: 'tree', size: 1 };
+    s.objects[live] = { oid: live, type: 'blob', size: 1 };
+    s.unreachable = [lost];
+
+    const scene = layout(s, { ...DEFAULT_VIEW, expanded: [oid('a')], showCrossLinks: true, folded: [lost] });
+    assert.ok(!scene.edges.some((e) => e.from === lost));
+  });
+
   it('lets a pinned orphan stay where it was drawn, reserving no room below', () => {
     const s = fakeSnapshot({ a: ['b'], b: ['c'], c: ['d'], d: ['e'], e: [] });
     s.objects[oid('lost')] = { oid: oid('lost'), type: 'blob', size: 7 };
