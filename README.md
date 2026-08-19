@@ -11,6 +11,8 @@ obvious:
 
 > **git is just a key-value store plus a few pointers**
 
+![gitva: HEAD and main pointing at a commit, its tree opening into blobs, the index beside them](docs/screenshot.png)
+
 Put a terminal beside the browser and type. Hash an object, update the index, write a tree,
 commit, reset, tag — the canvas updates on its own within a second and flashes what changed.
 
