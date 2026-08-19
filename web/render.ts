@@ -268,7 +268,10 @@ function drawEdge(
     const ay = a.y + a.h;
     const bx = b.x + b.w / 2;
     const by = b.y;
-    ctx.strokeStyle = theme.ink;
+    // A line touching a ghost is part of the ghost's story, not the live
+    // spine's: it drops to the ghost grey so the orphanage stays quiet.
+    const stroke = a.unreachable === true || b.unreachable === true ? theme.ghost : theme.ink;
+    ctx.strokeStyle = stroke;
     ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(ax, ay);
@@ -283,7 +286,7 @@ function drawEdge(
         ctx.lineTo(bx, by);
       }
       ctx.stroke();
-      arrowhead(ctx, bx, by, Math.PI / 2, theme.ink);
+      arrowhead(ctx, bx, by, Math.PI / 2, stroke);
     } else {
       // Dragged level with or above its parent. Still leave the child from the
       // bottom and route around both, entering the parent's side: the top of a
@@ -297,7 +300,7 @@ function drawEdge(
       ctx.lineTo(aisle, my);
       ctx.lineTo(b.x + b.w, my);
       ctx.stroke();
-      arrowhead(ctx, b.x + b.w, my, Math.PI, theme.ink);
+      arrowhead(ctx, b.x + b.w, my, Math.PI, stroke);
     }
   } else if (e.kind === 'pointer') {
     // "Points at" is learned in five seconds and then should not be shouted.

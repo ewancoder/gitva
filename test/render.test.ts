@@ -184,6 +184,36 @@ describe('painting', () => {
     nodes: [node({ id: 'c1', kind: 'commit', x: 0, y: 900 }), ...s.nodes.slice(1)],
   });
 
+  /** Every strokeStyle the painter set, in order. */
+  function strokes(s: Scene): string[] {
+    const seen: string[] = [];
+    const ctx = new Proxy(
+      { measureText: (t: string) => ({ width: t.length * 7 }) } as Record<string, unknown>,
+      {
+        get: (t, k) => (k in t ? t[k as string] : () => {}),
+        set: (t, k, v) => (k === 'strokeStyle' && seen.push(String(v)), (t[k as string] = v), true),
+      },
+    ) as unknown as CanvasRenderingContext2D;
+    snapPositions();
+    draw(ctx, s, paint());
+    return seen;
+  }
+
+  it('draws a parent line touching an orphan in ghost grey, not in ink', () => {
+    const pair = (from: Partial<SceneNode>, to: Partial<SceneNode>): Scene => ({
+      ...full,
+      nodes: [node({ id: 'a', kind: 'commit', ...from }), node({ id: 'b', kind: 'commit', y: 100, ...to })],
+      edges: [{ id: 'p', from: 'a', to: 'b', kind: 'parent' }],
+    });
+    // An orphan's line to its live parent, and one orphan to the next.
+    for (const s of [pair({ unreachable: true }, {}), pair({ unreachable: true }, { unreachable: true })]) {
+      const seen = strokes(s);
+      assert.ok(seen.includes(theme.ghost));
+      assert.ok(!seen.includes(theme.ink));
+    }
+    assert.ok(strokes(pair({}, {})).includes(theme.ink));
+  });
+
   it('draws every kind, at every tier of detail, without falling over', () => {
     for (const scale of [0.3, 0.6, 1.2, 1.5]) {
       snapPositions();
