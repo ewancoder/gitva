@@ -69,10 +69,18 @@ export class Tape {
     const last = this.last;
     let post: View | null = null;
 
+    // `--learning`: the room is being shown a small repository, so every commit
+    // in the window is open before anyone touches it — including for a browser
+    // that joins late and replays. The server has to hear about it, because on
+    // a repository too big to hold whole it reads only the opened trees.
+    const openAll = s.view.learning ? [...s.window.commits] : [];
+
     if (first) {
-      // Everything starts folded: opening a repository should cost nothing to
-      // draw, and unfolding a commit is the gesture the tutorial wants asked.
-      this.view = { ...s.view, showIndex: prefs.showIndex, expanded: [], folded: [] };
+      // Everything otherwise starts folded: opening a repository should cost
+      // nothing to draw, and unfolding a commit is the gesture the tutorial
+      // wants asked.
+      this.view = { ...s.view, showIndex: prefs.showIndex, expanded: openAll, folded: [] };
+      if (s.view.learning) post = this.view;
     } else if (replay && last) {
       // A commit born during the replayed session keeps whatever the room last
       // said about it — opened by the rule below when it was made, or folded by
@@ -83,9 +91,14 @@ export class Tape {
       this.view = {
         ...s.view,
         showIndex: prefs.showIndex,
-        expanded: prefs.openNewCommits ? s.view.expanded.filter((c) => this.born.has(c)) : [],
+        expanded: s.view.learning
+          ? openAll
+          : prefs.openNewCommits
+            ? s.view.expanded.filter((c) => this.born.has(c))
+            : [],
         folded: this.view.folded,
       };
+      if (s.view.learning) post = this.view;
     } else if (prefs.openNewCommits && last && s.seq !== last.seq) {
       // A commit git just made opens itself: the lesson is that it points at
       // the trees and blobs already on screen, which folding it away would

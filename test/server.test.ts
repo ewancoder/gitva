@@ -37,6 +37,11 @@ describe('the view arriving from the browser', () => {
     assert.equal(sanitise({ limit: Number.MAX_SAFE_INTEGER }).limit, 1_000_000);
     assert.equal(sanitise({ limit: -4 }).limit, 1);
   });
+
+  it('carries --learning back and forth with the view the browser hands over', () => {
+    assert.equal(sanitise({ learning: true }).learning, true);
+    assert.equal(sanitise({}).learning, false);
+  });
 });
 
 /** The snapshots off an event stream, one frame at a time. */

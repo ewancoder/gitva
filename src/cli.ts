@@ -11,6 +11,8 @@ export interface Options {
   port: number;
   host: string;
   open: boolean;
+  /** Commits arrive unfolded — for demonstrating to a room. */
+  learning: boolean;
 }
 
 export function parseArgs(args: string[]): Options {
@@ -30,12 +32,18 @@ export function parseArgs(args: string[]): Options {
       if (at) i++;
     } else if (!args[i].startsWith('-')) positional.push(args[i]);
   }
-  return { repo: positional[0] ?? '.', port, host, open: !args.includes('--no-open') };
+  return {
+    repo: positional[0] ?? '.',
+    port,
+    host,
+    open: !args.includes('--no-open'),
+    learning: args.includes('--learning'),
+  };
 }
 
 export async function main(args: string[]): Promise<Server> {
-  const { repo, port, host, open } = parseArgs(args);
-  const server = await serve(repo, port, host);
+  const { repo, port, host, open, learning } = parseArgs(args);
+  const server = await serve(repo, port, host, learning);
   const url = browseUrl(host, server.port);
   process.stdout.write(`gitva watching ${repo}\n${url}\n`);
   // Reaching other machines has no authentication: whoever reaches the port

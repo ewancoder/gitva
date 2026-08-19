@@ -17,12 +17,24 @@ import { plumbedRepo } from './fixture.js';
 
 describe('arguments', () => {
   it('watches the directory you are standing in, on a port the OS picks', () => {
-    assert.deepEqual(parseArgs([]), { repo: '.', port: 0, host: '127.0.0.1', open: true });
+    assert.deepEqual(parseArgs([]), {
+      repo: '.',
+      port: 0,
+      host: '127.0.0.1',
+      open: true,
+      learning: false,
+    });
   });
 
   it('takes a repository as the one positional argument', () => {
     assert.equal(parseArgs(['/tmp/x', '--no-open']).repo, '/tmp/x');
     assert.equal(parseArgs(['--no-open']).open, false);
+  });
+
+  it('takes --learning, for showing a repository to a room', () => {
+    assert.equal(parseArgs(['--learning']).learning, true);
+    // A flag is not a repository.
+    assert.equal(parseArgs(['--learning']).repo, '.');
   });
 
   it('takes a port, and stays on the loopback address with it', () => {
@@ -31,7 +43,13 @@ describe('arguments', () => {
   });
 
   it('opens onto every interface for a bare --serve, on a port that does not move', () => {
-    assert.deepEqual(parseArgs(['--serve']), { repo: '.', port: 4200, host: '0.0.0.0', open: true });
+    assert.deepEqual(parseArgs(['--serve']), {
+      repo: '.',
+      port: 4200,
+      host: '0.0.0.0',
+      open: true,
+      learning: false,
+    });
   });
 
   it('takes an address for --serve, and a port on its own', () => {

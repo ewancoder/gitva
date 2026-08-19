@@ -39,7 +39,12 @@ export interface Server {
   close(): Promise<void>;
 }
 
-export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Promise<Server> {
+export async function serve(
+  repoPath: string,
+  port = 0,
+  host = '127.0.0.1',
+  learning = false,
+): Promise<Server> {
   // The repository need not exist yet: `gitva` in an empty directory waits for
   // `git init`, so the very first plumbing command the tutorial teaches can be
   // watched happening rather than assumed to have happened already.
@@ -54,7 +59,7 @@ export async function serve(repoPath: string, port = 0, host = '127.0.0.1'): Pro
     return opened;
   }
 
-  let view: View = { ...DEFAULT_VIEW };
+  let view: View = { ...DEFAULT_VIEW, learning };
   let seq = 0;
   /** Every state of the repository, oldest first, already serialised — not
    *  just the newest one. A browser opened halfway through a session gets the
@@ -296,5 +301,7 @@ export function sanitise(raw: unknown): View {
     showIndex: v.showIndex !== false,
     showUnreachable: v.showUnreachable !== false,
     showCrossLinks: v.showCrossLinks === true,
+    // The browser hands it back with every view; it starts on the command line.
+    learning: v.learning === true,
   };
 }

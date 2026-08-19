@@ -217,6 +217,23 @@ describe('what is folded', () => {
     small.arrive(s, SHUT);
     assert.deepEqual(small.view.expanded, []);
   });
+
+  it('opens every commit on arrival when the server was started for a room', () => {
+    // `--learning`: a demo repository shown to people, where nobody should have
+    // to unfold anything to see the same picture as everyone else.
+    const t = new Tape();
+    const s = state(1, ['a', 'b'], { learning: true });
+    const a = t.arrive(s, SHUT);
+    assert.deepEqual(t.view.expanded, s.window.commits);
+    assert.equal(a.post, t.view, 'the server was not told which trees to read');
+
+    // And so does a browser that joins the room halfway through.
+    const late = new Tape();
+    late.arrive(state(1, ['a'], { learning: true }), SHUT, true);
+    const two = state(2, ['b', 'a'], { learning: true });
+    assert.equal(late.arrive(two, SHUT, true).post, late.view);
+    assert.deepEqual(late.view.expanded, two.window.commits);
+  });
 });
 
 /** A state whose window is full and has history behind it. */

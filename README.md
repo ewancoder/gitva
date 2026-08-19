@@ -20,7 +20,7 @@ cd some-repo
 gitva
 ```
 
-`gitva [repo] [--port N] [--no-open] [--serve [HOST:PORT]]` — repo defaults to `.`, port to a
+`gitva [repo] [--port N] [--no-open] [--serve [HOST:PORT]] [--learning]` — repo defaults to `.`, port to a
 free one, and the browser opens itself. Node ≥20. No runtime dependencies.
 
 The directory need not be a repository yet: start `gitva` in an empty one and it waits, then
@@ -32,6 +32,10 @@ from their own browsers — useful for teaching. Bare, it takes `0.0.0.0:4200`; 
 whole repository. Pins and folding stay local to each browser. Filtering, searching, paging and
 the index toggle are the server's one question, so whoever changes one changes what every browser
 is looking at — the presenter drives, the room watches.
+
+`--learning` opens every commit in the window unfolded, in every browser, including one that
+joins late — so a small repository being demonstrated to a room needs nobody to unfold anything
+first.
 
 ## What you see
 

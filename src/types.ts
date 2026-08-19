@@ -104,6 +104,10 @@ export interface View {
   showIndex: boolean;
   /** Orphans are half the lesson, so they are drawn unless asked otherwise. */
   showUnreachable?: boolean;
+  /** `--learning`: commits arrive already open. A room watching a demo should
+   *  all see the same picture, including whoever opens the page late, without
+   *  anyone having to unfold anything. */
+  learning?: boolean;
   /** Arrows from an orphaned object to things that are still reachable — a
    *  tree's entries, and a discarded commit's parent. They cross the picture,
    *  so they are asked for rather than assumed. */
