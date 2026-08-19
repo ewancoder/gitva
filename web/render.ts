@@ -189,9 +189,12 @@ function drawBands(
     // caption below has color under it everywhere it might be pinned.
     ctx.fillStyle = band.key === 'index' ? theme.panel : 'rgba(255,255,255,0.014)';
     ctx.fillRect(band.x - 10, v.y0, band.w + 20, v.y1 - v.y0);
-    ctx.font = `500 11px ${theme.sans}`;
+    // Furniture, not content: the caption stays the same size on screen at any
+    // zoom, so it is divided back out of the camera's scale.
+    const z = p.camera.scale;
+    ctx.font = `500 ${11 / z}px ${theme.sans}`;
     ctx.fillStyle = theme.faint;
-    ctx.fillText(band.label, band.x - 4, v.y0 + 14);
+    ctx.fillText(band.label, band.x - 4, v.y0 + 14 / z);
     // The seam you drag to give a band more room. Faint, because it is furniture.
     const seam = bandEdge(band);
     if (seam !== null) {
