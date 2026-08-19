@@ -36,7 +36,7 @@
         color: var(--ink);
         font: 13px/1.5 var(--sans);
         display: grid;
-        grid-template-rows: auto auto auto 1fr;
+        grid-template-rows: auto auto auto auto 1fr;
         overflow: hidden;
       }
       kbd, code, .mono { font-family: var(--mono); }
@@ -78,7 +78,7 @@
 
       /* The tape rides on its own row: the toolbar above it resizes as the
          state changes, and a button that moves is a button you miss. */
-      #transport {
+      #transport, #reset-row {
         display: flex; align-items: center; gap: calc(var(--u) * 2);
         padding: 6px calc(var(--u) * 1.5);
         background: var(--panel);
@@ -169,7 +169,6 @@
         <button id="load-all" title="Load the whole history, not just the first page">load all</button>
         <button id="unfold" title="Open every commit (double-click one commit for just it)">unfold all</button>
         <button id="fold" title="Fold everything back to the commit DAG">fold all</button>
-        <button id="unpin" title="Send every dragged node, and every widened column, back to where the layout puts it">unpin all</button>
         <button id="toggle-index" aria-pressed="true" title="The index is the sandbox beside the object graph">index</button>
         <button id="toggle-cross" aria-pressed="false" title="Arrows from orphaned objects to what is still reachable: a tree's entries, and a discarded commit's parent">cross links</button>
         <button id="toggle-orphans" aria-pressed="true" title="Objects nothing points at — still in the object database either way">orphans</button>
@@ -193,6 +192,10 @@
         <span class="tally" id="tally"></span>
         <span class="change" id="change"></span>
       </div>
+    </div>
+
+    <div id="reset-row">
+      <button id="unpin" title="Send every dragged node, and every widened column, back to where the layout puts it">Reset view</button>
     </div>
 
     <div id="notes"><ul id="notes-list"></ul></div>
@@ -227,9 +230,9 @@
         <code>double-click commit</code><span>fold or open what it contains</span>
         <code>double-click tree</code><span>fold or open that subtree (open to begin with; folded it counts what it holds)</span>
         <code>double-click background</code><span>fit the graph to the width again</span>
-        <code>drag a node</code><span>pin it where you put it (&ldquo;unpin all&rdquo; drops every pin)</span>
+        <code>drag a node</code><span>pin it where you put it (&ldquo;Reset view&rdquo; drops every pin)</span>
         <code>shift-click a node</code><span>unpin that one again</span>
-        <code>drag a column seam</code><span>widen that column, for room to arrange pinned things (&ldquo;unpin all&rdquo; puts it back)</span>
+        <code>drag a column seam</code><span>widen that column, for room to arrange pinned things (&ldquo;Reset view&rdquo; puts it back)</span>
         <code>click</code><span>select, and read what it is</span>
         <code>right-click</code><span>mark it, to follow it as the graph moves</span>
         <code>click "load more history"</code><span>another thousand commits ("load all" loads the lot)</span>

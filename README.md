@@ -76,14 +76,14 @@ the one line inside a ref.
 |---|---|
 | wheel | pan; hold <kbd>ctrl</kbd> to zoom |
 | drag background | pan |
-| drag a node | pin it where you put it (*unpin all* in the toolbar drops every pin) |
-| drag the seam between two columns | widen the left one, for room to arrange pinned things; it never narrows past what it holds, and *unpin all* puts it back. The index is last and has no seam: it grows to hold whatever you drag into it |
+| drag a node | pin it where you put it (*Reset view* below the tape drops every pin) |
+| drag the seam between two columns | widen the left one, for room to arrange pinned things; it never narrows past what it holds, and *Reset view* puts it back. The index is last and has no seam: it grows to hold whatever you drag into it |
 | click | select: read what it is, and light the whole path through it; anything with a sha copies it to the clipboard |
 | hover | light what it connects to |
 | right-click anything | mark it with a red outline — objects, pointers and index entries alike, so you can follow it as the graph moves; right-click again to unmark |
 | double-click a commit | fold or unfold what it contains (a commit git just made arrives unfolded, unless you turn that off in the legend) |
 | double-click a tree | fold or unfold that subtree; folded, it says how many entries it is holding back (`tree +3`). Trees arrive open |
-| shift+click a node | unpin it, wherever the layout wants it (*unpin all* in the toolbar drops the lot) |
+| shift+click a node | unpin it, wherever the layout wants it (*Reset view* below the tape drops the lot) |
 | double-click background | fit to width again, centred on the point you clicked |
 | click *load more history* | load another thousand commits (*load all* in the toolbar loads the lot) |
 | <kbd>f</kbd> <kbd>←</kbd>/<kbd>[</kbd> <kbd>→</kbd>/<kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |
