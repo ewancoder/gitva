@@ -397,11 +397,14 @@ describe('what the right button can mark', () => {
   it('marks every node that can get lost in the graph, and nothing else', () => {
     // One gesture for every kind: a mark is "keep an eye on this", and that is
     // the same wish for a commit as for a blob or a branch.
-    for (const kind of ['commit', 'tree', 'blob', 'tag', 'submodule', 'ref', 'head'] as const) {
+    // The index band is one chip per staged file, and a file is exactly what
+    // you want to keep an eye on while it is staged and then reset.
+    for (const kind of [
+      'commit', 'tree', 'blob', 'tag', 'submodule', 'ref', 'head', 'index',
+    ] as const) {
       assert.equal(canMark(kind), true, `${kind} could not be marked`);
     }
-    // There is one index and one "load more" button; neither can be mislaid.
-    assert.equal(canMark('index'), false);
+    // There is one "load more" button, and it cannot be mislaid.
     assert.equal(canMark('more'), false);
   });
 });

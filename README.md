@@ -75,7 +75,7 @@ the one line inside a ref.
 | drag a node | pin it where you put it (*unpin all* in the toolbar drops every pin) |
 | click | select: read what it is, and light the whole path through it; anything with a sha copies it to the clipboard |
 | hover | light what it connects to |
-| right-click anything | mark it with a red outline, so you can follow it as the graph moves; right-click again to unmark |
+| right-click anything | mark it with a red outline — objects, pointers and index entries alike, so you can follow it as the graph moves; right-click again to unmark |
 | double-click a commit | fold or unfold what it contains (a commit git just made arrives unfolded, unless you turn that off in the legend) |
 | double-click a tree | fold or unfold that subtree; folded, it says how many entries it is holding back (`tree +3`). Trees arrive open |
 | shift+click a node | unpin it, wherever the layout wants it (*unpin all* in the toolbar drops the lot) |

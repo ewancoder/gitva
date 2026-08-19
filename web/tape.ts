@@ -264,9 +264,11 @@ export class Pins {
 /**
  * Whether the right button marks this node. One gesture for every kind: a mark
  * says "keep an eye on this" and that is the same wish whether the thing is a
- * commit, a blob or a branch. The index and the "more" button are left out —
- * there is exactly one of each and neither can get lost in the graph.
+ * commit, a blob, a branch or a staged path — the index band is one chip per
+ * file, and a file is exactly the thing you want to follow across a stage and
+ * a reset. Only the "more" button is left out: there is one of it, and it
+ * cannot get lost in the graph.
  */
 export function canMark(kind: NodeKind): boolean {
-  return kind !== 'index' && kind !== 'more';
+  return kind !== 'more';
 }
