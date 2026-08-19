@@ -36,7 +36,9 @@
         color: var(--ink);
         font: 13px/1.5 var(--sans);
         display: grid;
-        grid-template-rows: auto auto auto auto 1fr;
+        /* header, recording toolbar, notes, then the canvas takes the rest. One
+           `auto` per toolbar: add or drop a row here and this must follow. */
+        grid-template-rows: auto auto auto 1fr;
         overflow: hidden;
       }
       kbd, code, .mono { font-family: var(--mono); }
@@ -76,9 +78,11 @@
       #tape-pos { min-width: 5ch; }
       .change { color: var(--muted); font-family: var(--mono); font-size: 11px; min-width: 8ch; }
 
-      /* The tape rides on its own row: the toolbar above it resizes as the
-         state changes, and a button that moves is a button you miss. */
-      #transport, #reset-row {
+      /* The recording rides on its own row: the toolbar above it resizes as the
+         state changes, and a button that moves is a button you miss. `reset view`
+         sits at its left rather than on a row of its own — one button did not
+         earn a whole row, and it is still the leftmost thing on the row. */
+      #transport {
         display: flex; align-items: center; gap: calc(var(--u) * 2);
         padding: 6px calc(var(--u) * 1.5);
         background: var(--panel);
@@ -181,6 +185,9 @@
 
     <div id="transport">
       <div class="group">
+        <button id="unpin" title="Send everything you dragged, and every widened column, back to where the layout puts it">reset view</button>
+      </div>
+      <div class="group">
         <button id="step-back" title="Previous step">◀</button>
         <button id="play" aria-pressed="false" title="Pause following new steps">pause</button>
         <button id="step-fwd" title="Next step">▶</button>
@@ -192,10 +199,6 @@
         <span class="tally" id="tally"></span>
         <span class="change" id="change"></span>
       </div>
-    </div>
-
-    <div id="reset-row">
-      <button id="unpin" title="Send everything you dragged, and every widened column, back to where the layout puts it">reset view</button>
     </div>
 
     <div id="notes"><ul id="notes-list"></ul></div>

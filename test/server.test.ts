@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { ensureFirstSnapshot, record, sanitise, sanitiseQuestion, serve, type Server } from '../src/server.js';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { plumbedRepo, fakeState, type Repo } from './fixture.js';
@@ -405,5 +405,25 @@ describe('the history everyone shares', () => {
       await server.close();
       repo.dispose();
     }
+  });
+});
+
+describe('the page the server hands the browser', () => {
+  // The canvas collapsed to its content height once, because a toolbar was
+  // deleted and the body's row list still had a track for it: `main` landed on
+  // an `auto` row and the `1fr` went to an empty one.
+  it('gives the canvas the leftover height, not a row meant for a toolbar', () => {
+    const html = readFileSync('web/index.html', 'utf8');
+    const rows = /grid-template-rows:([^;]+);/.exec(html)![1].trim().split(/\s+/);
+    const children = html
+      .slice(html.indexOf('<body>'), html.indexOf('</body>'))
+      .match(/^ {4}<(?!\/)([a-z]+)/gm)!
+      .map((t) => t.slice(5));
+    assert.deepEqual(
+      children.filter((t) => t !== 'script' && t !== 'dialog'),
+      ['header', 'div', 'div', 'main'],
+    );
+    assert.equal(rows.length, 4, 'one track per row of the page');
+    assert.equal(rows[rows.length - 1], '1fr', 'the canvas is last and takes the rest');
   });
 });
