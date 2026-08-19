@@ -27,6 +27,21 @@ const ctx = canvas.getContext('2d')!;
 const panel = $('panel');
 const port = () => ({ width: canvas.clientWidth, height: canvas.clientHeight });
 
+/** Copy a sha and say so briefly; a clipboard the browser refuses is not worth a dialog. */
+let copiedTimer = 0;
+function copied(oid: string) {
+  void navigator.clipboard?.writeText(oid).then(
+    () => {
+      const el = $('copied');
+      el.textContent = `copied ${oid.slice(0, 7)}`;
+      el.classList.add('show');
+      clearTimeout(copiedTimer);
+      copiedTimer = setTimeout(() => el.classList.remove('show'), 1200) as unknown as number;
+    },
+    () => {},
+  );
+}
+
 // --- preferences: about how this person likes to work, not about this session
 interface Prefs {
   showIndex: boolean;
@@ -410,6 +425,9 @@ canvas.addEventListener('pointerup', () => {
     selected = drag.id;
     const node = scene?.nodes.find((n) => n.id === selected) ?? null;
     renderPanel(panel, tape.current, node);
+    // Anything with a sha is a key in the key-value store, so a click hands you
+    // the key: the whole point is that you can paste it into the next command.
+    if (node?.oid) copied(node.oid);
     if (node && prefs.centreOnClick) {
       glide = null;
       camera = centre(camera, node, port());

@@ -73,7 +73,7 @@ the one line inside a ref.
 | wheel | pan; hold <kbd>ctrl</kbd> to zoom |
 | drag background | pan |
 | drag a node | pin it where you put it (*unpin all* in the toolbar drops every pin) |
-| click | select: read what it is, and light the whole path through it |
+| click | select: read what it is, and light the whole path through it; anything with a sha copies it to the clipboard |
 | hover | light what it connects to |
 | right-click a commit | fold or unfold what it contains (a commit git just made arrives unfolded, unless you turn that off in the legend) |
 | right-click a tree, blob or tag | mark it with a red outline, so you can follow that sha as the graph moves; right-click again to unmark |
