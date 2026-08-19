@@ -493,6 +493,12 @@ export function layout(
     // about its entries, here as anywhere.
     if (view.showCrossLinks) {
       for (const oid of strays) {
+        // A discarded commit still names its parent, and after a reset that
+        // parent is usually still on a branch: the arrow is the whole point of
+        // "the old tip is still there, hanging off the one you moved to".
+        for (const p of snap.commits[oid]?.parents ?? []) {
+          if (!strayed.has(p)) edges.push({ id: `p:${oid}:${p}`, from: oid, to: p, kind: 'parent' });
+        }
         if (folded.has(oid)) continue;
         for (const e of snap.trees[oid] ?? []) {
           if (strayed.has(e.oid)) continue;

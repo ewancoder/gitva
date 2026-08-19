@@ -534,6 +534,23 @@ describe('the scene', () => {
     assert.equal(crosses(layout(s, { ...DEFAULT_VIEW, showCrossLinks: true })).length, 0);
   });
 
+  it('draws a discarded commit\u2019s arrow to the live parent it was cut from', () => {
+    // What `git reset --hard HEAD~1` leaves: the old tip hangs below, still
+    // naming the commit the branch now points at.
+    const s = fakeSnapshot({ a: ['b'], b: [] });
+    const lost = oid('lost');
+    s.commits[lost] = { ...s.commits[oid('a')], oid: lost, tree: oid('ta'), parents: [oid('a')] };
+    s.objects[lost] = { oid: lost, type: 'commit', size: 1 };
+    s.unreachable = [lost];
+
+    const parent = (v: View) =>
+      layout(s, v).edges.filter((e) => e.from === lost && e.to === oid('a'));
+    assert.equal(parent(DEFAULT_VIEW).length, 0, 'off by default, like any cross link');
+    const on = parent({ ...DEFAULT_VIEW, showCrossLinks: true });
+    assert.equal(on.length, 1);
+    assert.equal(on[0].kind, 'parent');
+  });
+
   it('says nothing about the entries of a folded orphan, cross links or not', () => {
     const s = fakeSnapshot({ a: [] });
     const [live, lost] = ['bl', 'tlost'].map(oid);

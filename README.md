@@ -85,9 +85,10 @@ the one line inside a ref.
 
 In the toolbar: ask for everything, for chosen branches, or search by message, author, path or
 content; load the whole history; fold or unfold every commit at once; drop every pin; hide the
-index; hide the orphans; show the *cross links* — the arrows from an orphaned tree to objects
-that are still reachable, off by default because they cross the picture, and on when you want to
-see how much a discarded state shares with the live one. Every one of those is the same
+index; hide the orphans; show the *cross links* — the arrows from an orphaned object to what is
+still reachable, a tree's entries and a discarded commit's parent, off by default because they
+cross the picture, and on when you want to see how much a discarded state shares with the live
+one and where it was cut from. Every one of those is the same
 mechanism — a change to the *view* the browser holds, which is why none of them care how big
 the repository is.
 

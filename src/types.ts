@@ -104,8 +104,9 @@ export interface View {
   showIndex: boolean;
   /** Orphans are half the lesson, so they are drawn unless asked otherwise. */
   showUnreachable?: boolean;
-  /** Arrows from an orphaned tree to objects that are still reachable. They
-   *  cross the picture, so they are asked for rather than assumed. */
+  /** Arrows from an orphaned object to things that are still reachable — a
+   *  tree's entries, and a discarded commit's parent. They cross the picture,
+   *  so they are asked for rather than assumed. */
   showCrossLinks?: boolean;
 }
 
