@@ -195,6 +195,7 @@ describe('painting', () => {
     hover: null,
     selected: null,
     marked: new Set<string>(),
+    showPins: true,
     enter: 1,
     ghosts: [],
     motion: true,
@@ -214,7 +215,7 @@ describe('painting', () => {
   });
 
   /** Every value the painter gave one style property, in order. */
-  function painted(s: Scene, prop: 'strokeStyle' | 'font'): string[] {
+  function painted(s: Scene, prop: 'strokeStyle' | 'font', over: Partial<Paint> = {}): string[] {
     const seen: string[] = [];
     const ctx = new Proxy(
       { measureText: (t: string) => ({ width: t.length * 7 }) } as Record<string, unknown>,
@@ -224,11 +225,11 @@ describe('painting', () => {
       },
     ) as unknown as CanvasRenderingContext2D;
     snapPositions();
-    draw(ctx, s, paint());
+    draw(ctx, s, { ...paint(), ...over });
     return seen;
   }
 
-  const strokes = (s: Scene) => painted(s, 'strokeStyle');
+  const strokes = (s: Scene, over: Partial<Paint> = {}) => painted(s, 'strokeStyle', over);
 
   it('draws a parent line touching an orphan in ghost grey, not in ink', () => {
     const pair = (from: Partial<SceneNode>, to: Partial<SceneNode>): Scene => ({
@@ -253,6 +254,14 @@ describe('painting', () => {
     const open = { ...shut, nodes: [node({ id: 't9', kind: 'tree', sub: 'tree' })] };
     assert.ok(!strokes(open).includes(theme.tree), 'an open tree gets neither');
     assert.ok(!bold(open));
+  });
+
+  it('sticks a pushpin through a pinned node, but only when asked to', () => {
+    const put = { ...full, nodes: [node({ id: 'b1', kind: 'blob', pinned: true })], edges: [] };
+    assert.ok(strokes(put).includes(theme.mark), 'the pin, in the colour the reader\'s own marks use');
+    const loose = { ...put, nodes: [node({ id: 'b1', kind: 'blob' })] };
+    assert.ok(!strokes(loose).includes(theme.mark), 'an unpinned node gets none');
+    assert.ok(!strokes(put, { showPins: false }).includes(theme.mark), 'nor does one with pins turned off');
   });
 
   it('draws every kind, at every tier of detail, without falling over', () => {

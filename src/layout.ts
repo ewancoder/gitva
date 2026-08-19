@@ -42,6 +42,8 @@ export interface SceneNode {
   folded?: boolean;
   /** Put down here because nothing on screen points at it, not beside anything. */
   stray?: boolean;
+  /** The reader dragged this one somewhere by hand; the painter says so. */
+  pinned?: boolean;
   /** Only the index holds this: written, not committed, and safe from gc while
    *  the entry beside it lasts. A state, like `unreachable`, not a kind. */
   staged?: boolean;
@@ -323,6 +325,7 @@ export function layout(
     if (pin) {
       n.x = pin.x;
       n.y = pin.y;
+      n.pinned = true;
     }
     nodes.push(n);
     at.set(n.id, n);

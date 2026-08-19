@@ -48,12 +48,14 @@ interface Prefs {
   centreOnClick: boolean;
   openNewCommits: boolean;
   refitOnChange: boolean;
+  showPins: boolean;
 }
 const prefs: Prefs = {
   showIndex: true,
   centreOnClick: false,
   openNewCommits: true,
   refitOnChange: true,
+  showPins: false,
   ...JSON.parse(localStorage.getItem('gitva.prefs') ?? '{}'),
 };
 const savePrefs = () => localStorage.setItem('gitva.prefs', JSON.stringify(prefs));
@@ -123,6 +125,7 @@ function paint() {
     hover,
     selected,
     marked,
+    showPins: prefs.showPins,
     enter,
     ghosts,
     motion: !reduceMotion,
@@ -379,6 +382,13 @@ openNew.checked = prefs.openNewCommits;
 openNew.addEventListener('change', () => {
   prefs.openNewCommits = openNew.checked;
   savePrefs();
+});
+const pinBox = $<HTMLInputElement>('show-pins');
+pinBox.checked = prefs.showPins;
+pinBox.addEventListener('change', () => {
+  prefs.showPins = pinBox.checked;
+  savePrefs();
+  schedule();
 });
 const refitBox = $<HTMLInputElement>('refit-on-change');
 refitBox.checked = prefs.refitOnChange;

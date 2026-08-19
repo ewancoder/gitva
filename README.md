@@ -108,8 +108,9 @@ the tape, and one you folded stays folded, until you say otherwise — including
 in this browser, for every commit and not only the ones the session made.
 
 The legend dialog also holds preferences, which survive a reload — whether clicking a node centres
-the view on it, whether a commit git just made arrives unfolded, and whether the graph refits the
-width when the repository changes (on by default; the height stays where you were reading).
+the view on it, whether a commit git just made arrives unfolded, whether a node you pinned wears a
+pushpin (off by default), and whether the graph refits the width when the repository changes (on by
+default; the height stays where you were reading).
 
 ## Two promises
 

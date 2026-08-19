@@ -27,6 +27,8 @@ export interface Paint {
   selected: string | null;
   /** Objects the reader marked, to keep an eye on them as the graph moves. */
   marked: Set<string>;
+  /** Whether a pinned node wears a pushpin. Off unless the reader asked. */
+  showPins: boolean;
   /** 0→1 while new things grow out of where they came from. */
   enter: number;
   /** Nodes that have gone, drawn at their old place while they fade. */
@@ -409,6 +411,25 @@ function drawNode(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, lit: Se
     ctx.lineTo(n.x + n.w + 13, n.y + n.h / 2);
     ctx.stroke();
     arrowhead(ctx, n.x + n.w + 17, n.y + n.h / 2, 0, theme.tree);
+  }
+
+  // A node the reader dragged somewhere gets a pushpin through its top right
+  // corner: a hand-placed thing, so it wears the one colour the reader's own
+  // marks use — outside the silhouette, so it joins no hue count.
+  if (n.pinned && p.showPins) {
+    const hx = n.x + n.w + 3;
+    const hy = n.y - 2;
+    ctx.setLineDash([]);
+    ctx.strokeStyle = theme.mark;
+    ctx.fillStyle = theme.mark;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(hx, hy);
+    ctx.lineTo(n.x + n.w - 4, n.y + 5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(hx, hy, 3.2, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   const marked = p.marked.has(n.id);
