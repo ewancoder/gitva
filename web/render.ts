@@ -10,7 +10,7 @@
  * Hidden means absent: culled nodes are not drawn *and* not walked.
  */
 
-import type { Scene, SceneEdge, SceneNode } from '../src/layout.js';
+import { M, type Scene, type SceneEdge, type SceneNode } from '../src/layout.js';
 import type { Change } from '../src/diff.js';
 import type { Camera } from './camera.js';
 import { chipHue, hueFor, theme } from './theme.js';
@@ -33,6 +33,8 @@ export interface Paint {
   ghosts: SceneNode[];
   /** False under prefers-reduced-motion: everything snaps to its end state. */
   motion: boolean;
+  /** The band whose seam is under the pointer or being dragged. */
+  resizing?: string | null;
 }
 
 const TIER = { none: 0.45, sha: 0.75, kind: 1.05, names: 1.35 };
@@ -188,9 +190,14 @@ function drawBands(
     ctx.font = `500 11px ${theme.sans}`;
     ctx.fillStyle = theme.faint;
     ctx.fillText(band.label, band.x - 4, v.y0 + 14);
+    // The seam you drag to give a band more room. Faint, because it is furniture.
+    const seam = bandEdge(band);
+    if (seam !== null) {
+      ctx.fillStyle = p.resizing === band.key ? theme.muted : theme.line;
+      ctx.fillRect(seam - 0.5, v.y0, 1, v.y1 - v.y0);
+    }
   }
   ctx.restore();
-  void p;
 }
 
 // ---------------------------------------------------------------------------
@@ -500,6 +507,20 @@ function clip(ctx: CanvasRenderingContext2D, s: string, max: number): string {
 }
 
 // ---------------------------------------------------------------------------
+
+/** Where a band's drag seam sits: the middle of the gap after it. The index is
+ *  last and holds one column of fixed-width chips, so it has no seam. */
+const bandEdge = (band: Scene['bands'][number]) =>
+  band.key === 'index' ? null : band.x + band.w + M.bandGap / 2;
+
+/** The band whose width a drag at `wx` would change, if any. */
+export function bandEdgeAt(scene: Scene, wx: number): string | null {
+  for (const band of scene.bands) {
+    const e = bandEdge(band);
+    if (e !== null && Math.abs(wx - e) <= 9) return band.key;
+  }
+  return null;
+}
 
 export function hitTest(scene: Scene, wx: number, wy: number): SceneNode | null {
   for (let i = scene.nodes.length - 1; i >= 0; i--) {

@@ -11,11 +11,11 @@
  */
 
 import { diffScenes, describe, EMPTY_CHANGE, type Change } from '../src/diff.js';
-import { layout, type Scene, type SceneNode } from '../src/layout.js';
+import { layout, M, type Scene, type SceneNode } from '../src/layout.js';
 import { type Snapshot, type View } from '../src/types.js';
 import { bounded, centre, fit, glideStep, refit, toWorld, zoom, zoomOut, type Camera } from './camera.js';
 import { renderPanel } from './panel.js';
-import { draw, hitTest, snapPositions } from './render.js';
+import { bandEdgeAt, draw, hitTest, snapPositions } from './render.js';
 import { canMark, isDouble, Pins, questionFor, Tape, type Click } from './tape.js';
 import { theme } from './theme.js';
 
@@ -69,6 +69,12 @@ tape.view = { ...tape.view, showIndex: prefs.showIndex };
 tape.answers = JSON.parse(localStorage.getItem('gitva.folds') ?? '{}');
 const saveFolds = () => localStorage.setItem('gitva.folds', JSON.stringify(tape.answers));
 const pins = new Pins();
+// How wide the reader has dragged each band. A hand-set width, like a pin, so
+// it outlives the page — and like the folds, one key for the origin.
+const bandWidths: Record<string, number> = JSON.parse(
+  localStorage.getItem('gitva.bands') ?? '{}',
+);
+const saveBands = () => localStorage.setItem('gitva.bands', JSON.stringify(bandWidths));
 
 // --- what is on screen
 let scene: Scene | null = null;
@@ -120,6 +126,7 @@ function paint() {
     enter,
     ghosts,
     motion: !reduceMotion,
+    resizing: seam,
   });
   if (flash > 0 || enter < 1 || settling || glide) schedule();
 }
@@ -133,7 +140,7 @@ function relayout(animate: boolean, repoChanged: boolean) {
   // a commit opened now has to draw open on a state recorded before it was.
   const state = tape.world;
   if (!state) return;
-  const next = layout(state, tape.view, pins.at(state.seq));
+  const next = layout(state, tape.view, pins.at(state.seq), bandWidths);
   // Losing your last arrow is the lesson — being teleported to the bottom of the
   // page is not. An object whose relations changed used to be pinned where it
   // already was, which froze it there for good: everything else went on
@@ -353,8 +360,11 @@ $('fold').addEventListener('click', () => {
 });
 // Dropping every pin, at every moment of the tape: a pin is a thing you put
 // there by hand, so taking them all back is one gesture, not a page reload.
+// A widened band is the same kind of thing, and goes back with them.
 $('unpin').addEventListener('click', () => {
   pins.clear();
+  for (const k of Object.keys(bandWidths)) delete bandWidths[k];
+  saveBands();
   relayout(true, false);
 });
 $('legend-btn').addEventListener('click', () => $<HTMLDialogElement>('legend').showModal());
@@ -412,6 +422,9 @@ const world = (ev: { clientX: number; clientY: number }) =>
   toWorld(camera, ev, canvas.getBoundingClientRect());
 
 let drag: { id: string | null; x: number; y: number; moved: boolean; dx: number; dy: number } | null = null;
+/** The band seam under the pointer, or the one being dragged. */
+let seam: string | null = null;
+let resize: { key: string; band: { x: number; w: number } } | null = null;
 
 canvas.addEventListener('pointerdown', (e) => {
   if (e.button !== 0) return;
@@ -420,6 +433,10 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.classList.add('dragging');
   const w = world(e);
   const hit = scene ? hitTest(scene, w.x, w.y) : null;
+  // A node under the pointer wins the seam: the seam is empty space by nature.
+  const key = hit || !scene ? null : bandEdgeAt(scene, w.x);
+  const band = scene?.bands.find((b) => b.key === key);
+  resize = key && band ? { key, band: { x: band.x, w: band.w } } : null;
   drag = hit
     ? { id: hit.id, x: e.clientX, y: e.clientY, moved: false, dx: w.x - hit.x, dy: w.y - hit.y }
     : { id: null, x: e.clientX, y: e.clientY, moved: false, dx: 0, dy: 0 };
@@ -430,9 +447,11 @@ canvas.addEventListener('pointermove', (e) => {
     const w = world(e);
     const hit = scene ? hitTest(scene, w.x, w.y) : null;
     const id = hit?.id ?? null;
-    if (id !== hover) {
+    const over = hit || !scene ? null : bandEdgeAt(scene, w.x);
+    if (id !== hover || over !== seam) {
       hover = id;
-      canvas.style.cursor = id ? 'pointer' : 'grab';
+      seam = over;
+      canvas.style.cursor = id ? 'pointer' : over ? 'col-resize' : 'grab';
       schedule();
     }
     return;
@@ -440,7 +459,14 @@ canvas.addEventListener('pointermove', (e) => {
   const dx = e.clientX - drag.x;
   const dy = e.clientY - drag.y;
   if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
-  if (drag.id && drag.moved) {
+  if (resize) {
+    // The seam sits half a gap past the band's right edge, and the width is
+    // clamped back to the content's own in `layout`, so dragging left stops
+    // where the band is full rather than at some number invented here.
+    bandWidths[resize.key] = world(e).x - M.bandGap / 2 - resize.band.x;
+    drag.moved = true;
+    relayout(false, false);
+  } else if (drag.id && drag.moved) {
     const w = world(e);
     pins.put(tape.current?.seq ?? 0, drag.id, w.x - drag.dx, w.y - drag.dy);
     relayout(false, false);
@@ -454,6 +480,12 @@ canvas.addEventListener('pointermove', (e) => {
 
 canvas.addEventListener('pointerup', (e) => {
   canvas.classList.remove('dragging');
+  if (resize) {
+    resize = null;
+    saveBands();
+    drag = null;
+    return;
+  }
   const click: Click | null =
     drag && !drag.moved ? { at: e.timeStamp, x: e.clientX, y: e.clientY, id: drag.id } : null;
   drag = null;

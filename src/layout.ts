@@ -75,6 +75,7 @@ export interface Scene {
 export const M = {
   unit: 8,
   gutterX: 12,
+  /** A full three-column gutter; narrower when no chain is that long. */
   gutterW: 246,
   chipW: 72,
   chipH: 20,
@@ -95,6 +96,9 @@ export const M = {
   indexGap: 6,
   bandGap: 28,
 };
+
+/** HEAD → branch → tag object: the longest a pointer chain can get. */
+const GUTTER_COLS = 3;
 
 const short = (oid: Oid) => oid.slice(0, 7);
 /** The name is in the tree, never in the blob — so the arrow carries it. */
@@ -209,6 +213,7 @@ export function layout(
   snap: Snapshot,
   view: View,
   pins: Record<string, { x: number; y: number }> = {},
+  bandWidths: Record<string, number> = {},
 ): Scene {
   const commits = snap.window.commits;
   const { lane, laneCount } = assignLanes(commits, (o) => snap.commits[o]?.parents ?? []);
@@ -220,9 +225,10 @@ export function layout(
   const unreachable = new Set(snap.unreachable ?? []);
   const stagedOnly = new Set(snap.stagedOnly ?? []);
 
-  const lanesX = M.gutterX + M.gutterW + M.bandGap;
-  const lanesW = laneCount * M.laneW;
-  const objectsX = lanesX + lanesW + M.bandGap;
+  // A band can be widened by hand — dragging the gap after it — when the
+  // reader wants room to arrange pinned nodes. Never narrower than its content:
+  // a band that cannot hold what it holds would spill into the next one.
+  const widen = (key: string, natural: number) => Math.max(natural, bandWidths[key] ?? 0);
 
   // --- what each row holds, so we know how tall it is ---
   const graphs = new Map<Oid, ObjectGraph>();
@@ -255,6 +261,19 @@ export function layout(
   if (snap.head.detached && snap.head.oid && inWindow.has(snap.head.oid)) {
     chainAt(snap.head.oid, ['HEAD']);
   }
+
+  // The gutter is a grid of chip columns and chains are right-aligned in it, so
+  // its width is the longest chain there is — never the longest there could be.
+  // `HEAD → branch` is two, and a repository with no annotated tags should not
+  // pay for the third column all the way down the page.
+  const chipCols = Math.min(
+    GUTTER_COLS,
+    Math.max(1, ...[...chains.values()].flat().map((c) => c.length)),
+  );
+  const gutterW = widen('pointers', M.gutterW - (GUTTER_COLS - chipCols) * M.chipPitch);
+  const lanesX = M.gutterX + gutterW + M.bandGap;
+  const lanesW = widen('commits', laneCount * M.laneW);
+  const objectsX = lanesX + lanesW + M.bandGap;
 
   // `git add` writes a blob before anything points at it, and that blob is the
   // first thing the tutorial has to show. Down with the orphans it is off the
@@ -384,7 +403,7 @@ export function layout(
       const cy = row.y + M.rowPad + i * (M.chipH + 6);
       chain.forEach((id, j) => {
         // Right-aligned: the last hop sits nearest the commit it names.
-        const col = Math.max(0, 3 - (chain.length - j));
+        const col = Math.max(0, chipCols - (chain.length - j));
         const isHead = id === 'HEAD';
         const isTag = id.startsWith('tag:');
         // The tag object gets its sha and nothing else: the ref chip beside it
@@ -607,7 +626,7 @@ export function layout(
         id: oid,
         kind: 'tag',
         oid,
-        x: target ? M.gutterX + 2 * M.chipPitch : objectsX,
+        x: target ? M.gutterX + (chipCols - 1) * M.chipPitch : objectsX,
         y: target ? target.y + i * (M.chipH + 6) : cursor,
         w: target ? M.chipW : M.objW,
         h: target ? M.chipH : M.objH,
@@ -626,7 +645,12 @@ export function layout(
   }
 
   // --- the index, apart, at the far right ---
+  objectsW = widen('objects', objectsW);
   const indexX = objectsX + objectsW + M.bandGap;
+  // The index is the last band, so it can simply grow to hold what is dragged
+  // into it: a path pulled rightwards stays inside its own column rather than
+  // hanging off the end of the picture.
+  let indexW = M.indexW;
   if (view.showIndex) {
     const placed = snap.index
       .map((e) => ({ e, blob: at.get(e.oid) }))
@@ -637,7 +661,7 @@ export function layout(
       const iy = Math.max(wanted, cursor);
       cursor = iy + M.indexH + M.indexGap;
       const id = `index:${e.stage}:${e.path}`;
-      put({
+      const n = put({
         id,
         kind: 'index',
         oid: e.oid,
@@ -649,6 +673,7 @@ export function layout(
         sub: short(e.oid) + (e.stage ? `  stage ${e.stage}` : ''),
         conflict: e.stage !== 0,
       });
+      indexW = Math.max(indexW, n.x + n.w - indexX);
       if (blob) edges.push({ id: `s:${id}`, from: id, to: e.oid, kind: 'stage' });
     }
     y = Math.max(y, cursor);
@@ -659,14 +684,14 @@ export function layout(
     nodes,
     edges: edges.filter((e) => at.has(e.from) && at.has(e.to)),
     bands: [
-      { key: 'pointers', label: 'pointers', x: M.gutterX, w: M.gutterW },
+      { key: 'pointers', label: 'pointers', x: M.gutterX, w: gutterW },
       { key: 'commits', label: 'commits', x: lanesX, w: lanesW },
       { key: 'objects', label: 'objects', x: objectsX, w: objectsW },
       ...(view.showIndex
-        ? [{ key: 'index' as const, label: 'index', x: indexX, w: M.indexW }]
+        ? [{ key: 'index' as const, label: 'index', x: indexX, w: indexW }]
         : []),
     ],
-    width: (view.showIndex ? indexX + M.indexW : objectsX + objectsW) + 40,
+    width: (view.showIndex ? indexX + indexW : objectsX + objectsW) + 40,
     height,
     rows,
   };

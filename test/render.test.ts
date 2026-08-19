@@ -11,7 +11,7 @@ import test, { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Scene, SceneEdge, SceneNode } from '../src/layout.js';
 import { EMPTY_CHANGE } from '../src/diff.js';
-import { draw, hitTest, path, snapPositions, type Paint } from '../web/render.js';
+import { bandEdgeAt, draw, hitTest, path, snapPositions, type Paint } from '../web/render.js';
 import { chipHue, hueFor, theme } from '../web/theme.js';
 
 /** c2 → c1 → c0, and c2 holds a tree holding a blob. */
@@ -80,6 +80,35 @@ describe('what is under the pointer', () => {
   it('takes the last one drawn, which is the one on top', () => {
     const stacked = { ...hits, nodes: [node({ id: 'under', kind: 'blob' }), node({ id: 'over', kind: 'tree' })] };
     assert.equal(hitTest(stacked, 5, 5)?.id, 'over');
+  });
+});
+
+describe('the seam a column is widened by', () => {
+  const seams = {
+    nodes: [],
+    edges: [],
+    bands: [
+      { key: 'pointers', label: 'pointers', x: 12, w: 100 },
+      { key: 'commits', label: 'commits', x: 140, w: 88 },
+      { key: 'index', label: 'index', x: 256, w: 176 },
+    ],
+    width: 400,
+    height: 200,
+    rows: [],
+  } satisfies Scene;
+
+  it('finds the band whose gap the point is in', () => {
+    assert.equal(bandEdgeAt(seams, 126), 'pointers'); // 12 + 100 + 28/2
+    assert.equal(bandEdgeAt(seams, 242), 'commits');
+  });
+
+  it('finds nothing out in the band itself', () => {
+    assert.equal(bandEdgeAt(seams, 60), null);
+    assert.equal(bandEdgeAt(seams, 136), null);
+  });
+
+  it('gives the index no seam: it is last, and its width is its content', () => {
+    assert.equal(bandEdgeAt(seams, 256 + 176 + 14), null);
   });
 });
 

@@ -220,6 +220,64 @@ describe('the scene', () => {
     assert.ok(open.nodes.some((n) => n.id === oid('blob1')));
   });
 
+  it('makes the pointer gutter as narrow as the longest chain in it', () => {
+    // main alone is one hop, HEAD → main is two, and neither should be paying
+    // for the third column an annotated tag would need.
+    const bare = fakeSnapshot({ c: ['b'], b: ['a'], a: [] });
+    bare.head = { ref: undefined, oid: undefined, detached: false, unborn: false };
+    const oneHop = layout(bare, DEFAULT_VIEW);
+    const twoHops = layout(snap, DEFAULT_VIEW);
+    const w = (sc: typeof oneHop) => sc.bands.find((b) => b.key === 'pointers')!.w;
+    assert.equal(w(twoHops) - w(oneHop), M.chipPitch, 'one column of difference');
+    assert.equal(w(twoHops), M.gutterW - M.chipPitch, 'and the full gutter is three');
+  });
+
+  it('still right-aligns the chips against the narrower gutter', () => {
+    const scene = layout(snap, DEFAULT_VIEW);
+    const band = scene.bands.find((b) => b.key === 'pointers')!;
+    for (const n of scene.nodes.filter((c) => c.kind === 'ref' || c.kind === 'head')) {
+      assert.ok(n.x >= band.x && n.x + n.w <= band.x + band.w, `${n.id} is inside the gutter`);
+    }
+    // The last hop is the one nearest the commits: HEAD sits left of its branch.
+    const head = scene.nodes.find((n) => n.id === 'HEAD')!;
+    const ref = scene.nodes.find((n) => n.kind === 'ref')!;
+    assert.ok(head.x < ref.x);
+  });
+
+  it('grows the index column to hold an entry dragged out to the right', () => {
+    const s = fakeSnapshot({ c: ['b'], b: ['a'], a: [] });
+    s.index = [{ path: 'a.txt', oid: oid('blob1'), mode: '100644', stage: 0 }];
+    const id = 'index:0:a.txt';
+    const plain = layout(s, DEFAULT_VIEW);
+    const chip = plain.nodes.find((n) => n.id === id)!;
+    const band = (sc: typeof plain) => sc.bands.find((b) => b.key === 'index')!;
+
+    const out = layout(s, DEFAULT_VIEW, { [id]: { x: chip.x + 300, y: chip.y } });
+    assert.equal(band(out).w, band(plain).w + 300, 'the band followed it');
+    assert.ok(out.width > plain.width, 'and the picture is wide enough to pan to it');
+
+    // Dragging left is a way out of the band, and stays one.
+    const back = layout(s, DEFAULT_VIEW, { [id]: { x: chip.x - 300, y: chip.y } });
+    assert.equal(band(back).w, band(plain).w);
+  });
+
+  it('widens a band by hand, moving every band after it along', () => {
+    const plain = layout(snap, DEFAULT_VIEW);
+    const wide = layout(snap, DEFAULT_VIEW, {}, { pointers: 400 });
+    const band = (sc: typeof plain, key: string) => sc.bands.find((b) => b.key === key)!;
+    assert.equal(band(wide, 'pointers').w, 400);
+    const shift = 400 - band(plain, 'pointers').w;
+    assert.equal(band(wide, 'commits').x - band(plain, 'commits').x, shift);
+    assert.equal(band(wide, 'index').x - band(plain, 'index').x, shift);
+    assert.equal(wide.width - plain.width, shift);
+  });
+
+  it('will not narrow a band past what it holds', () => {
+    const plain = layout(snap, DEFAULT_VIEW);
+    const squeezed = layout(snap, DEFAULT_VIEW, {}, { pointers: 10, commits: 1, objects: 1 });
+    assert.deepEqual(squeezed.bands, plain.bands);
+  });
+
   it('explains the ref chips it draws — the scene keys them, the panel looks them up', () => {
     const chip = layout(snap, DEFAULT_VIEW).nodes.find((n) => n.kind === 'ref')!;
     const facts = explain(snap, 'ref', chip.id).facts;
