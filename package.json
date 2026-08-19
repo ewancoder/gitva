@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "A visual tutorial for git, taught from the internals upward: a live picture of .git in your browser.",
   "type": "module",
+  "repository": "github:ewancoder/gitva",
   "bin": {
     "gitva": "dist/src/cli.js"
   },
@@ -17,7 +18,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/src/cli.js",
-    "test": "tsc && node --test dist/test/*.test.js",
+    "test": "tsc && node --test --experimental-test-coverage dist/test/*.test.js",
     "prepublishOnly": "tsc"
   },
   "devDependencies": {

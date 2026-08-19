@@ -83,6 +83,15 @@ export interface Capabilities {
   limits: { fullLoad: number; indexNodes: number };
 }
 
+/**
+ * Filtering — chosen branches, or a search — is off. The server holds one
+ * shared `view` and broadcasts every rebuild, so one viewer's question rewrites
+ * every other viewer's canvas, and the rule is *the repository is shared, the
+ * view is yours* (CLAUDE.md, Known open work). The code stays: flip this once
+ * each browser can ask its own question, or behind a flag.
+ */
+export const QUESTIONS_ENABLED = false;
+
 export type Question =
   | { kind: 'all' }
   | { kind: 'refs'; refs: string[] }
@@ -97,14 +106,35 @@ export interface View {
   question: Question;
   limit: number;
   expanded: Oid[];
+  /** Trees the reader closed. Trees arrive open — a commit you opened is a
+   *  promise to show what is in it — so this is the folded ones, not the open
+   *  ones, and an empty list means the whole tree is on screen. */
+  folded?: Oid[];
   showIndex: boolean;
+  /** Orphans are half the lesson, so they are drawn unless asked otherwise. */
+  showUnreachable?: boolean;
+  /** `--learning`: commits arrive already open. A room watching a demo should
+   *  all see the same picture, including whoever opens the page late, without
+   *  anyone having to unfold anything. */
+  learning?: boolean;
+  /** Arrows from an orphaned object to things that are still reachable — a
+   *  tree's entries, and a discarded commit's parent. They cross the picture,
+   *  so they are asked for rather than assumed. */
+  showCrossLinks?: boolean;
 }
+
+/** How many states either side keeps. The server holds the history and the
+ *  browser holds the tape; sharing the number makes them forget together. */
+export const TAPE_CAP = 400;
 
 export const DEFAULT_VIEW: View = {
   question: { kind: 'all' },
   limit: 120,
   expanded: [],
+  folded: [],
   showIndex: true,
+  showUnreachable: true,
+  showCrossLinks: false,
 };
 
 export interface Snapshot {

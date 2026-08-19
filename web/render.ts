@@ -10,15 +10,10 @@
  * Hidden means absent: culled nodes are not drawn *and* not walked.
  */
 
-import type { Scene, SceneEdge, SceneNode } from '../src/layout.js';
+import { M, type Scene, type SceneEdge, type SceneNode } from '../src/layout.js';
 import type { Change } from '../src/diff.js';
+import type { Camera } from './camera.js';
 import { chipHue, hueFor, theme } from './theme.js';
-
-export interface Camera {
-  x: number;
-  y: number;
-  scale: number;
-}
 
 export interface Paint {
   camera: Camera;
@@ -32,12 +27,16 @@ export interface Paint {
   selected: string | null;
   /** Objects the reader marked, to keep an eye on them as the graph moves. */
   marked: Set<string>;
+  /** Whether a pinned node wears a pushpin. Off unless the reader asked. */
+  showPins: boolean;
   /** 0→1 while new things grow out of where they came from. */
   enter: number;
   /** Nodes that have gone, drawn at their old place while they fade. */
   ghosts: SceneNode[];
   /** False under prefers-reduced-motion: everything snaps to its end state. */
   motion: boolean;
+  /** The band whose seam is under the pointer or being dragged. */
+  resizing?: string | null;
 }
 
 const TIER = { none: 0.45, sha: 0.75, kind: 1.05, names: 1.35 };
@@ -190,12 +189,20 @@ function drawBands(
     // caption below has color under it everywhere it might be pinned.
     ctx.fillStyle = band.key === 'index' ? theme.panel : 'rgba(255,255,255,0.014)';
     ctx.fillRect(band.x - 10, v.y0, band.w + 20, v.y1 - v.y0);
-    ctx.font = `500 11px ${theme.sans}`;
+    // Furniture, not content: the caption stays the same size on screen at any
+    // zoom, so it is divided back out of the camera's scale.
+    const z = p.camera.scale;
+    ctx.font = `500 ${11 / z}px ${theme.sans}`;
     ctx.fillStyle = theme.faint;
-    ctx.fillText(band.label, band.x - 4, v.y0 + 14);
+    ctx.fillText(band.label, band.x - 4, v.y0 + 14 / z);
+    // The seam you drag to give a band more room. Faint, because it is furniture.
+    const seam = bandEdge(band);
+    if (seam !== null) {
+      ctx.fillStyle = p.resizing === band.key ? theme.muted : theme.line;
+      ctx.fillRect(seam - 0.5, v.y0, 1, v.y1 - v.y0);
+    }
   }
   ctx.restore();
-  void p;
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +280,10 @@ function drawEdge(
     const ay = a.y + a.h;
     const bx = b.x + b.w / 2;
     const by = b.y;
-    ctx.strokeStyle = theme.ink;
+    // A line touching a ghost is part of the ghost's story, not the live
+    // spine's: it drops to the ghost grey so the orphanage stays quiet.
+    const stroke = a.unreachable === true || b.unreachable === true ? theme.ghost : theme.ink;
+    ctx.strokeStyle = stroke;
     ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(ax, ay);
@@ -288,7 +298,7 @@ function drawEdge(
         ctx.lineTo(bx, by);
       }
       ctx.stroke();
-      arrowhead(ctx, bx, by, Math.PI / 2, theme.ink);
+      arrowhead(ctx, bx, by, Math.PI / 2, stroke);
     } else {
       // Dragged level with or above its parent. Still leave the child from the
       // bottom and route around both, entering the parent's side: the top of a
@@ -302,7 +312,7 @@ function drawEdge(
       ctx.lineTo(aisle, my);
       ctx.lineTo(b.x + b.w, my);
       ctx.stroke();
-      arrowhead(ctx, b.x + b.w, my, Math.PI, theme.ink);
+      arrowhead(ctx, b.x + b.w, my, Math.PI, stroke);
     }
   } else if (e.kind === 'pointer') {
     // "Points at" is learned in five seconds and then should not be shouted.
@@ -390,6 +400,39 @@ function drawNode(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, lit: Se
     ctx.lineWidth = n.kind === 'head' ? 1.8 : 1.2;
     if (n.conflict) ctx.setLineDash([4, 2]);
     ctx.stroke();
+  }
+
+  // A folded tree is drawn like an empty one, so it carries its own handle: a
+  // stub arrow off its right edge, in the tree hue, pointing at the entries
+  // that are not there. "There is more in here" has to be visible at any zoom.
+  if (n.folded) {
+    ctx.setLineDash([]);
+    ctx.strokeStyle = theme.tree;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(n.x + n.w + 4, n.y + n.h / 2);
+    ctx.lineTo(n.x + n.w + 13, n.y + n.h / 2);
+    ctx.stroke();
+    arrowhead(ctx, n.x + n.w + 17, n.y + n.h / 2, 0, theme.tree);
+  }
+
+  // A node the reader dragged somewhere gets a pushpin through its top right
+  // corner: a hand-placed thing, so it wears the one colour the reader's own
+  // marks use — outside the silhouette, so it joins no hue count.
+  if (n.pinned && p.showPins) {
+    const hx = n.x + n.w + 3;
+    const hy = n.y - 2;
+    ctx.setLineDash([]);
+    ctx.strokeStyle = theme.mark;
+    ctx.fillStyle = theme.mark;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(hx, hy);
+    ctx.lineTo(n.x + n.w - 4, n.y + 5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(hx, hy, 3.2, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   const marked = p.marked.has(n.id);
@@ -484,7 +527,10 @@ function label(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, dim: numbe
     ctx.fillStyle = ghost ? theme.ghost : 'rgba(10,12,16,0.9)';
     ctx.fillText(n.label, n.x + 10, n.y + n.h / 2 + 4);
     if (s >= TIER.kind && n.sub) {
-      ctx.font = `10px ${theme.sans}`;
+      // `tree +N` on a folded tree is not a description like the others — it is
+      // the count of what is being held back, so it is said in bold. Bold and
+      // not a colour: red on the tree green is the one pair that reads badly.
+      ctx.font = `${n.folded ? '700 ' : ''}10px ${theme.sans}`;
       ctx.fillStyle = ghost ? theme.faint : 'rgba(10,12,16,0.6)';
       ctx.textAlign = 'right';
       ctx.fillText(n.sub, n.x + n.w - 8, n.y + n.h / 2 + 4);
@@ -503,20 +549,24 @@ function clip(ctx: CanvasRenderingContext2D, s: string, max: number): string {
 
 // ---------------------------------------------------------------------------
 
+/** Where a band's drag seam sits: the middle of the gap after it. The index is
+ *  last and holds one column of fixed-width chips, so it has no seam. */
+const bandEdge = (band: Scene['bands'][number]) =>
+  band.key === 'index' ? null : band.x + band.w + M.bandGap / 2;
+
+/** The band whose width a drag at `wx` would change, if any. */
+export function bandEdgeAt(scene: Scene, wx: number): string | null {
+  for (const band of scene.bands) {
+    const e = bandEdge(band);
+    if (e !== null && Math.abs(wx - e) <= 9) return band.key;
+  }
+  return null;
+}
+
 export function hitTest(scene: Scene, wx: number, wy: number): SceneNode | null {
   for (let i = scene.nodes.length - 1; i >= 0; i--) {
     const n = scene.nodes[i];
     if (wx >= n.x - 3 && wx <= n.x + n.w + 3 && wy >= n.y - 3 && wy <= n.y + n.h + 3) return n;
   }
   return null;
-}
-
-/**
- * Fit the width and let history run off the bottom. A repository is tall and
- * narrow, so a scale that fits its height too is a scale at which nothing can
- * be read — the graph is meant to be scrolled, not squinted at.
- */
-export function fit(scene: Scene, width: number): Camera {
-  const scale = Math.min(2, Math.max(0.15, (width - 40) / scene.width));
-  return { x: 20, y: 20, scale };
 }

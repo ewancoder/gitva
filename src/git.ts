@@ -210,15 +210,15 @@ function identDate(ident: string): number {
  * Capabilities, not modes. `count-objects -v` and a ref count are both cheap;
  * everything the interface offers or declines is derived from them.
  *
- * The limits are set from the *expensive* step — measured, not guessed, because
- * the previous build got one of these wrong by more than an order of magnitude
- * by sizing it from the cheap step.
+ * The limits are set from the *expensive* step, not the cheap one — the
+ * previous build got one of these wrong by more than an order of magnitude by
+ * sizing it from the cheap step.
  *
- * Listing every object is nearly free (`--batch-all-objects --batch-check` on
- * 46,000 objects is a few milliseconds). Reading every *tree* so orphans can be
- * found by traversal is what binds: it costs about 8.5 microseconds per object
- * on a mid-range laptop — 394 ms at 46,000 objects, 17 ms at 2,500. The budget
- * for rebuilding after a change is a tenth of a second, so the limit is there.
+ * Listing every object is nearly free (`--batch-all-objects --batch-check`).
+ * Reading every *tree* so unreachable objects can be found by traversal is what
+ * binds, and the budget for rebuilding after a change is a tenth of a second,
+ * so the limit is there. Both numbers are estimates, not benchmarks: nobody has
+ * timed this. If a repository in the field argues with them, measure first.
  */
 export const LIMITS = { fullLoad: 12_000, indexNodes: 400 };
 
@@ -598,9 +598,9 @@ function notesFor(
   const notes: string[] = [];
   if (!caps.fullLoad) {
     notes.push(
-      `Orphan detection is off: ${caps.objectCount.toLocaleString()} objects, and finding an orphan means reading every one. Everything drawn here is reachable by construction.`,
+      `Unreachable detection is off: ${caps.objectCount.toLocaleString()} objects, and finding an unreachable object means reading every one. Everything drawn here is reachable by construction.`,
     );
-    notes.push('Trees load only for the commits you open — nothing walks the object database.');
+    notes.push('Trees load only for the commits you expand — nothing walks the object database.');
   }
   if (ctx.indexElided) {
     notes.push(
@@ -611,6 +611,8 @@ function notesFor(
   if (ctx.refsOutside > 0)
     notes.push(`${ctx.refsOutside} refs point outside this window and are left out.`);
   if (!ctx.view.showIndex) notes.push('The index is hidden.');
+  if (ctx.view.showUnreachable === false && caps.fullLoad)
+    notes.push('Unreachable objects are hidden — they are still in the object database.');
   if (!caps.commitGraph && caps.objectCount > LIMITS.fullLoad) {
     // Teaching the user about a git internal they didn't know existed is gitva
     // working as designed. Detect it, hint at it, never build it — that would
@@ -632,6 +634,7 @@ export async function readBody(h: RepoHandle, oid: Oid): Promise<{
   type: ObjectType;
   size: number;
   text: string | null;
+  truncated?: boolean;
   entries?: TreeEntry[];
 }> {
   const batch = parseBatch(await run(h.repo, ['cat-file', '--batch'], oid + '\n'));
@@ -646,5 +649,7 @@ export async function readBody(h: RepoHandle, oid: Oid): Promise<{
     type: got.type,
     size: got.body.length,
     text: binary ? null : slice.toString('utf8'),
+    // The panel must not present the first 64 KiB of a blob as the whole blob.
+    truncated: got.body.length > slice.length,
   };
 }

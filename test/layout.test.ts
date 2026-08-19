@@ -118,6 +118,35 @@ describe('a commit\'s objects', () => {
     );
   });
 
+  it('holds back what a folded tree contains, and still draws the tree', () => {
+    // Hidden means absent: folding `lib` takes the blob under it out of the
+    // scene, rather than drawing it somewhere nobody can see.
+    const g = objectGraph('root', { root: trees.root, lib: [{ name: 'c.txt', oid: 'only', mode: '100644', type: 'blob' }] }, new Set(['lib']));
+    assert.equal(g.depth.get('lib'), 1, 'the folded tree is still there');
+    assert.equal(g.depth.has('only'), false, 'what it holds left the scene');
+    assert.deepEqual(
+      g.edges.map((e) => e.label),
+      ['a.txt', 'lib'],
+      'and no arrow points at a node that is not drawn',
+    );
+  });
+
+  it('keeps a blob a folded tree shared with someone still open', () => {
+    // The fold hides a path, not an object: `shared` is a.txt at the root too,
+    // so it stays, and only the arrow from `lib` goes.
+    const g = objectGraph('root', trees, new Set(['lib']));
+    assert.equal(g.depth.get('shared'), 1, 'it moves up to the path still open');
+    assert.equal(g.edges.some((e) => e.from === 'lib'), false);
+  });
+
+  it('holds back everything when the root itself is folded', () => {
+    // The root is a tree like any other: a commit whose own tree is folded
+    // shows the tree and nothing under it.
+    const g = objectGraph('root', trees, new Set(['root']));
+    assert.deepEqual(g.columns, [['root']]);
+    assert.deepEqual(g.edges, []);
+  });
+
   it('marks an executable and a symlink on the arrow', () => {
     const g = objectGraph('r', {
       r: [
@@ -134,6 +163,34 @@ describe('the scene', () => {
 
   it('is the same picture every time it is drawn', () => {
     assert.deepEqual(layout(snap, DEFAULT_VIEW), layout(snap, DEFAULT_VIEW));
+  });
+
+  it('folding a tree removes what it holds from the scene, and says how much', () => {
+    // A folded tree with nothing drawn under it would read as an empty tree, so
+    // it carries the count. And the blob is gone from the scene, not hidden in
+    // it: the node list is what the reader can see.
+    const open = fakeSnapshot(
+      { a: [] },
+      {
+        trees: {
+          [oid('ta')]: [{ name: 'a.txt', oid: oid('bl'), mode: '100644', type: 'blob' }],
+        },
+        objects: {
+          [oid('ta')]: { oid: oid('ta'), type: 'tree', size: 1 },
+          [oid('bl')]: { oid: oid('bl'), type: 'blob', size: 1 },
+        },
+      },
+    );
+    const view = { ...DEFAULT_VIEW, expanded: [oid('a')] };
+    const before = layout(open, view);
+    assert.equal(before.nodes.find((n) => n.id === oid('ta'))?.sub, 'tree');
+    assert.ok(before.nodes.some((n) => n.id === oid('bl')));
+
+    const after = layout(open, { ...view, folded: [oid('ta')] });
+    assert.equal(after.nodes.find((n) => n.id === oid('ta'))?.sub, 'tree +1');
+    assert.equal(after.nodes.find((n) => n.id === oid('ta'))?.folded, true, 'and says so, for the painter');
+    assert.equal(after.nodes.some((n) => n.id === oid('bl')), false, 'hidden means absent');
+    assert.equal(after.edges.some((e) => e.to === oid('bl')), false);
   });
 
   it('does not move anything sideways when a commit lands on top', () => {
@@ -162,6 +219,64 @@ describe('the scene', () => {
     const grew = open.rows[0].h - folded.rows[0].h;
     assert.equal(open.rows[1].y - folded.rows[1].y, grew, 'and the row below shifted by exactly that');
     assert.ok(open.nodes.some((n) => n.id === oid('blob1')));
+  });
+
+  it('makes the pointer gutter as narrow as the longest chain in it', () => {
+    // main alone is one hop, HEAD → main is two, and neither should be paying
+    // for the third column an annotated tag would need.
+    const bare = fakeSnapshot({ c: ['b'], b: ['a'], a: [] });
+    bare.head = { ref: undefined, oid: undefined, detached: false, unborn: false };
+    const oneHop = layout(bare, DEFAULT_VIEW);
+    const twoHops = layout(snap, DEFAULT_VIEW);
+    const w = (sc: typeof oneHop) => sc.bands.find((b) => b.key === 'pointers')!.w;
+    assert.equal(w(twoHops) - w(oneHop), M.chipPitch, 'one column of difference');
+    assert.equal(w(twoHops), M.gutterW - M.chipPitch, 'and the full gutter is three');
+  });
+
+  it('still right-aligns the chips against the narrower gutter', () => {
+    const scene = layout(snap, DEFAULT_VIEW);
+    const band = scene.bands.find((b) => b.key === 'pointers')!;
+    for (const n of scene.nodes.filter((c) => c.kind === 'ref' || c.kind === 'head')) {
+      assert.ok(n.x >= band.x && n.x + n.w <= band.x + band.w, `${n.id} is inside the gutter`);
+    }
+    // The last hop is the one nearest the commits: HEAD sits left of its branch.
+    const head = scene.nodes.find((n) => n.id === 'HEAD')!;
+    const ref = scene.nodes.find((n) => n.kind === 'ref')!;
+    assert.ok(head.x < ref.x);
+  });
+
+  it('grows the index column to hold an entry dragged out to the right', () => {
+    const s = fakeSnapshot({ c: ['b'], b: ['a'], a: [] });
+    s.index = [{ path: 'a.txt', oid: oid('blob1'), mode: '100644', stage: 0 }];
+    const id = 'index:0:a.txt';
+    const plain = layout(s, DEFAULT_VIEW);
+    const chip = plain.nodes.find((n) => n.id === id)!;
+    const band = (sc: typeof plain) => sc.bands.find((b) => b.key === 'index')!;
+
+    const out = layout(s, DEFAULT_VIEW, { [id]: { x: chip.x + 300, y: chip.y } });
+    assert.equal(band(out).w, band(plain).w + 300, 'the band followed it');
+    assert.ok(out.width > plain.width, 'and the picture is wide enough to pan to it');
+
+    // Dragging left is a way out of the band, and stays one.
+    const back = layout(s, DEFAULT_VIEW, { [id]: { x: chip.x - 300, y: chip.y } });
+    assert.equal(band(back).w, band(plain).w);
+  });
+
+  it('widens a band by hand, moving every band after it along', () => {
+    const plain = layout(snap, DEFAULT_VIEW);
+    const wide = layout(snap, DEFAULT_VIEW, {}, { pointers: 400 });
+    const band = (sc: typeof plain, key: string) => sc.bands.find((b) => b.key === key)!;
+    assert.equal(band(wide, 'pointers').w, 400);
+    const shift = 400 - band(plain, 'pointers').w;
+    assert.equal(band(wide, 'commits').x - band(plain, 'commits').x, shift);
+    assert.equal(band(wide, 'index').x - band(plain, 'index').x, shift);
+    assert.equal(wide.width - plain.width, shift);
+  });
+
+  it('will not narrow a band past what it holds', () => {
+    const plain = layout(snap, DEFAULT_VIEW);
+    const squeezed = layout(snap, DEFAULT_VIEW, {}, { pointers: 10, commits: 1, objects: 1 });
+    assert.deepEqual(squeezed.bands, plain.bands);
   });
 
   it('explains the ref chips it draws — the scene keys them, the panel looks them up', () => {
@@ -241,6 +356,24 @@ describe('the scene', () => {
     assert.deepEqual(entries.map((e) => e.conflict), [false, true]);
   });
 
+  it('folds an orphaned tree too — a ghost is a tree with entries like any other', () => {
+    const s = fakeSnapshot({ a: [] });
+    s.objects[oid('lt')] = { oid: oid('lt'), type: 'tree', size: 7 };
+    s.objects[oid('lb')] = { oid: oid('lb'), type: 'blob', size: 7 };
+    s.trees[oid('lt')] = [{ name: 'gone.txt', oid: oid('lb'), mode: '100644', type: 'blob' }];
+    s.unreachable = [oid('lt'), oid('lb')];
+    const scene = layout(s, { ...DEFAULT_VIEW, folded: [oid('lt')] });
+    assert.equal(scene.nodes.find((n) => n.id === oid('lt'))?.sub, 'tree +1');
+    assert.equal(scene.nodes.find((n) => n.id === oid('lt'))?.folded, true);
+    // Folding a ghost does not delete one: an unreachable object nothing draws
+    // any more falls through to the dangling band, because "never silently
+    // dropped" outranks the fold. It leaves the fold's column, not the picture.
+    const lost = scene.nodes.find((n) => n.id === oid('lb'))!;
+    assert.ok(lost, 'an orphan is never hidden by a fold');
+    assert.equal(lost.stray, true);
+    assert.equal(scene.edges.some((e) => e.to === oid('lb')), false, 'and no arrow into it from the folded tree');
+  });
+
   it('draws an orphan nothing points at, never silently dropping it', () => {
     const s = fakeSnapshot({ a: [] });
     s.objects[oid('lost')] = { oid: oid('lost'), type: 'blob', size: 7 };
@@ -249,6 +382,17 @@ describe('the scene', () => {
     const lost = scene.nodes.find((n) => n.id === oid('lost'))!;
     assert.ok(lost);
     assert.equal(lost.unreachable, true);
+  });
+
+  it('hides orphans outright when they are switched off, and keeps staged blobs', () => {
+    const s = fakeSnapshot({ a: [] });
+    s.objects[oid('lost')] = { oid: oid('lost'), type: 'blob', size: 7 };
+    s.objects[oid('stag')] = { oid: oid('stag'), type: 'blob', size: 7 };
+    s.unreachable = [oid('lost')];
+    s.stagedOnly = [oid('stag')];
+    const off = layout(s, { ...DEFAULT_VIEW, showUnreachable: false });
+    assert.ok(!off.nodes.some((n) => n.id === oid('lost')), 'out of the scene, not merely invisible');
+    assert.ok(off.nodes.some((n) => n.id === oid('stag')), 'the index still holds this one');
   });
 
   it('keeps the arrows between objects that were orphaned together', () => {
@@ -303,6 +447,22 @@ describe('the scene', () => {
     assert.ok(node(tree).x >= commits.x + commits.w, 'and never where the commits are');
     assert.ok(node(blob).x > node(tree).x);
     assert.ok(node(tree).y > node(oid('a')).y);
+  });
+
+  it('fans a dangling tree out to a blob that git happened to list first', () => {
+    // hash-object then mktree: the blob exists before the tree does, and comes
+    // back first. Order of arrival must not decide who gets the first column.
+    const s = fakeSnapshot({ a: [] });
+    const [tree, blob] = ['tlost', 'blost'].map(oid);
+    s.trees[tree] = [{ mode: '100644', name: 'gone.txt', oid: blob, type: 'blob' }];
+    s.objects[tree] = { oid: tree, type: 'tree', size: 1 };
+    s.objects[blob] = { oid: blob, type: 'blob', size: 1 };
+    s.unreachable = [blob, tree];
+
+    const scene = layout(s, DEFAULT_VIEW);
+    const node = (o: string) => scene.nodes.find((n) => n.id === o)!;
+    assert.ok(node(blob).x > node(tree).x, 'the blob is right of the tree, not under it');
+    assert.equal(node(blob).y, node(tree).y, 'on the same row');
   });
 
   it('puts an orphaned tag in the pointer gutter, beside what it still names', () => {
@@ -365,6 +525,105 @@ describe('the scene', () => {
     assert.ok(scene.edges.some((e) => e.from === tree && e.to === blob));
   });
 
+  it('keeps a staged blob beside the orphaned tree that names it — git write-tree', () => {
+    // `write-tree` writes a tree nothing points at, holding the blobs the index
+    // still holds. Hoisted to the top of the page the blob would be drawn twice
+    // over: purple up there, and unsaid down beside the tree that names it.
+    const s = fakeSnapshot({ a: [] });
+    const [tree, blob] = ['twritten', 'bstaged'].map(oid);
+    s.trees[tree] = [{ mode: '100644', name: 'x.txt', oid: blob, type: 'blob' }];
+    s.objects[tree] = { oid: tree, type: 'tree', size: 1 };
+    s.objects[blob] = { oid: blob, type: 'blob', size: 1 };
+    s.unreachable = [tree];
+    s.stagedOnly = [blob];
+    s.index = [{ path: 'x.txt', oid: blob, mode: '100644', stage: 0 }];
+
+    const scene = layout(s, DEFAULT_VIEW);
+    const node = (o: string) => scene.nodes.find((n) => n.id === o)!;
+    assert.ok(node(blob).y > node(oid('a')).y, 'down with the tree, not up at the top');
+    assert.ok(node(blob).x > node(tree).x, 'in the fan-out beside it');
+    assert.equal(node(blob).staged, true, 'and still the index\u2019s, not a ghost');
+    assert.equal(node(blob).unreachable, false);
+    assert.ok(scene.edges.some((e) => e.from === tree && e.to === blob && e.kind === 'entry'));
+    assert.ok(scene.edges.some((e) => e.to === blob && e.kind === 'stage'), 'the chip still holds it');
+  });
+
+  it('hoists a staged blob whose only tree is an orphan that is switched off', () => {
+    const s = fakeSnapshot({ a: [] });
+    const [tree, blob] = ['twritten', 'bstaged'].map(oid);
+    s.trees[tree] = [{ mode: '100644', name: 'x.txt', oid: blob, type: 'blob' }];
+    s.objects[tree] = { oid: tree, type: 'tree', size: 1 };
+    s.objects[blob] = { oid: blob, type: 'blob', size: 1 };
+    s.unreachable = [tree];
+    s.stagedOnly = [blob];
+
+    const scene = layout(s, { ...DEFAULT_VIEW, showUnreachable: false });
+    const node = (o: string) => scene.nodes.find((n) => n.id === o)!;
+    assert.ok(!scene.nodes.some((n) => n.id === tree), 'the tree is out of the scene');
+    assert.ok(node(blob).y < node(oid('a')).y, 'so the blob goes back up beside the newest commit');
+  });
+
+  it('draws an orphaned tree\u2019s arrows into live territory only when asked', () => {
+    // The whole point of the switch: the ghost tree names the very blob the
+    // live commit names, so gc would free the tree and nothing else. Off, the
+    // arrow is not there; on, it is, and not one node has moved.
+    const s = fakeSnapshot({ a: [] });
+    const [live, lost, own] = ['bl', 'tlost', 'bown'].map(oid);
+    s.trees[oid('ta')] = [{ mode: '100644', name: 'a.txt', oid: live, type: 'blob' }];
+    s.trees[lost] = [
+      { mode: '100644', name: 'a.txt', oid: live, type: 'blob' },
+      { mode: '100644', name: 'gone.txt', oid: own, type: 'blob' },
+    ];
+    for (const [o, t] of [[oid('ta'), 'tree'], [lost, 'tree'], [live, 'blob'], [own, 'blob']] as const)
+      s.objects[o] = { oid: o, type: t, size: 1 };
+    s.unreachable = [lost, own];
+
+    const crosses = (sc: ReturnType<typeof layout>) =>
+      sc.edges.filter((e) => e.from === lost && e.to === live);
+    const open = { ...DEFAULT_VIEW, expanded: [oid('a')] };
+    const off = layout(s, open);
+    const on = layout(s, { ...open, showCrossLinks: true });
+    assert.equal(crosses(off).length, 0);
+    assert.equal(crosses(on).length, 1, 'one arrow, labelled with the name it is under');
+    assert.equal(crosses(on)[0].label, 'a.txt');
+    assert.equal(on.nodes.filter((n) => n.id === live).length, 1, 'the blob is not drawn twice');
+    assert.deepEqual(on.nodes, off.nodes, 'an arrow is added, nothing is moved');
+    assert.ok(on.edges.some((e) => e.from === lost && e.to === own), 'its own blob still fans out');
+    // Fold the commit away and the blob is off the screen; an arrow to a node
+    // nobody can see is not an arrow.
+    assert.equal(crosses(layout(s, { ...DEFAULT_VIEW, showCrossLinks: true })).length, 0);
+  });
+
+  it('draws a discarded commit\u2019s arrow to the live parent it was cut from', () => {
+    // What `git reset --hard HEAD~1` leaves: the old tip hangs below, still
+    // naming the commit the branch now points at.
+    const s = fakeSnapshot({ a: ['b'], b: [] });
+    const lost = oid('lost');
+    s.commits[lost] = { ...s.commits[oid('a')], oid: lost, tree: oid('ta'), parents: [oid('a')] };
+    s.objects[lost] = { oid: lost, type: 'commit', size: 1 };
+    s.unreachable = [lost];
+
+    const parent = (v: View) =>
+      layout(s, v).edges.filter((e) => e.from === lost && e.to === oid('a'));
+    assert.equal(parent(DEFAULT_VIEW).length, 0, 'off by default, like any cross link');
+    const on = parent({ ...DEFAULT_VIEW, showCrossLinks: true });
+    assert.equal(on.length, 1);
+    assert.equal(on[0].kind, 'parent');
+  });
+
+  it('says nothing about the entries of a folded orphan, cross links or not', () => {
+    const s = fakeSnapshot({ a: [] });
+    const [live, lost] = ['bl', 'tlost'].map(oid);
+    s.trees[oid('ta')] = [{ mode: '100644', name: 'a.txt', oid: live, type: 'blob' }];
+    s.trees[lost] = [{ mode: '100644', name: 'a.txt', oid: live, type: 'blob' }];
+    for (const o of [oid('ta'), lost]) s.objects[o] = { oid: o, type: 'tree', size: 1 };
+    s.objects[live] = { oid: live, type: 'blob', size: 1 };
+    s.unreachable = [lost];
+
+    const scene = layout(s, { ...DEFAULT_VIEW, expanded: [oid('a')], showCrossLinks: true, folded: [lost] });
+    assert.ok(!scene.edges.some((e) => e.from === lost));
+  });
+
   it('lets a pinned orphan stay where it was drawn, reserving no room below', () => {
     const s = fakeSnapshot({ a: ['b'], b: ['c'], c: ['d'], d: ['e'], e: [] });
     s.objects[oid('lost')] = { oid: oid('lost'), type: 'blob', size: 7 };
@@ -375,6 +634,23 @@ describe('the scene', () => {
     assert.deepEqual([lost.x, lost.y], [300, 20]);
     assert.equal(lost.stray, true);
     assert.ok(kept.height < dropped.height);
+  });
+
+  it('puts lost commits newest first, and settles a tie by sha', () => {
+    const s = fakeSnapshot({ a: ['b'], b: [] });
+    const [old, recent, tied] = ['lost1', 'lost2', 'lost3'].map(oid);
+    for (const [o, when] of [
+      [old, 1],
+      [recent, 9],
+      [tied, 9],
+    ] as const) {
+      s.commits[o] = { ...s.commits[oid('a')], oid: o, parents: [], authorDate: when };
+    }
+    s.unreachable = [old, recent, tied];
+    const scene = layout(s, DEFAULT_VIEW);
+    const y = (o: string) => scene.nodes.find((n) => n.id === o)!.y;
+    assert.ok(y(recent) < y(old), 'the most recent thing you lost is the one you are looking for');
+    assert.ok(y(recent) < y(tied), 'two at the same moment go in sha order, so the picture is stable');
   });
 
   it('lets a pin override a position without disturbing anything else', () => {

@@ -51,7 +51,7 @@ const KIND: Record<string, { title: string; what: string; made: string }> = {
   },
   more: {
     title: 'Load more history',
-    what: 'These commits have parents that are real, but outside the window gitva asked for. The arrow is drawn honestly into here rather than pointing at a node that is not on screen. Click this block to load the rest of the history.',
+    what: 'These commits have parents that are real, but outside the window gitva asked for. The link is drawn honestly into here rather than pointing at an object that is not on screen. Click this block to load the rest of the history.',
     made: 'git rev-list -n <more>',
   },
 };
@@ -82,7 +82,7 @@ export function explain(snap: Snapshot, kind: string, id: string): Explanation {
     } else if (snap.stagedOnly?.includes(id)) {
       facts.push([
         'reachable',
-        'only through the index — no commit names it yet. git gc keeps it while it is staged, and unstaging it makes it an orphan.',
+        'only through the index — no commit names it yet. git gc keeps it while it is staged, and unstaging it makes it unreachable.',
       ]);
     }
   }
@@ -158,16 +158,3 @@ export const entryId = (path: string, stage: number) => `index:${stage}:${path}`
 
 /** Scene nodes for refs are keyed `ref:<full name>`; the lookups want the name. */
 export const refName = (id: string) => id.replace(/^ref:/, '');
-
-/** One line for the header: what just changed. */
-export function describeChange(counts: {
-  added: number;
-  removed: number;
-  moved: number;
-}): string {
-  const parts: string[] = [];
-  if (counts.added) parts.push(`+${counts.added}`);
-  if (counts.removed) parts.push(`-${counts.removed}`);
-  if (counts.moved) parts.push(`${counts.moved} moved`);
-  return parts.length ? parts.join('  ') : 'no change';
-}
