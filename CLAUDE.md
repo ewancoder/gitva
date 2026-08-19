@@ -78,7 +78,7 @@ Everything horizontal across the top is a **toolbar**, each named for its job, n
 
 | region | holds |
 |---|---|
-| **view toolbar** | repo name, the question, search, branches, load all, expand/collapse, index · links from unreachable · unreachable, help. Every control here is a `View` field. |
+| **view toolbar** | repo name, load all, expand/collapse, index · links from unreachable · unreachable, help. Every control here is a `View` field. The question — branches and search — is built but hidden behind `QUESTIONS_ENABLED` in `src/types.ts`, because one shared view means one viewer's filter is everyone's. |
 | **recording toolbar** | step back · pause · step forward · scrub · live · tally · what changed |
 | **reset toolbar** | `Reset view`, alone because it is the most-used control and got lost among the others |
 | **notes toolbar** | what the canvas isn't showing, what gitva won't do to your repo, and why |
@@ -277,8 +277,11 @@ git reset b.txt       → the index entry goes; the blob survives, now marked un
 ## Known open work
 
 - **One viewer can change what every other viewer sees.** The server holds a single `view` and
-  broadcasts every rebuild to all clients, so a filter, a search or "load all" applies to
-  everyone. Intended behaviour is *the repository is shared, the view is yours* — viewers may
+  broadcasts every rebuild to all clients, so "load all", expanding and the index toggle apply to
+  everyone. Filtering — chosen branches, or a search — is switched off for that reason
+  (`QUESTIONS_ENABLED` in `src/types.ts`): the control is hidden and `sanitise` forces
+  `{ kind: 'all' }`, so no browser can ask a different question of the server. Turning it back on
+  is one constant, once the view is per-viewer. Intended behaviour is *the repository is shared, the view is yours* — viewers may
   only watch the recording, never affect anyone else's canvas. The fix touches the recording's
   design: today it is a list of pre-built snapshots made under whatever view was current, and
   per-viewer views mean it has to hold the repository's state and let each browser ask its own

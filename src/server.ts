@@ -11,8 +11,8 @@ import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GitError, changeSignal, measure, open, readBody, snapshot, type RepoHandle } from './git.js';
-import type { Capabilities, View } from './types.js';
-import { DEFAULT_VIEW, TAPE_CAP } from './types.js';
+import type { Capabilities, Question, View } from './types.js';
+import { DEFAULT_VIEW, QUESTIONS_ENABLED, TAPE_CAP } from './types.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const MIME: Record<string, string> = {
@@ -277,22 +277,26 @@ function text(req: IncomingMessage): Promise<string> {
   });
 }
 
+/** The question, checked before it reaches git. Only reached when
+ *  `QUESTIONS_ENABLED`; kept whole so re-enabling is one constant. */
+export function sanitiseQuestion(q: Question | undefined): View['question'] {
+  return q?.kind === 'refs'
+    ? // No ref name begins with a dash, and a name that did would reach
+      // `rev-list` as an option rather than as a thing to walk from.
+      { kind: 'refs', refs: (q.refs ?? []).filter((r) => /^[\w./@^~][\w./@^~-]*$/.test(r)).slice(0, 200) }
+    : q?.kind === 'search'
+      ? {
+          kind: 'search',
+          text: String(q.text ?? '').slice(0, 200),
+          in: (['message', 'author', 'path', 'content'] as const).includes(q.in) ? q.in : 'message',
+        }
+      : { kind: 'all' };
+}
+
 /** The view arrives from the browser, so it is checked before it reaches git. */
 export function sanitise(raw: unknown): View {
   const v = (raw ?? {}) as Partial<View>;
-  const q = v.question;
-  const question: View['question'] =
-    q?.kind === 'refs'
-      ? // No ref name begins with a dash, and a name that did would reach
-        // `rev-list` as an option rather than as a thing to walk from.
-        { kind: 'refs', refs: (q.refs ?? []).filter((r) => /^[\w./@^~][\w./@^~-]*$/.test(r)).slice(0, 200) }
-      : q?.kind === 'search'
-        ? {
-            kind: 'search',
-            text: String(q.text ?? '').slice(0, 200),
-            in: (['message', 'author', 'path', 'content'] as const).includes(q.in) ? q.in : 'message',
-          }
-        : { kind: 'all' };
+  const question = QUESTIONS_ENABLED ? sanitiseQuestion(v.question) : { kind: 'all' as const };
   return {
     question,
     // The ceiling is only there to keep a hostile number out of `rev-list -n`;

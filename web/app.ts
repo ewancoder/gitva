@@ -12,7 +12,7 @@
 
 import { diffScenes, describe, EMPTY_CHANGE, type Change } from '../src/diff.js';
 import { layout, M, type Scene, type SceneNode } from '../src/layout.js';
-import { type Snapshot, type View } from '../src/types.js';
+import { QUESTIONS_ENABLED, type Snapshot, type View } from '../src/types.js';
 import { bounded, centre, fit, glideStep, refit, toWorld, zoom, zoomOut, type Camera } from './camera.js';
 import { renderPanel } from './panel.js';
 import { bandEdgeAt, draw, hitTest, snapPositions } from './render.js';
@@ -325,6 +325,9 @@ function askFromToolbar() {
   tape.ask(questionFor(kind, $<HTMLInputElement>('search').value, refs));
   pushView();
 }
+
+// Filtering is off while the server holds one shared view — see types.ts.
+if (!QUESTIONS_ENABLED) $('question').hidden = true;
 
 $('question').addEventListener('change', () => {
   const kind = $<HTMLSelectElement>('question').value;

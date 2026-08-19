@@ -93,8 +93,7 @@ the one line inside a ref.
 | click *load more history* | load another thousand commits (*load all* in the view toolbar loads the lot) |
 | <kbd>f</kbd> <kbd>←</kbd>/<kbd>[</kbd> <kbd>→</kbd>/<kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |
 
-In the view toolbar: ask for everything, for chosen branches, or search by message, author, path
-or content; load the whole history; expand or collapse every commit at once; hide the index;
+In the view toolbar: load the whole history; expand or collapse every commit at once; hide the index;
 hide the unreachable; show the *links from unreachable* — what a discarded object still points
 at, a tree's entries and a discarded commit's parent, off by default because they cross the
 canvas, and on when you want to see how much a discarded state shares with the live one and
@@ -104,8 +103,8 @@ why none of them care how big the repository is.
 
 Every step is kept, and the recording is the server's: while `gitva` runs it records, watched or
 not, so opening a second browser — or the first one, ten commands in — hands you everything
-that happened before you arrived rather than a blank page. Only git causes a step; expanding,
-filtering and paging redraw in place and add nothing. Pause and the recording keeps going
+that happened before you arrived rather than a blank page. Only git causes a step; expanding
+and paging redraw in place and add nothing. Pause and the recording keeps going
 behind you, so a demo can be **replayed instead of redone**; stepping backwards highlights the
 change in reverse, which is how you show a reset twice without doing it twice. Going back to a
 step asks the question that was being asked then — except for expanding: a commit you expanded

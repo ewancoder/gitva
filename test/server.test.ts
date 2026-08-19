@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { ensureFirstSnapshot, record, sanitise, serve, type Server } from '../src/server.js';
+import { ensureFirstSnapshot, record, sanitise, sanitiseQuestion, serve, type Server } from '../src/server.js';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,21 +13,27 @@ describe('the view arriving from the browser', () => {
     assert.deepEqual(sanitise({ question: { kind: 'nonsense' } }).question, { kind: 'all' });
     assert.equal(sanitise(null).limit, 120);
   });
+  it('asks for everything however hard the browser asks for a filter', () => {
+    // One shared view: a question from one viewer would rewrite every canvas.
+    assert.deepEqual(sanitise({ question: { kind: 'search', text: 'a', in: 'content' } }).question, { kind: 'all' });
+    assert.deepEqual(sanitise({ question: { kind: 'refs', refs: ['refs/heads/main'] } }).question, { kind: 'all' });
+  });
   it('refuses a ref name that is not one', () => {
     // A name beginning with a dash would reach `rev-list` as an option.
-    assert.deepEqual(sanitise({ question: { kind: 'refs', refs: ['--objects', '-n1'] } }).question, {
+    assert.deepEqual(sanitiseQuestion({ kind: 'refs', refs: ['--objects', '-n1'] }), {
       kind: 'refs',
       refs: [],
     });
-    assert.deepEqual(sanitise({ question: { kind: 'refs', refs: ['refs/heads/ok', '; rm -rf /'] } }).question, {
+    assert.deepEqual(sanitiseQuestion({ kind: 'refs', refs: ['refs/heads/ok', '; rm -rf /'] }), {
       kind: 'refs',
       refs: ['refs/heads/ok'],
     });
   });
   it('keeps a search inside what the plumbing will take', () => {
-    const q = sanitise({ question: { kind: 'search', text: 'x'.repeat(500), in: 'sausage' } }).question;
+    const q = sanitiseQuestion({ kind: 'search', text: 'x'.repeat(500), in: 'sausage' as 'message' });
     assert.deepEqual(q, { kind: 'search', text: 'x'.repeat(200), in: 'message' });
-    assert.equal(sanitise({ question: { kind: 'search', text: 'a', in: 'content' } }).question.kind, 'search');
+    assert.equal(sanitiseQuestion({ kind: 'search', text: 'a', in: 'content' }).kind, 'search');
+    assert.deepEqual(sanitiseQuestion(undefined), { kind: 'all' });
   });
 
   it('refuses an oid that is not one, and clamps the window', () => {

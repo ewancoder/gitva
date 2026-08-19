@@ -83,6 +83,15 @@ export interface Capabilities {
   limits: { fullLoad: number; indexNodes: number };
 }
 
+/**
+ * Filtering — chosen branches, or a search — is off. The server holds one
+ * shared `view` and broadcasts every rebuild, so one viewer's question rewrites
+ * every other viewer's canvas, and the rule is *the repository is shared, the
+ * view is yours* (CLAUDE.md, Known open work). The code stays: flip this once
+ * each browser can ask its own question, or behind a flag.
+ */
+export const QUESTIONS_ENABLED = false;
+
 export type Question =
   | { kind: 'all' }
   | { kind: 'refs'; refs: string[] }
