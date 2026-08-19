@@ -290,8 +290,12 @@ function updateHeader() {
   $('play').textContent = tape.following ? 'pause' : 'go live';
   $('play').setAttribute('aria-pressed', String(!tape.following));
   $('toggle-index').setAttribute('aria-pressed', String(tape.view.showIndex));
-  $('toggle-orphans').setAttribute('aria-pressed', String(tape.view.showUnreachable !== false));
+  const unreachableShown = tape.view.showUnreachable !== false;
+  $('toggle-orphans').setAttribute('aria-pressed', String(unreachableShown));
   $('toggle-cross').setAttribute('aria-pressed', String(tape.view.showCrossLinks === true));
+  // Links from unreachable are drawn from the unreachable set, so with that set
+  // hidden there is nothing for them to leave from.
+  $<HTMLButtonElement>('toggle-cross').disabled = !unreachableShown;
   $('load-all').hidden = !tape.canLoadMore;
   live(source.readyState !== 2);
 }

@@ -64,8 +64,11 @@
         padding: 3px var(--u);
       }
       button { cursor: pointer; }
-      button:hover, button[aria-pressed='true'] { background: #2b3140; }
+      button:not(:disabled):hover, button[aria-pressed='true'] { background: #2b3140; }
       button[aria-pressed='true'] { border-color: var(--muted); }
+      /* A control whose subject is off screen: still readable, still shows
+         whether it is pressed, but there is nothing for it to act on. */
+      button:disabled { opacity: 0.45; cursor: default; }
       input[type='range'] { padding: 0; background: none; border: none; width: 140px; }
 
       .live { display: flex; align-items: center; gap: 6px; color: var(--muted); }
@@ -174,8 +177,8 @@
         <button id="unfold" title="Expand every commit (double-click one commit for just it)">expand all</button>
         <button id="fold" title="Collapse everything back to the commit DAG">collapse all</button>
         <button id="toggle-index" aria-pressed="true" title="The index is the sandbox beside the object graph">index</button>
-        <button id="toggle-cross" aria-pressed="false" title="What unreachable objects still point at: a tree's entries, and a discarded commit's parent. Nothing points at them; they still point at plenty">links from unreachable</button>
         <button id="toggle-orphans" aria-pressed="true" title="Objects nothing points at — still in the object database either way">unreachable</button>
+        <button id="toggle-cross" aria-pressed="false" title="What unreachable objects still point at: a tree's entries, and a discarded commit's parent. Nothing points at them; they still point at plenty">links from unreachable</button>
       </div>
 
       <div class="group">
