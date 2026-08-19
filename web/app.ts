@@ -380,8 +380,8 @@ addEventListener('keydown', (e) => {
     camera = fit(scene, canvas.clientWidth);
     glide = null;
     schedule();
-  } else if (e.key === '[') moved(tape.step(-1));
-  else if (e.key === ']') moved(tape.step(1));
+  } else if (e.key === '[' || e.key === 'ArrowLeft') moved(tape.step(-1));
+  else if (e.key === ']' || e.key === 'ArrowRight') moved(tape.step(1));
   else if (e.key === ' ') {
     e.preventDefault();
     $('play').click();

@@ -71,6 +71,9 @@
       .dot.off { background: transparent; border: 1px solid var(--muted); }
       .dot.paused { background: var(--commit); }
       .tally { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+      /* Reserve the widest label: the buttons must not move when the words change. */
+      #play { min-width: 5.5em; }
+      #tape-pos { min-width: 5ch; }
       .change { color: var(--muted); font-family: var(--mono); font-size: 11px; min-width: 8ch; }
 
       #notes {
@@ -162,12 +165,6 @@
         <button id="toggle-orphans" aria-pressed="true" title="Objects nothing points at — still in the object database either way">orphans</button>
       </div>
 
-      <div class="group right">
-        <span class="live"><span class="dot" id="live-dot"></span><span id="live-text">connecting</span></span>
-        <span class="tally" id="tally"></span>
-        <span class="change" id="change"></span>
-      </div>
-
       <div class="group">
         <button id="step-back" title="Previous state">◀</button>
         <button id="play" aria-pressed="false" title="Pause following the tail">pause</button>
@@ -178,6 +175,12 @@
 
       <div class="group">
         <button id="legend-btn">legend</button>
+      </div>
+
+      <div class="group right">
+        <span class="live"><span class="dot" id="live-dot"></span><span id="live-text">connecting</span></span>
+        <span class="tally" id="tally"></span>
+        <span class="change" id="change"></span>
       </div>
     </header>
 
@@ -216,7 +219,7 @@
         <code>click</code><span>select, and read what it is</span>
         <code>right-click commit</code><span>fold or open what it contains</span>
         <code>click "load more history"</code><span>another thousand commits ("load all" loads the lot)</span>
-        <code>f / [ / ] / space</code><span>fit &middot; step back &middot; step forward &middot; pause</span>
+        <code>f / ← [ / → ] / space</code><span>fit &middot; step back &middot; step forward &middot; pause</span>
       </div>
       <h2 style="margin-top: 16px">Preferences</h2>
       <p style="color: var(--muted)">
