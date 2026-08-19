@@ -465,6 +465,44 @@ describe('the scene', () => {
     assert.ok(scene.edges.some((e) => e.from === tree && e.to === blob));
   });
 
+  it('keeps a staged blob beside the orphaned tree that names it — git write-tree', () => {
+    // `write-tree` writes a tree nothing points at, holding the blobs the index
+    // still holds. Hoisted to the top of the page the blob would be drawn twice
+    // over: purple up there, and unsaid down beside the tree that names it.
+    const s = fakeSnapshot({ a: [] });
+    const [tree, blob] = ['twritten', 'bstaged'].map(oid);
+    s.trees[tree] = [{ mode: '100644', name: 'x.txt', oid: blob, type: 'blob' }];
+    s.objects[tree] = { oid: tree, type: 'tree', size: 1 };
+    s.objects[blob] = { oid: blob, type: 'blob', size: 1 };
+    s.unreachable = [tree];
+    s.stagedOnly = [blob];
+    s.index = [{ path: 'x.txt', oid: blob, mode: '100644', stage: 0 }];
+
+    const scene = layout(s, DEFAULT_VIEW);
+    const node = (o: string) => scene.nodes.find((n) => n.id === o)!;
+    assert.ok(node(blob).y > node(oid('a')).y, 'down with the tree, not up at the top');
+    assert.ok(node(blob).x > node(tree).x, 'in the fan-out beside it');
+    assert.equal(node(blob).staged, true, 'and still the index\u2019s, not a ghost');
+    assert.equal(node(blob).unreachable, false);
+    assert.ok(scene.edges.some((e) => e.from === tree && e.to === blob && e.kind === 'entry'));
+    assert.ok(scene.edges.some((e) => e.to === blob && e.kind === 'stage'), 'the chip still holds it');
+  });
+
+  it('hoists a staged blob whose only tree is an orphan that is switched off', () => {
+    const s = fakeSnapshot({ a: [] });
+    const [tree, blob] = ['twritten', 'bstaged'].map(oid);
+    s.trees[tree] = [{ mode: '100644', name: 'x.txt', oid: blob, type: 'blob' }];
+    s.objects[tree] = { oid: tree, type: 'tree', size: 1 };
+    s.objects[blob] = { oid: blob, type: 'blob', size: 1 };
+    s.unreachable = [tree];
+    s.stagedOnly = [blob];
+
+    const scene = layout(s, { ...DEFAULT_VIEW, showUnreachable: false });
+    const node = (o: string) => scene.nodes.find((n) => n.id === o)!;
+    assert.ok(!scene.nodes.some((n) => n.id === tree), 'the tree is out of the scene');
+    assert.ok(node(blob).y < node(oid('a')).y, 'so the blob goes back up beside the newest commit');
+  });
+
   it('lets a pinned orphan stay where it was drawn, reserving no room below', () => {
     const s = fakeSnapshot({ a: ['b'], b: ['c'], c: ['d'], d: ['e'], e: [] });
     s.objects[oid('lost')] = { oid: oid('lost'), type: 'blob', size: 7 };

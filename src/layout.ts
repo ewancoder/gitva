@@ -261,9 +261,15 @@ export function layout(
   // bottom of a page of history; up here it is beside the newest commit — where
   // the index chip holding it already sits, and where the commit that will name
   // it is about to appear. Blobs only: a staged tree fans out, and fanning out
-  // is what the orphanage below is shaped for, and a blob one of those trees
-  // names belongs to its fan-out rather than up here on its own.
-  const under = new Set([...stagedOnly].flatMap((o) => (snap.trees[o] ?? []).map((e) => e.oid)));
+  // is what the orphanage below is shaped for, and a blob any drawn tree names —
+  // staged or orphaned — belongs to that tree's fan-out rather than up here on
+  // its own, because that is where the arrow saying so can be drawn. `git
+  // write-tree` is exactly this: the tree it writes is an orphan, and the blobs
+  // still in the index are what it names.
+  const orphans = view.showUnreachable === false ? [] : unreachable;
+  const under = new Set(
+    [...stagedOnly, ...orphans].flatMap((o) => (snap.trees[o] ?? []).map((e) => e.oid)),
+  );
   const stagedTop = [...stagedOnly].filter(
     (o) => (snap.objects[o]?.type ?? 'blob') === 'blob' && !under.has(o),
   );
@@ -467,7 +473,6 @@ export function layout(
   // Hidden means absent, so switching orphans off takes them out of the scene
   // the way a fold does. A staged object is held by the index, not orphaned,
   // and stays.
-  const orphans = view.showUnreachable === false ? [] : unreachable;
   const strays = [...orphans, ...stagedOnly].filter((oid) => !at.has(oid));
   if (strays.length > 0) {
     const strayed = new Set(strays);
