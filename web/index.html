@@ -166,7 +166,7 @@
         </select>
         <input id="search" placeholder="search" size="14" hidden />
         <select id="branches" multiple size="1" hidden></select>
-        <button id="load-all" title="Load the whole history, not just the first page">load all</button>
+        <button id="load-all" title="Load the whole history, not just the first page" hidden>load all commits</button>
         <button id="unfold" title="Expand every commit (double-click one commit for just it)">expand all</button>
         <button id="fold" title="Collapse everything back to the commit DAG">collapse all</button>
         <button id="toggle-index" aria-pressed="true" title="The index is the sandbox beside the object graph">index</button>
@@ -235,7 +235,7 @@
         <code>drag a column seam</code><span>widen that column, for room to arrange pinned things (&ldquo;Reset view&rdquo; puts it back)</span>
         <code>click</code><span>select it &mdash; read what it is, and copy its sha</span>
         <code>right-click</code><span>mark it, to follow it as the object graph moves</span>
-        <code>click "load more history"</code><span>another thousand commits ("load all" loads the lot)</span>
+        <code>click "load more history"</code><span>another thousand commits ("load all commits" loads the lot)</span>
         <code>f / ← [ / → ] / space</code><span>fit &middot; step back &middot; step forward &middot; pause</span>
       </div>
       <h2 style="margin-top: 16px">Settings</h2>

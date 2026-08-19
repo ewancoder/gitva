@@ -292,7 +292,7 @@ function updateHeader() {
   $('toggle-index').setAttribute('aria-pressed', String(tape.view.showIndex));
   $('toggle-orphans').setAttribute('aria-pressed', String(tape.view.showUnreachable !== false));
   $('toggle-cross').setAttribute('aria-pressed', String(tape.view.showCrossLinks === true));
-  $<HTMLButtonElement>('load-all').disabled = !tape.canLoadMore;
+  $('load-all').hidden = !tape.canLoadMore;
   live(source.readyState !== 2);
 }
 
