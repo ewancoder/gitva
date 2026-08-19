@@ -404,6 +404,34 @@ describe('history from before this browser arrived', () => {
     assert.deepEqual(t.view.expanded, [oid('b'), oid('c'), oid('d')], 'the commit git just made stayed folded');
   });
 
+  it('hands back the folds of commits older than the session, and asks for their trees', () => {
+    // The gesture is the person's answer, not the state's, so it has to survive
+    // the page: an old commit they opened comes back open on the next load,
+    // and the server has to be told to read its tree again.
+    const first = new Tape();
+    first.arrive(state(1, ['a']), SHUT);
+    first.toggle(oid('a'));
+
+    const reloaded = new Tape();
+    reloaded.answers = JSON.parse(JSON.stringify(first.answers)); // through localStorage
+    const arrival = reloaded.arrive(state(1, ['a']), SHUT, true);
+    assert.ok(reloaded.view.expanded.includes(oid('a')), 'a reload folded away what was opened by hand');
+    assert.equal(arrival.post, reloaded.view, 'the server was not asked for the tree it has to read');
+  });
+
+  it('keeps a commit folded by hand in a room where everything else is open', () => {
+    const first = new Tape();
+    const s = state(1, ['a', 'b'], { learning: true });
+    first.arrive(s, SHUT);
+    first.toggle(oid('a'));
+
+    const reloaded = new Tape();
+    reloaded.answers = { ...first.answers };
+    reloaded.arrive(s, SHUT);
+    assert.ok(!reloaded.view.expanded.includes(oid('a')), '--learning re-opened a commit somebody had folded');
+    assert.ok(reloaded.view.expanded.includes(oid('b')), 'the rest of the room lost its unfolded commits');
+  });
+
   it('leaves folded whatever the session folded by hand, however much later', () => {
     const t = new Tape();
     // b opened itself when git made it, and was folded two states later —

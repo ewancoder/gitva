@@ -103,7 +103,8 @@ and the tape keeps recording behind you, so a demo can be **replayed instead of 
 stepping backwards highlights the change in reverse, which is how you show a reset twice
 without doing it twice. Going back to a state asks the question that
 was being asked then — except for folding: a commit you opened stays open wherever you stand in
-the tape, and one you folded stays folded, until you say otherwise.
+the tape, and one you folded stays folded, until you say otherwise — including across a reload,
+in this browser, for every commit and not only the ones the session made.
 
 The legend dialog also holds preferences, which survive a reload — whether clicking a node centres
 the view on it, whether a commit git just made arrives unfolded, and whether the graph refits the

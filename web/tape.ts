@@ -23,6 +23,13 @@ export interface Prefs {
   openNewCommits: boolean;
 }
 
+/** True when we mean to draw a tree the server is not reading one for — the
+ *  only reason a state's arrival has anything to say back to it. */
+const wants = (mine: Oid[], theirs: Oid[]) => {
+  const has = new Set(theirs);
+  return mine.some((o) => !has.has(o));
+};
+
 export class Tape {
   readonly states: Snapshot[] = [];
   dropped = 0;
@@ -43,6 +50,20 @@ export class Tape {
    *  not to the state before. `born` is what a replay may find already open. */
   private readonly seen = new Set<Oid>();
   private readonly born = new Set<Oid>();
+  /** What the watcher has said by hand about each commit — open or folded.
+   *  Held apart from the view because it is theirs and not the state's: the
+   *  browser writes it out and hands it back on the next load, so a commit
+   *  that was in the repository before the session started comes back the way
+   *  they left it rather than at its default. */
+  answers: Record<Oid, boolean> = {};
+
+  /** Their answers over whatever the defaults worked out to. */
+  private answered(open: Oid[]): Oid[] {
+    const on = new Set(open);
+    for (const [oid, want] of Object.entries(this.answers)) if (want) on.add(oid);
+      else on.delete(oid);
+    return [...on];
+  }
 
   get current(): Snapshot | null {
     return this.states[this.cursor] ?? null;
@@ -79,8 +100,8 @@ export class Tape {
       // Everything otherwise starts folded: opening a repository should cost
       // nothing to draw, and unfolding a commit is the gesture the tutorial
       // wants asked.
-      this.view = { ...s.view, showIndex: prefs.showIndex, expanded: openAll, folded: [] };
-      if (s.view.learning) post = this.view;
+      this.view = { ...s.view, showIndex: prefs.showIndex, expanded: this.answered(openAll), folded: [] };
+      if (wants(this.view.expanded, s.view.expanded)) post = this.view;
     } else if (replay && last) {
       // A commit born during the replayed session keeps whatever the room last
       // said about it — opened by the rule below when it was made, or folded by
@@ -91,14 +112,12 @@ export class Tape {
       this.view = {
         ...s.view,
         showIndex: prefs.showIndex,
-        expanded: s.view.learning
-          ? openAll
-          : prefs.openNewCommits
-            ? s.view.expanded.filter((c) => this.born.has(c))
-            : [],
+        expanded: this.answered(
+          s.view.learning ? openAll : prefs.openNewCommits ? s.view.expanded.filter((c) => this.born.has(c)) : [],
+        ),
         folded: this.view.folded,
       };
-      if (s.view.learning) post = this.view;
+      if (wants(this.view.expanded, s.view.expanded)) post = this.view;
     } else if (prefs.openNewCommits && last && s.seq !== last.seq) {
       // A commit git just made opens itself: the lesson is that it points at
       // the trees and blobs already on screen, which folding it away would
@@ -180,6 +199,7 @@ export class Tape {
   /** The three fold gestures — the only things that own `expanded`. */
   toggle(oid: Oid) {
     const on = this.view.expanded.includes(oid);
+    this.answers[oid] = !on;
     this.view = {
       ...this.view,
       expanded: on ? this.view.expanded.filter((o) => o !== oid) : [...this.view.expanded, oid],
@@ -188,11 +208,13 @@ export class Tape {
   /** Both act on what is on screen: folds made elsewhere in the tape are not
    *  something this gesture said anything about. */
   unfoldAll() {
+    for (const c of this.current?.window.commits ?? []) this.answers[c] = true;
     const on = new Set([...this.view.expanded, ...(this.current?.window.commits ?? [])]);
     this.view = { ...this.view, expanded: [...on], folded: [] };
   }
   foldAll() {
     const off = new Set(this.current?.window.commits ?? []);
+    for (const c of off) this.answers[c] = false;
     this.view = { ...this.view, expanded: this.view.expanded.filter((o) => !off.has(o)) };
   }
 

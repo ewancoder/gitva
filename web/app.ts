@@ -62,6 +62,12 @@ const savePrefs = () => localStorage.setItem('gitva.prefs', JSON.stringify(prefs
 // with. It owns all three, so nothing here keeps a second copy to drift.
 const tape = new Tape();
 tape.view = { ...tape.view, showIndex: prefs.showIndex };
+// Which commits this person has opened and folded is an answer they gave, so
+// it outlives the page the way the preferences do.
+// ponytail: one key for the origin, so two repositories served on the same
+// port share it — harmless, the shas of one are never the shas of the other.
+tape.answers = JSON.parse(localStorage.getItem('gitva.folds') ?? '{}');
+const saveFolds = () => localStorage.setItem('gitva.folds', JSON.stringify(tape.answers));
 const pins = new Pins();
 
 // --- what is on screen
@@ -187,6 +193,7 @@ function postView(v: View) {
 function pushView() {
   prefs.showIndex = tape.view.showIndex;
   savePrefs();
+  saveFolds();
   relayout(true, false);
   updateHeader();
   postView(tape.view);
@@ -202,7 +209,9 @@ const source = new EventSource('/events');
 source.addEventListener('history', (e) => {
   live(true);
   const states: Snapshot[] = JSON.parse((e as MessageEvent).data);
-  for (const s of states) tape.arrive(s, prefs, true);
+  let post: View | null = null;
+  for (const s of states) post = tape.arrive(s, prefs, true).post ?? post;
+  if (post) postView(tape.view);
   fillBranches(states[states.length - 1]);
   shown(null);
   if (scene) {
