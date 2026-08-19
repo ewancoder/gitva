@@ -203,6 +203,21 @@ describe('a repository that moves under the server', () => {
     }
   });
 
+  it('has the cross links up already under --learning', async () => {
+    const repo = plumbedRepo();
+    const server = await serve(repo.dir, 0, '127.0.0.1', true);
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}/events`);
+      const stream = snapshots(res);
+      const first = (await stream.next()).value;
+      assert.equal(first.view.showCrossLinks, true);
+      await stream.return(undefined);
+    } finally {
+      await server.close();
+      repo.dispose();
+    }
+  });
+
   it('keeps serving while git is mid-rewrite, and says what went wrong', async () => {
     const repo = plumbedRepo();
     const server = await serve(repo.dir, 0);

@@ -34,8 +34,8 @@ the index toggle are the server's one question, so whoever changes one changes w
 is looking at — the presenter drives, the room watches.
 
 `--learning` opens every commit in the window unfolded, in every browser, including one that
-joins late — so a small repository being demonstrated to a room needs nobody to unfold anything
-first.
+joins late, and starts with the cross links showing — so a small repository being demonstrated to
+a room needs nobody to unfold anything first.
 
 ## What you see
 

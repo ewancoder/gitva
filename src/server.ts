@@ -59,7 +59,9 @@ export async function serve(
     return opened;
   }
 
-  let view: View = { ...DEFAULT_VIEW, learning };
+  // `--learning`: the demo repository is small and the orphans are the point,
+  // so the arrows out of them are up before anyone asks.
+  let view: View = { ...DEFAULT_VIEW, learning, showCrossLinks: learning };
   let seq = 0;
   /** Every state of the repository, oldest first, already serialised — not
    *  just the newest one. A browser opened halfway through a session gets the
