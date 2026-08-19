@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "A visual tutorial for git, taught from the internals upward: a live picture of .git in your browser.",
   "type": "module",
+  "repository": "github:ewancoder/gitva",
   "bin": {
     "gitva": "dist/src/cli.js"
   },

@@ -202,8 +202,9 @@ delta.
 
 **Capabilities, not modes.** `measure()` runs once at startup and derives what is on offer.
 Above `LIMITS.fullLoad` (12,000 objects) unreachable detection is off; above `LIMITS.indexNodes`
-(400) the index is drawn as its delta from HEAD. Both limits were **measured** — reading every
-tree costs ~8.5 µs/object, and the rebuild budget is 100 ms. When something is not on offer,
+(400) the index is drawn as its delta from HEAD. Both limits are estimates from the expensive
+step — reading every tree — against a 100 ms rebuild budget; **they have never been benchmarked**,
+so treat them as knobs to measure, not facts. When something is not on offer,
 the interface says why, in `snapshot()`'s `notes[]`, shown in the notes toolbar. Test degradation
 by faking the `Capabilities` object, not by building a huge repo.
 
@@ -257,8 +258,9 @@ first two things the tutorial teaches.
   `GIT_CONFIG_SYSTEM=/dev/null` — your global config signs commits and tags, and a signing
   prompt hangs the suite. **Never touch your global git config, and never commit to a repo you
   own unless asked.**
-- Write performance numbers down when you change something that affects them; the README's
-  Speed table is the record.
+- Never write a performance number down that you did not measure. There is no benchmark in this
+  repo and the README no longer claims any timings; if you add a real one, add the script that
+  produced it in the same pass.
 - **Finish every change by asking whether it added or altered something a user would want to
   know about** — a gesture, a key, a toolbar control, a flag, a limit, a new thing on screen.
   If so, update the README in the same pass. The README stays minimal: only what someone needs
@@ -286,13 +288,8 @@ git reset b.txt       → the index entry goes; the blob survives, now marked un
   design: today it is a list of pre-built snapshots made under whatever view was current, and
   per-viewer views mean it has to hold the repository's state and let each browser ask its own
   question of it.
-- **The README's opening sentence should be demonstrative** — show the canonical scenario
-  happening rather than describe the tool. Sketch: *"Type `git add a.txt` and watch a blob
-  appear, an index entry point at it, and nothing else in the repository change."*
-- **The visual pass has never been looked at by a human.** It was built to the brief but no
-  screenshot has been taken. `INITIAL_DESIGN.md` §12 sets the bar: screenshot it on a real repo
-  with a couple of hundred commits and ask whether you would put that image at the top of the
-  README. Whatever is wrong with it is the next task. One thing to check while you are there:
-  the column labels roughly doubled in width (`pointers and tags`, `trees and blobs`) and are
-  painted with no clipping, so they should be looked at on a narrow pointer gutter.
-- No README screenshot yet, for the same reason.
+- **The visual pass has been looked at once**, on a small repository — `docs/small-demo.png`, now
+  at the top of the README. It has not been seen on a repo with a couple of hundred commits,
+  which is the bar `INITIAL_DESIGN.md` §12 sets, and the column labels (`pointers and tags`,
+  `trees and blobs`) are painted with no clipping, so they still want looking at on a narrow
+  pointer gutter.
