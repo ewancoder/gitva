@@ -86,7 +86,7 @@ the one line inside a ref.
 | click | select: read what it is, and light the whole path through it; anything with a sha copies it to the clipboard |
 | hover | light what it links to |
 | right-click anything | mark it with a red outline — objects, pointers and index entries alike, so you can follow it as the object graph moves; right-click again to unmark |
-| double-click a commit | expand or collapse it, showing what it links to (a commit git just made arrives expanded, unless you turn that off in Settings) |
+| double-click a commit | expand or collapse it, showing what it links to (a commit git just made arrives expanded, unless you turn that off in settings) |
 | double-click a tree | expand or collapse that subtree; collapsed, it says how many entries it is holding back in bold (`tree +3`) and grows a green arrow off its right edge. Trees arrive expanded |
 | shift+click anything | unpin it, wherever the layout wants it (*reset view* drops the lot) |
 | double-click background | fit to width again, keeping the point you clicked in view |
@@ -112,10 +112,11 @@ stays expanded wherever you stand in the recording, and one you collapsed stays 
 you say otherwise — including across a reload, in this browser, for every commit and not only
 the ones the session made.
 
-The help dialog holds the legend, the gestures, and settings, which survive a reload — whether
-clicking something centres the view on it, whether a commit git just made arrives expanded,
-whether anything you pinned wears a pushpin (off by default), and whether the canvas refits the
-width when the repository changes (on by default; the height stays where you were reading).
+The help dialog holds the legend and the keys. Beside it, settings, which survive a reload —
+whether clicking something centres the view on it, whether a commit git just made arrives
+expanded, whether anything you pinned wears a pushpin (off by default), and whether the canvas
+refits the width when the repository changes (on by default; the height stays where you were
+reading).
 
 ## Two promises
 

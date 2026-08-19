@@ -378,6 +378,7 @@ $('unpin').addEventListener('click', () => {
   relayout(true, false);
 });
 $('legend-btn').addEventListener('click', () => $<HTMLDialogElement>('legend').showModal());
+$('settings-btn').addEventListener('click', () => $<HTMLDialogElement>('settings').showModal());
 const centreBox = $<HTMLInputElement>('centre-on-click');
 centreBox.checked = prefs.centreOnClick;
 centreBox.addEventListener('change', () => {

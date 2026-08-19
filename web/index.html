@@ -136,15 +136,31 @@
       }
       aside .empty { color: var(--faint); }
 
+      /* `body` is a grid, so a dialog left to flow would be placed in a row
+         rather than in the middle of the window: fixed and auto-margined puts
+         it back on the screen's centre. No scroll — it has to fit. */
       dialog {
+        position: fixed; inset: 0; margin: auto;
+        width: fit-content; height: fit-content; max-width: 560px;
         background: var(--panel); color: var(--ink);
         border: 1px solid var(--line); border-radius: var(--r);
-        padding: calc(var(--u) * 2); max-width: 560px;
+        padding: calc(var(--u) * 2);
       }
       dialog::backdrop { background: rgba(0, 0, 0, .6); }
       dialog label { display: block; margin-bottom: var(--u); }
-      .legend { display: grid; grid-template-columns: 20px 1fr; gap: var(--u); align-items: center; }
-      .swatch { width: 16px; height: 16px; }
+      dialog h2 { font-size: 13px; margin: calc(var(--u) * 2) 0 var(--u); }
+      dialog h2:first-child { margin-top: 0; }
+      dialog .lede { color: var(--muted); margin: 0 0 var(--u); }
+      dialog footer { margin-top: calc(var(--u) * 2); display: flex; align-items: center; gap: var(--u); }
+      dialog footer a { color: var(--muted); margin-left: auto; }
+      /* The kinds read as one row of samples: the swatch and the word are the
+         legend, and a description each would cost more height than it teaches. */
+      .legend { display: flex; flex-wrap: wrap; gap: 6px calc(var(--u) * 1.5); align-items: center; }
+      .legend > span { display: flex; align-items: center; gap: 6px; }
+      /* A key is machine text and gets <kbd>; what it does is not. */
+      .keys { display: grid; grid-template-columns: max-content 1fr; gap: 6px calc(var(--u) * 1.5); align-items: baseline; }
+      .keys > :nth-child(odd) { color: var(--muted); }
+      .swatch { width: 16px; height: 16px; flex: none; }
       .swatch.commit { border-radius: 50%; background: var(--commit); }
       .swatch.tree { background: var(--tree); clip-path: polygon(30% 0, 100% 0, 100% 100%, 30% 100%, 0 70%, 0 30%); }
       .swatch.blob { border-radius: 8px; background: var(--blob); }
@@ -184,6 +200,7 @@
 
       <div class="group">
         <button id="legend-btn">help</button>
+        <button id="settings-btn">settings</button>
       </div>
     </header>
 
@@ -214,39 +231,46 @@
     </main>
 
     <dialog id="legend">
-      <h2>What you are looking at</h2>
-      <p style="color: var(--muted)">
-        Identity is never colour alone: silhouette first, then the label, then hue. Three hues carry
-        the three things you look at constantly; everything else is an outline in plain ink.
-      </p>
+      <h2>what you are looking at</h2>
+      <p class="lede">A live object graph of a repository.</p>
       <div class="legend">
-        <span class="swatch commit"></span><span><b>commit</b> — a tree, some parents, a message</span>
-        <span class="swatch tree"></span><span><b>tree</b> — one directory: names, modes, shas</span>
-        <span class="swatch blob"></span><span><b>blob</b> — file contents, with no name of its own</span>
-        <span class="swatch staged"></span><span><b>staged blob</b> — written by <code>git add</code>, held only by the index: no commit names it, and nothing collects it while the entry lasts</span>
-        <span class="swatch ref"></span><span><b>ref / HEAD</b> — a file with a sha in it</span>
-        <span class="swatch tag"></span><span><b>annotated tag</b> — a name and a message pointing at an object</span>
-        <span class="swatch index"></span><span><b>index entry</b> — a staged path; dashed border means a conflict stage</span>
-        <span class="swatch ghost"></span><span><b>unreachable</b> — a state, not a kind. Still there; still rescuable</span>
-        <span class="swatch changed"></span><span><b>just changed</b> — the one reserved accent, spent on nothing else</span>
+        <span><span class="swatch commit"></span>commit</span>
+        <span><span class="swatch tree"></span>tree</span>
+        <span><span class="swatch blob"></span>blob</span>
+        <span><span class="swatch staged"></span>staged blob</span>
+        <span><span class="swatch ref"></span>ref / HEAD</span>
+        <span><span class="swatch tag"></span>annotated tag</span>
+        <span><span class="swatch index"></span>index entry</span>
+        <span><span class="swatch ghost"></span>unreachable</span>
+        <span><span class="swatch changed"></span>just changed</span>
       </div>
-      <h2 style="margin-top: 16px">Gestures</h2>
-      <div class="legend" style="grid-template-columns: 140px 1fr">
-        <code>wheel</code><span>pan &middot; hold <kbd>ctrl</kbd> to zoom</span>
-        <code>drag background</code><span>pan</span>
-        <code>double-click commit</code><span>expand or collapse &mdash; show what this commit links to</span>
-        <code>double-click tree</code><span>expand or collapse that subtree (expanded to begin with; collapsed it counts what it links to)</span>
-        <code>double-click background</code><span>fit the canvas to the width again</span>
-        <code>drag anything</code><span>pin it where you put it (&ldquo;reset view&rdquo; drops every pin)</span>
-        <code>shift-click it</code><span>unpin it again</span>
-        <code>drag a column seam</code><span>widen that column, for room to arrange pinned things (&ldquo;reset view&rdquo; puts it back)</span>
-        <code>click</code><span>select it &mdash; read what it is, and copy its sha</span>
-        <code>right-click</code><span>mark it, to follow it as the object graph moves</span>
-        <code>click "load more history"</code><span>another thousand commits ("load all commits" loads the lot)</span>
-        <code>f / ← [ / → ] / space</code><span>fit &middot; step back &middot; step forward &middot; pause</span>
+      <h2>keyboard</h2>
+      <div class="keys">
+        <span>wheel</span><span>pan &middot; hold <kbd>ctrl</kbd> to zoom</span>
+        <span>drag background</span><span>pan</span>
+        <span>double-click background</span><span>fit the canvas to the width again</span>
+        <span>click</span><span>select it &mdash; read what it is, and copy its sha</span>
+        <span>right-click</span><span>mark it, to follow it as the object graph moves</span>
+        <span>double-click commit</span><span>expand or collapse &mdash; show what this commit links to</span>
+        <span>double-click tree</span><span>expand or collapse that subtree</span>
+        <span>drag anything</span><span>pin it where you put it (&ldquo;reset view&rdquo; drops every pin)</span>
+        <span>shift-click it</span><span>unpin it again</span>
+        <span>drag a column seam</span><span>widen that column (&ldquo;reset view&rdquo; puts it back)</span>
+        <span><kbd>f</kbd></span><span>the same fit, from the keyboard</span>
+        <span><kbd>i</kbd></span><span>show or hide the index</span>
+        <span><kbd>&larr;</kbd> or <kbd>[</kbd></span><span>step back through the recording</span>
+        <span><kbd>&rarr;</kbd> or <kbd>]</kbd></span><span>step forward again</span>
+        <span><kbd>space</kbd></span><span>pause, or go live</span>
       </div>
-      <h2 style="margin-top: 16px">Settings</h2>
-      <p style="color: var(--muted)">
+      <footer>
+        <button onclick="this.closest('dialog').close()">close</button>
+        <a href="https://github.com/ewancoder/gitva" target="_blank" rel="noreferrer">github.com/ewancoder/gitva</a>
+      </footer>
+    </dialog>
+
+    <dialog id="settings">
+      <h2>settings</h2>
+      <p class="lede">
         These are about how you like to work, not about this session, so they survive a reload.
       </p>
       <label><input type="checkbox" id="centre-on-click" /> clicking something centres the view on it</label>
@@ -258,7 +282,7 @@
       <label
         ><input type="checkbox" id="open-new-commits" /> a commit git just made arrives expanded</label
       >
-      <p><button onclick="this.closest('dialog').close()">close</button></p>
+      <footer><button onclick="this.closest('dialog').close()">close</button></footer>
     </dialog>
 
     <script type="module" src="/web/app.js"></script>

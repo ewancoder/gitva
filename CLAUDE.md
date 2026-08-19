@@ -83,7 +83,8 @@ Everything horizontal across the top is a **toolbar**, each named for its job, n
 | **notes toolbar** | what the canvas isn't showing, what gitva won't do to your repo, and why |
 | **canvas** | the object graph |
 | **inspector** | what you selected: the full sha, the fields, the teaching text, the body |
-| **help** | a dialog holding three sections: **legend**, **gestures**, **settings** |
+| **help** | a dialog holding two sections: **legend** and the keys |
+| **settings** | its own dialog, opened from the button beside help |
 
 The canvas columns are **pointers and tags | commits | trees and blobs | index**. Not "objects"
 — commits and tags are objects too, and a column labelled otherwise teaches the opposite of the
