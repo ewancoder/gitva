@@ -44,12 +44,15 @@ describe('the strings behind the chrome', () => {
 
 describe('the language in force', () => {
   it('has words for every language it offers', async () => {
-    for (const l of LANGUAGES) {
-      await setLanguage(l.code);
-      assert.equal(language, l.code, l.code);
-      assert.ok(Object.keys(S.ui).length > 0, l.code);
+    try {
+      for (const l of LANGUAGES) {
+        await setLanguage(l.code);
+        assert.equal(language, l.code, l.code);
+        assert.ok(Object.keys(S.ui).length > 0, l.code);
+      }
+    } finally {
+      await setLanguage('en');
     }
-    await setLanguage('en');
   });
 
   it('falls back to English for a language nobody wrote', async () => {
@@ -63,17 +66,22 @@ describe('the language in force', () => {
 // sits beside are chosen by the number: 1 коммит, 2 коммита, 5 коммитов.
 describe('the Russian counted forms', () => {
   it('agrees with the number in front of it', async () => {
+    // A failed assertion must not leave Russian in force: `S` is a live
+    // binding shared by every test after this one.
     await setLanguage('ru');
-    assert.equal(S.change.kind(1, 'commit'), '1 коммит');
-    assert.equal(S.change.kind(2, 'tree'), '2 дерева');
-    assert.equal(S.change.kind(5, 'blob'), '5 блобов');
-    assert.equal(S.change.kind(21, 'tag'), '21 метка');
-    assert.equal(S.change.kind(11, 'whatever'), '11 объектов');
-    assert.match(
-      S.status.tally(3, 2, { commit: 1, tree: 1, blob: 1, tag: 1 }, 0, 0),
-      /2 коммита · 1c 1t 1b 1g/,
-    );
-    await setLanguage('en');
+    try {
+      assert.equal(S.change.kind(1, 'commit'), '1 коммит');
+      assert.equal(S.change.kind(2, 'tree'), '2 дерева');
+      assert.equal(S.change.kind(5, 'blob'), '5 блобов');
+      assert.equal(S.change.kind(21, 'tag'), '21 тег');
+      assert.equal(S.change.kind(11, 'whatever'), '11 объектов');
+      assert.match(
+        S.status.tally(3, 2, { commit: 1, tree: 1, blob: 1, tag: 1 }, 0, 0),
+        /2 коммита · 1c 1t 1b 1g/,
+      );
+    } finally {
+      await setLanguage('en');
+    }
   });
 });
 
