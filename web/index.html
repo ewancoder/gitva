@@ -109,7 +109,7 @@
       #notes li { list-style: none; }
       #notes ul { display: contents; margin: 0; padding: 0; }
 
-      main { display: grid; grid-template-columns: 1fr auto; min-height: 0; }
+      main { display: grid; grid-template-columns: 1fr auto auto; min-height: 0; }
       #graph { display: block; width: 100%; height: 100%; cursor: grab; }
       #copied {
         position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
@@ -120,9 +120,11 @@
       #copied.show { opacity: 1; }
       #graph.dragging { cursor: grabbing; }
 
-      /* The details panel is where the teaching lives, so it earns width. */
+      /* The details panel is where the teaching lives, so it earns width —
+         and how much is yours to drag, the way a canvas band's width is. */
+      #panel-seam { width: 5px; cursor: col-resize; background: var(--line); }
       aside {
-        width: 380px; background: var(--panel); border-left: 1px solid var(--line);
+        width: 430px; background: var(--panel);
         overflow-y: auto; scroll-behavior: smooth; padding: calc(var(--u) * 2);
         display: flex; flex-direction: column; gap: calc(var(--u) * 1.5);
       }
@@ -136,6 +138,13 @@
       aside dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px var(--u); margin: 0; }
       aside dt { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
       aside dd { margin: 0; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
+      /* The sha is the key to the store, and a click hands it over — so it is
+         drawn as the one field you can take, not as another fact. */
+      aside dd.sha {
+        background: var(--raised); border: 1px solid var(--line); border-radius: var(--r);
+        padding: 2px 6px; margin: -2px 0; cursor: pointer;
+      }
+      aside dd.sha:hover { border-color: var(--muted); }
       aside pre {
         background: var(--raised); border-radius: var(--r); padding: var(--u);
         margin: 0; max-height: 40vh; overflow: auto; font-size: 12px;
@@ -255,6 +264,7 @@
     <main>
       <canvas id="graph"></canvas>
       <div id="copied" aria-live="polite"></div>
+      <div id="panel-seam"></div>
       <!-- The empty state is the inspector's own words; app.ts renders it on load. -->
       <aside id="panel"></aside>
     </main>

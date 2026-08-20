@@ -53,6 +53,7 @@ interface Prefs {
   openNewCommits: boolean;
   refitOnChange: boolean;
   showPins: boolean;
+  panelWidth: number;
 }
 const prefs: Prefs = {
   language: 'en',
@@ -61,6 +62,7 @@ const prefs: Prefs = {
   openNewCommits: true,
   refitOnChange: true,
   showPins: false,
+  panelWidth: 430,
   ...JSON.parse(localStorage.getItem('gitva.prefs') ?? '{}'),
 };
 const savePrefs = () => localStorage.setItem('gitva.prefs', JSON.stringify(prefs));
@@ -692,6 +694,39 @@ canvas.addEventListener(
   },
   { passive: false },
 );
+
+// ---------------------------------------------------------------------------
+// The inspector
+// ---------------------------------------------------------------------------
+
+/** How wide the teaching is, is yours. The canvas follows on its own — its
+ *  ResizeObserver is what redraws it. */
+const seamEl = $('panel-seam');
+const setPanelWidth = (w: number) => {
+  prefs.panelWidth = Math.max(240, Math.min(w, innerWidth - 240));
+  panel.style.width = `${prefs.panelWidth}px`;
+};
+setPanelWidth(prefs.panelWidth);
+seamEl.addEventListener('pointerdown', (e) => {
+  seamEl.setPointerCapture(e.pointerId);
+  const move = (m: PointerEvent) => setPanelWidth(innerWidth - m.clientX);
+  seamEl.addEventListener('pointermove', move);
+  // Written out at the end of the gesture, like the bands and the pins.
+  seamEl.addEventListener(
+    'pointerup',
+    () => {
+      seamEl.removeEventListener('pointermove', move);
+      savePrefs();
+    },
+    { once: true },
+  );
+});
+
+/** A click on the sha hands you the key, exactly as a click on a shape does. */
+panel.addEventListener('click', (e) => {
+  const el = e.target as HTMLElement;
+  if (el.classList.contains('sha')) copied(el.textContent ?? '');
+});
 
 // ---------------------------------------------------------------------------
 

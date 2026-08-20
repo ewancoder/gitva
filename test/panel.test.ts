@@ -153,6 +153,17 @@ describe('the panel on screen', () => {
     assert.equal(el.find('pre')!.textContent, 'could not read it');
   });
 
+  it('marks the sha field alone, so a click can hand the key over', () => {
+    const el = new El('aside');
+    held();
+    renderPanel(el as unknown as HTMLElement, state, blob('b1'));
+    const fields = el.find('dl')!.children.filter((c) => c.tag === 'dd');
+    assert.deepEqual(
+      fields.map((c) => [c.textContent, c.className]),
+      [['b1', 'sha'], ['3 B', '']],
+    );
+  });
+
   it('shows a ref’s bytes without asking the server for anything', () => {
     const el = new El('aside');
     globalThis.fetch = (() => assert.fail('a ref is not fetched')) as unknown as typeof fetch;

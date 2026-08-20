@@ -89,6 +89,8 @@ line inside a ref.
 | double-click a tree | expand or collapse that subtree; collapsed it says how many entries it holds back (`tree +3`) |
 | drag anything | pin it where you put it, across a reload too; shift+click unpins |
 | drag a column seam | widen the left column, for room to arrange pins |
+| drag the inspector's edge | widen or narrow the inspector; the width is kept |
+| click a sha in the inspector | copies it |
 | *reset view* | drops every pin and puts the columns back |
 | click the identifier | copies what the recording is filed under, for `--id` |
 | *clear* | throws the recording away, after asking; it starts again at the repository as it is now |

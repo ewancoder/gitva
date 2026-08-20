@@ -93,7 +93,11 @@ export function renderPanel(el: HTMLElement, snap: Snapshot | null, node: SceneN
   if (m.made) el.append(el2('div', 'made', m.made));
   if (m.facts.length > 0) {
     const dl = document.createElement('dl');
-    for (const [k, v] of m.facts) dl.append(el2('dt', '', k), el2('dd', '', v));
+    // The sha is the key the store is addressed by, so it is worth handing
+    // over: marked here, copied by whoever owns the clipboard.
+    for (const [k, v] of m.facts) {
+      dl.append(el2('dt', '', k), el2('dd', k === S.inspector.fields.sha ? 'sha' : '', v));
+    }
     el.append(dl);
   }
   if (m.raw !== null) {
