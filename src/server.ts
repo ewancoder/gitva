@@ -12,6 +12,7 @@ import { extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GitError, changeSignal, measure, open, readBody, snapshot, type RepoHandle } from './git.js';
 import { lastSeq, loadRecording, recordingFile, recordingKey, saveRecording } from './store.js';
+import { S } from './strings.js';
 import type { Capabilities, Question, View } from './types.js';
 import { DEFAULT_VIEW, QUESTIONS_ENABLED, TAPE_CAP } from './types.js';
 
@@ -62,7 +63,7 @@ export async function serve(
   async function repository() {
     if (!opened) {
       const handle = await open(repoPath).catch(() => {
-        throw new GitError(`no repository at ${repoPath} yet — waiting for \`git init\``);
+        throw new GitError(S.server.noRepo(repoPath));
       });
       opened = { handle, caps: await measure(handle.repo, handle.gitDir) };
     }

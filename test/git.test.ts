@@ -175,7 +175,7 @@ describe('a repository read through its own plumbing', () => {
   it('says out loud when orphans are switched off, and still counts them', async () => {
     const s = await snapshot(handle, { ...DEFAULT_VIEW, showUnreachable: false }, caps, 4);
     assert.ok(s.unreachable!.length > 0, 'hiding is a drawing decision, not a lie about the repo');
-    assert.ok(s.notes.some((n) => /Unreachable objects are hidden/.test(n)));
+    assert.ok(s.notes.some((n) => n.id === 'unreachableHidden'));
   });
 
   it('stores one blob for two names, because names live in trees', () => {
@@ -287,14 +287,14 @@ describe('degrading the documented way above a limit', () => {
 
   it('turns orphan detection off and says why', () => {
     assert.equal(snap.unreachable, null);
-    assert.ok(snap.notes.some((n) => /Unreachable detection is off/.test(n)));
+    assert.ok(snap.notes.some((n) => n.id === 'noUnreachableDetection'));
   });
 
   it('draws the index as the delta from HEAD, and counts the rest', () => {
     assert.ok(snap.indexElided);
     assert.equal(snap.indexElided!.total, 4);
     assert.ok(snap.indexElided!.shown < snap.indexElided!.total);
-    assert.ok(snap.notes.some((n) => /differ from HEAD/.test(n)));
+    assert.ok(snap.notes.some((n) => n.id === 'indexElided'));
   });
 
   it('still draws the commits it was asked for', () => {

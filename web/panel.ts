@@ -8,6 +8,7 @@
  */
 
 import { explain, refName } from '../src/explain.js';
+import { S } from '../src/strings.js';
 import type { Oid, Snapshot } from '../src/types.js';
 import type { SceneNode } from '../src/layout.js';
 
@@ -44,7 +45,11 @@ export function panelModel(snap: Snapshot, node: SceneNode): PanelModel {
 }
 
 const headingFor = (kind: string) =>
-  kind === 'tree' ? 'entries' : kind === 'commit' || kind === 'tag' ? 'raw object' : 'contents';
+  kind === 'tree'
+    ? S.inspector.heading.entries
+    : kind === 'commit' || kind === 'tag'
+      ? S.inspector.heading.object
+      : S.inspector.heading.contents;
 
 /** What `/object` answered, as the lines to show. */
 export function bodyText(body: {
@@ -56,8 +61,10 @@ export function bodyText(body: {
   if (body.entries) {
     return body.entries.map((x) => `${x.mode} ${x.type} ${x.oid.slice(0, 7)}\t${x.name}`).join('\n');
   }
-  if (body.text == null) return `${body.size} bytes, not text.`;
-  return body.truncated ? `${body.text}\n\n… first 64 KiB of ${body.size} bytes.` : body.text;
+  if (body.text == null) return S.inspector.notText(body.size ?? 0);
+  return body.truncated
+    ? `${body.text}\n\n${S.inspector.truncated(body.size ?? 0)}`
+    : body.text;
 }
 
 /** What is in .git/<name> — or, once packed, the line that replaced the file. */
@@ -77,7 +84,7 @@ export function renderPanel(el: HTMLElement, snap: Snapshot | null, node: SceneN
   const mine = ++token;
   el.replaceChildren();
   if (!snap || !node) {
-    el.append(el2('p', 'empty', 'Click anything to find out what it is.'));
+    el.append(el2('p', 'empty', S.inspector.empty));
     return;
   }
 
@@ -90,12 +97,12 @@ export function renderPanel(el: HTMLElement, snap: Snapshot | null, node: SceneN
     el.append(dl);
   }
   if (m.raw !== null) {
-    el.append(el2('dt', '', 'raw content'), el2('pre', '', m.raw));
+    el.append(el2('dt', '', S.inspector.heading.raw), el2('pre', '', m.raw));
     return;
   }
   if (!m.body) return;
 
-  const pre = el2('pre', '', 'reading…');
+  const pre = el2('pre', '', S.inspector.reading);
   el.append(el2('dt', '', m.body.heading), pre);
   void fetch(`/object?oid=${m.body.oid}`)
     .then((r) => r.json())
@@ -103,7 +110,7 @@ export function renderPanel(el: HTMLElement, snap: Snapshot | null, node: SceneN
       if (mine === token) pre.textContent = bodyText(body);
     })
     .catch(() => {
-      if (mine === token) pre.textContent = 'could not read it';
+      if (mine === token) pre.textContent = S.inspector.unreadable;
     });
 }
 

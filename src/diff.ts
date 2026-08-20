@@ -9,6 +9,7 @@
  */
 
 import type { Scene } from './layout.js';
+import { S } from './strings.js';
 import type { Snapshot } from './types.js';
 
 export interface Change {
@@ -51,7 +52,8 @@ export function diffScenes(prev: Scene | null, next: Scene): Change {
 
 /** The sentence in the header: what the last update actually did. */
 export function describe(prev: Snapshot | null, next: Snapshot): string {
-  if (!prev) return 'first read';
+  const T = S.change;
+  if (!prev) return T.first;
   const parts: string[] = [];
 
   const objs = (s: Snapshot) => new Set(Object.keys(s.objects));
@@ -60,40 +62,40 @@ export function describe(prev: Snapshot | null, next: Snapshot): string {
   const goneObjects = [...a].filter((o) => !b.has(o));
   if (newObjects.length) {
     const kinds = tally(newObjects.map((o) => next.objects[o]?.type ?? 'object'));
-    parts.push(`+${kinds}`);
+    parts.push(T.added(kinds));
   }
-  if (goneObjects.length) parts.push(`-${goneObjects.length} objects`);
+  if (goneObjects.length) parts.push(T.gone(goneObjects.length));
 
   for (const r of next.refs) {
     const was = prev.refs.find((x) => x.name === r.name);
-    if (!was) parts.push(`new ref ${strip(r.name)}`);
-    else if (was.oid !== r.oid) parts.push(`${strip(r.name)} → ${r.oid.slice(0, 7)}`);
+    if (!was) parts.push(T.newRef(strip(r.name)));
+    else if (was.oid !== r.oid) parts.push(T.refMoved(strip(r.name), r.oid.slice(0, 7)));
   }
-  for (const r of prev.refs) if (!next.refs.find((x) => x.name === r.name)) parts.push(`deleted ${strip(r.name)}`);
+  for (const r of prev.refs)
+    if (!next.refs.find((x) => x.name === r.name)) parts.push(T.refDeleted(strip(r.name)));
 
-  if (prev.head.ref !== next.head.ref) parts.push(`HEAD → ${next.head.ref ? strip(next.head.ref) : 'detached'}`);
-  else if (prev.head.detached && next.head.oid !== prev.head.oid) parts.push('HEAD moved');
+  if (prev.head.ref !== next.head.ref)
+    parts.push(T.headTo(next.head.ref ? strip(next.head.ref) : T.headDetached));
+  else if (prev.head.detached && next.head.oid !== prev.head.oid) parts.push(T.headMoved);
 
   const ia = new Set(prev.index.map((e) => `${e.stage}:${e.path}:${e.oid}`));
   const ib = new Set(next.index.map((e) => `${e.stage}:${e.path}:${e.oid}`));
   const staged = [...ib].filter((k) => !ia.has(k)).length;
   const unstaged = [...ia].filter((k) => !ib.has(k)).length;
-  if (staged) parts.push(`${staged} index ${staged === 1 ? 'entry' : 'entries'} added`);
-  if (unstaged) parts.push(`${unstaged} index ${unstaged === 1 ? 'entry' : 'entries'} gone`);
+  if (staged) parts.push(T.staged(staged));
+  if (unstaged) parts.push(T.unstaged(unstaged));
 
   const orphansNow = (next.unreachable ?? []).length;
   const orphansWas = (prev.unreachable ?? []).length;
-  if (orphansNow > orphansWas) parts.push(`${orphansNow - orphansWas} now unreachable`);
+  if (orphansNow > orphansWas) parts.push(T.nowUnreachable(orphansNow - orphansWas));
 
-  return parts.length ? parts.join(', ') : 'no visible change';
+  return parts.length ? parts.join(T.join) : T.none;
 }
 
 function tally(kinds: string[]): string {
   const counts = new Map<string, number>();
   for (const k of kinds) counts.set(k, (counts.get(k) ?? 0) + 1);
-  return [...counts]
-    .map(([k, n]) => `${n} ${k}${n === 1 ? '' : 's'}`)
-    .join(', ');
+  return [...counts].map(([k, n]) => S.change.kind(n, k)).join(S.change.join);
 }
 
 const strip = (name: string) => name.replace(/^refs\/(heads|tags|remotes)\//, '');

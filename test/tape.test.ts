@@ -333,11 +333,13 @@ describe('what the header says', () => {
     const t = new Tape();
     for (let i = 1; i <= TAPE_CAP + 1; i++) {
       const s = state(i, ['c' + i]);
-      s.notes = ['Unreachable detection is off in a repository this size.'];
+      s.notes = [{ id: 'noUnreachableDetection', args: [12_345] }];
       t.arrive(s, SHUT);
     }
     const notes = t.notes();
-    assert.equal(notes[0], 'Unreachable detection is off in a repository this size.');
+    // The step carries an id and a number; the sentence is put together here,
+    // in the language this browser is set to.
+    assert.match(notes[0], /Unreachable detection is off: repository is too big - 12,345 objects/);
     assert.match(notes[1], /400 steps kept, 1 older ones dropped/);
   });
 });

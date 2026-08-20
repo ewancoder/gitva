@@ -21,6 +21,7 @@ import type {
   GitObject,
   Head,
   IndexEntry,
+  Note,
   ObjectType,
   Oid,
   Ref,
@@ -594,38 +595,26 @@ function notesFor(
     view: View;
     indexElided?: { shown: number; total: number };
   },
-): string[] {
-  const notes: string[] = [];
+): Note[] {
+  const notes: Note[] = [];
   if (!caps.fullLoad) {
-    notes.push(
-      `Unreachable detection is off: ${caps.objectCount.toLocaleString()} objects, and finding an unreachable object means reading every one. Everything drawn here is reachable by construction.`,
-    );
-    notes.push('Trees load only for the commits you expand — nothing walks the object database.');
+    notes.push({ id: 'noUnreachableDetection', args: [caps.objectCount] });
+    notes.push({ id: 'treesOnDemand' });
   }
   if (ctx.indexElided) {
-    notes.push(
-      `Index: showing the ${ctx.indexElided.shown} entries that differ from HEAD, of ${ctx.indexElided.total} staged paths.`,
-    );
+    notes.push({ id: 'indexElided', args: [ctx.indexElided.shown, ctx.indexElided.total] });
   }
-  if (ctx.more) notes.push(`Showing ${ctx.shown} commits — click "load more history" for the rest.`);
-  if (ctx.refsOutside > 0)
-    notes.push(`${ctx.refsOutside} refs point outside this window and are left out.`);
-  if (!ctx.view.showIndex) notes.push('The index is hidden.');
-  if (ctx.view.showUnreachable === false && caps.fullLoad)
-    notes.push('Unreachable objects are hidden — they are still in the object database.');
-  if (!caps.commitGraph && caps.objectCount > LIMITS.fullLoad) {
-    // Teaching the user about a git internal they didn't know existed is gitva
-    // working as designed. Detect it, hint at it, never build it — that would
-    // be a write.
-    notes.push(
-      'This repo has no commit-graph. `git commit-graph write --reachable` would make walking history much faster — gitva will not write it for you.',
-    );
-  }
+  if (ctx.more) notes.push({ id: 'more', args: [ctx.shown] });
+  if (ctx.refsOutside > 0) notes.push({ id: 'refsOutside', args: [ctx.refsOutside] });
+  if (!ctx.view.showIndex) notes.push({ id: 'indexHidden' });
+  if (ctx.view.showUnreachable === false && caps.fullLoad) notes.push({ id: 'unreachableHidden' });
+  // Teaching the user about a git internal they didn't know existed is gitva
+  // working as designed. Detect it, hint at it, never build it — that would be
+  // a write.
+  if (!caps.commitGraph && caps.objectCount > LIMITS.fullLoad) notes.push({ id: 'noCommitGraph' });
   if (caps.looseCount > 0 && caps.objectCount > 5_000)
-    notes.push(
-      `${caps.looseCount.toLocaleString()} loose objects. \`git gc\` would pack them — gitva will not run it for you.`,
-    );
-  notes.push('Object contents are fetched when you select something, not shipped every update.');
+    notes.push({ id: 'looseObjects', args: [caps.looseCount] });
+  notes.push({ id: 'bodiesOnSelection' });
   return notes;
 }
 
