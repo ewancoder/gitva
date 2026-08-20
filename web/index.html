@@ -103,6 +103,9 @@
         background: var(--raised);
         border: 1px solid var(--line); border-radius: var(--r);
         padding: 3px var(--u);
+        /* The scrub track and the settings checkboxes are the only controls the
+           browser paints itself: without this they stay its blue in every ground. */
+        accent-color: var(--muted);
       }
       button { cursor: pointer; }
       button:not(:disabled):hover, button[aria-pressed='true'] { background: var(--hover); }
