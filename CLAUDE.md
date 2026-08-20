@@ -150,11 +150,13 @@ dependency passes the one-sentence test in `INITIAL_DESIGN.md` §14.
 
 | | |
 |---|---|
+| `src/strings-en.ts` | **every user-facing string**: the toolbars, tooltips, help, teaching text, notes, what the CLI prints. `ui` is one flat entry per `data-t*` key in `web/index.html`; the rest is what code asks for by name, a string or an arrow function where a number sits in the sentence. |
+| `src/strings.ts` | which language the words come from. `S` and the `Strings` type; one language per run. |
 | `src/types.ts` | shared vocabulary: `Snapshot`, `View`, `Capabilities`. Imported by both sides. |
 | `src/git.ts` | the **only** place that spawns git. Parsers, `measure`, `changeSignal`, `snapshot`, `findUnreachable`, `readBody`. |
 | `src/layout.ts` | `layout(snapshot, view, pins) → Scene`. Pure. Knows nothing about painting. |
 | `src/diff.ts` | `diffScenes` (what to flash), `describe` (the recording toolbar's change line). Pure. |
-| `src/explain.ts` | the teaching text, per shape kind (`NodeKind` in code). Pure. |
+| `src/explain.ts` | the inspector's facts, per shape kind (`NodeKind` in code); the wording is in `strings-en.ts`. Pure. |
 | `src/store.ts` | the recording on disk: where the system keeps it, `recordingKey` (the ten-character identifier, shown in the view toolbar), one file per key, load and save. Server-only. |
 | `src/server.ts` | `node:http`: static files, SSE `/events`, `POST /view`, `POST /clear`, `GET /object`. |
 | `src/cli.ts` | `parseArgs` (pure), `main`; opens the browser. Runs only when it *is* the command, so importing it for a test starts nothing. |
@@ -257,6 +259,12 @@ first two things the tutorial teaches.
 
 ## Conventions
 
+- **No user-facing string is written anywhere but `src/strings-en.ts`.** `web/index.html` holds
+  keys — `data-t` for text, `data-t-title`, `data-t-placeholder`, and `data-t-html` for the
+  handful that carry a `<kbd>` — and `web/app.ts` fills them in on load. `test/strings.test.ts` fails if a
+  key has no string, if a string is unused, or if a `data-t-html` value smuggles in a tag other
+  than `<kbd>`. New copy goes there and is reached through `S`; the strings module is pure data,
+  so `src/` files the browser imports may use it freely.
 - Small, obvious code — the codebase is part of the teaching material. If an optimisation stops
   reading as an explanation of how git works, it has to justify itself.
 - Comments explain *why* (usually citing the design brief), not what.
@@ -301,8 +309,10 @@ It is a user-facing document. Update it only when one of these is true, and in t
 - something in it is **outdated** or now wrong.
 
 The README stays minimal: only what someone needs to understand the project, run it, and know
-the features they would look for. Internal refactors, bug fixes and anything invisible from the
-browser get no mention. When in doubt, leave it alone.
+the features they would look for — **what the tool does, never what it is made of**. Internal
+refactors, bug fixes, where a file lives and anything invisible from the browser get no mention,
+however useful it would be to someone editing the code: that belongs here, or in a CONTRIBUTING
+file if one is ever written. When in doubt, leave it alone.
 
 ### When to update CLAUDE.md
 

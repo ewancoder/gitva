@@ -9,6 +9,7 @@
  */
 
 import type { NodeKind } from '../src/layout.js';
+import { S } from '../src/strings.js';
 import { DEFAULT_VIEW, TAPE_CAP, type Oid, type Question, type Snapshot, type TreeEntry, type View } from '../src/types.js';
 
 /** What the caller has to repaint after a state arrived. */
@@ -261,21 +262,22 @@ export class Tape {
     if (!snap) return '';
     const kinds = { commit: 0, tree: 0, blob: 0, tag: 0 };
     for (const o of Object.values(snap.objects)) kinds[o.type]++;
-    return (
-      `${drawn} on screen · ${snap.window.commits.length} commits` +
-      (snap.caps.fullLoad
-        ? ` · ${kinds.commit}c ${kinds.tree}t ${kinds.blob}b${kinds.tag ? ` ${kinds.tag}g` : ''}` +
-          ` · ${(snap.unreachable ?? []).length} unreachable`
-        : ` · ${snap.caps.objectCount.toLocaleString()} objects`) +
-      ` · ${snap.index.length} index`
-    );
+    const commits = snap.window.commits.length;
+    return snap.caps.fullLoad
+      ? S.status.tally(drawn, commits, kinds, (snap.unreachable ?? []).length, snap.index.length)
+      : S.status.tallyBig(
+          drawn,
+          commits,
+          snap.caps.objectCount.toLocaleString(),
+          snap.index.length,
+        );
   }
 
   /** What this picture is not showing — the server's reasons, plus our own. */
   notes(): string[] {
     const notes = [...(this.current?.notes ?? [])];
     if (this.dropped > 0) {
-      notes.push(`Recording: ${this.states.length} steps kept, ${this.dropped} older ones dropped.`);
+      notes.push(S.status.stepsDropped(this.states.length, this.dropped));
     }
     return notes;
   }

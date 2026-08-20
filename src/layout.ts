@@ -11,6 +11,7 @@
  * here: generality bought nothing and cost slow, jumpy and generic-looking.
  */
 
+import { S } from './strings.js';
 import type { Oid, Snapshot, TreeEntry, View } from './types.js';
 
 export type NodeKind =
@@ -109,7 +110,7 @@ const short = (oid: Oid) => oid.slice(0, 7);
 const entryLabel = (e: { name: string; mode: string }) =>
   `${e.name}${e.mode === '100755' ? ' +x' : e.mode === '120000' ? ' ->' : ''}`;
 const refLabel = (name: string) =>
-  name.replace(/^refs\/heads\//, '').replace(/^refs\/tags\//, 'tag: ').replace(/^refs\//, '');
+  name.replace(/^refs\/heads\//, '').replace(/^refs\/tags\//, S.canvas.tagPrefix).replace(/^refs\//, '');
 
 // ---------------------------------------------------------------------------
 // Lanes
@@ -225,7 +226,7 @@ export function layout(
   const expanded = new Set(view.expanded);
   const folded = new Set(view.folded ?? []);
   /** A folded tree looks like an empty one, so it says how much it holds. */
-  const heldBack = (oid: Oid) => `tree +${snap.trees[oid]?.length ?? 0}`;
+  const heldBack = (oid: Oid) => S.canvas.heldBack(snap.trees[oid]?.length ?? 0);
   const unreachable = new Set(snap.unreachable ?? []);
   const stagedOnly = new Set(snap.stagedOnly ?? []);
 
@@ -393,10 +394,10 @@ export function layout(
       y: y + 8,
       w: 210,
       h: 30,
-      label: 'load more history',
+      label: S.canvas.more.label,
       sub: snap.window.totalCommits
-        ? `${commits.length} of ${snap.window.totalCommits} commits`
-        : `${commits.length} commits shown`,
+        ? S.canvas.more.of(commits.length, snap.window.totalCommits)
+        : S.canvas.more.shown(commits.length),
     });
     y += 46;
   }
@@ -691,11 +692,11 @@ export function layout(
     nodes,
     edges: edges.filter((e) => at.has(e.from) && at.has(e.to)),
     bands: [
-      { key: 'pointers', label: 'pointers and tags', x: M.gutterX, w: gutterW },
-      { key: 'commits', label: 'commits', x: lanesX, w: lanesW },
-      { key: 'objects', label: 'trees and blobs', x: objectsX, w: objectsW },
+      { key: 'pointers', label: S.canvas.bands.pointers, x: M.gutterX, w: gutterW },
+      { key: 'commits', label: S.canvas.bands.commits, x: lanesX, w: lanesW },
+      { key: 'objects', label: S.canvas.bands.objects, x: objectsX, w: objectsW },
       ...(view.showIndex
-        ? [{ key: 'index' as const, label: 'index', x: indexX, w: indexW }]
+        ? [{ key: 'index' as const, label: S.canvas.bands.index, x: indexX, w: indexW }]
         : []),
     ],
     width: (view.showIndex ? indexX + indexW : objectsX + objectsW) + 40,

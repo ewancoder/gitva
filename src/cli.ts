@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { serve, type Server } from './server.js';
+import { S } from './strings.js';
 
 export interface Options {
   repo: string;
@@ -52,11 +53,11 @@ export async function main(args: string[]): Promise<Server> {
   const { repo, port, host, open, learning, id } = parseArgs(args);
   const server = await serve(repo, port, host, learning, id);
   const url = browseUrl(host, server.port);
-  process.stdout.write(`gitva watching ${repo}\n${url}\n`);
+  process.stdout.write(S.cli.watching(repo, url));
   // Reaching other machines has no authentication: whoever reaches the port
   // reads the whole repository.
   if (host !== '127.0.0.1')
-    process.stdout.write(`serving ${host}:${server.port} to the network — no auth\n`);
+    process.stdout.write(S.cli.serving(host, server.port));
   if (open) openBrowser(url);
   process.on('SIGINT', () => void server.close().then(() => process.exit(0)));
   return server;
