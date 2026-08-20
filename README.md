@@ -87,7 +87,7 @@ line inside a ref.
 | right-click | mark with a red outline, to follow something as the object graph moves |
 | double-click a commit | expand or collapse what it links to |
 | double-click a tree | expand or collapse that subtree; collapsed it says how many entries it holds back (`tree +3`) |
-| drag anything | pin it where you put it; shift+click unpins |
+| drag anything | pin it where you put it, across a reload too; shift+click unpins |
 | drag a column seam | widen the left column, for room to arrange pins |
 | *reset view* | drops every pin and puts the columns back |
 | click the identifier | copies what the recording is filed under, for `--id` |

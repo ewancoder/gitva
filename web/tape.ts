@@ -315,6 +315,19 @@ export class Pins {
     } else this.list.push({ seq, id, x, y });
   }
 
+  /** Every pin, for a browser to write out and hand back after a reload. */
+  get all(): readonly { seq: number; id: Oid; x: number; y: number }[] {
+    return this.list;
+  }
+
+  /** Pins from before a reload. They come back holding from the first step
+   *  there is, not the one they were made at: a recording that has been cleared
+   *  or has dropped its oldest steps would otherwise leave a pin waiting for a
+   *  step number that is not coming back. */
+  restore(pins: readonly { id: Oid; x: number; y: number }[]) {
+    for (const p of pins) this.put(0, p.id, p.x, p.y);
+  }
+
   /** Shift-clicking a node is the undo of dragging it, at every moment. */
   drop(id: Oid): boolean {
     const n = this.list.length;

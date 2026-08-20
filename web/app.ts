@@ -81,6 +81,10 @@ const saveFolds = () => {
   localStorage.setItem('gitva.trees', JSON.stringify(tape.view.folded ?? []));
 };
 const pins = new Pins();
+// Where you dragged something is the same kind of answer as a fold: yours, and
+// no reason for a reload to undo it. Same one key per origin.
+pins.restore(JSON.parse(localStorage.getItem('gitva.pins') ?? '[]'));
+const savePins = () => localStorage.setItem('gitva.pins', JSON.stringify(pins.all));
 // How wide the reader has dragged each band. A hand-set width, like a pin, so
 // it outlives the page — and like the folds, one key for the origin.
 const bandWidths: Record<string, number> = JSON.parse(
@@ -399,6 +403,7 @@ $('fold').addEventListener('click', () => {
 // A widened band is the same kind of thing, and goes back with them.
 $('unpin').addEventListener('click', () => {
   pins.clear();
+  savePins();
   for (const k of Object.keys(bandWidths)) delete bandWidths[k];
   saveBands();
   relayout(true, false);
@@ -537,6 +542,9 @@ canvas.addEventListener('pointerup', (e) => {
   }
   const click: Click | null =
     drag && !drag.moved ? { at: e.timeStamp, x: e.clientX, y: e.clientY, id: drag.id } : null;
+  // Written out at the end of the gesture, not per pointermove: one drag is a
+  // hundred of those, and the same reason `saveBands` sits where it does.
+  if (drag?.moved && drag.id) savePins();
   drag = null;
   if (!click) return;
 
@@ -571,7 +579,10 @@ canvas.addEventListener('pointerup', (e) => {
   // Shift is the undo of dragging: the pin comes out and the layout takes the
   // node back. Nothing is selected or copied on the way — it is one act.
   if (e.shiftKey && id) {
-    if (pins.drop(id)) relayout(true, false);
+    if (pins.drop(id)) {
+      savePins();
+      relayout(true, false);
+    }
     return;
   }
   selected = id;

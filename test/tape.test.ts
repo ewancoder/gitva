@@ -377,6 +377,20 @@ describe('pins', () => {
     pins.clear();
     assert.equal(pins.count, 0);
   });
+
+  // The reload path: the browser writes its pins out and hands them back.
+  it('brings pins back after a reload, holding from the first step there is', () => {
+    const before = new Pins();
+    before.put(4, 'b1', 10, 20);
+    before.put(7, 'b2', 30, 40);
+
+    const after = new Pins();
+    after.restore(JSON.parse(JSON.stringify(before.all)) as { id: string; x: number; y: number }[]);
+    // Not waiting for step 4 to come round again: a recording that was cleared
+    // is back at step one, and a pin nobody can see is a pin nobody can undo.
+    assert.deepEqual(after.at(1), { b1: { x: 10, y: 20 }, b2: { x: 30, y: 40 } });
+    assert.equal(after.count, 2);
+  });
 });
 
 describe('history from before this browser arrived', () => {
