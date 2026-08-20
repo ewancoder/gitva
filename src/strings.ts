@@ -31,6 +31,7 @@ export type Strings = typeof en;
  */
 export const LANGUAGES: { code: string; label: string; name: string }[] = [
   { code: 'en', label: 'EN', name: 'English' },
+  { code: 'ru', label: 'RU', name: 'Русский' },
 ];
 
 /**
@@ -40,6 +41,7 @@ export const LANGUAGES: { code: string; label: string; name: string }[] = [
  */
 const LOADERS: Record<string, () => Promise<Strings>> = {
   en: async () => en,
+  ru: async () => (await import('./strings-ru.js')).ru,
 };
 
 /** The words in force. Read it, never keep what it gave you. */

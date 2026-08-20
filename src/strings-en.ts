@@ -191,7 +191,7 @@ export const en = {
   // -------------------------------------------------------------------------
   notes: {
     noUnreachableDetection: (objects: number) =>
-      `Unreachable detection is off: repository is too big - ${objects.toLocaleString()} objects',
+      `Unreachable detection is off: repository is too big - ${objects.toLocaleString()} objects`,
     treesOnDemand: 'Trees load only for the commits you expand',
     indexElided: (shown: number, total: number) =>
       `Index: showing the ${shown} entries that differ from HEAD, of ${total} staged paths.`,

@@ -59,6 +59,24 @@ describe('the language in force', () => {
   });
 });
 
+// Russian counts three ways where English counts two, so the words a number
+// sits beside are chosen by the number: 1 коммит, 2 коммита, 5 коммитов.
+describe('the Russian counted forms', () => {
+  it('agrees with the number in front of it', async () => {
+    await setLanguage('ru');
+    assert.equal(S.change.kind(1, 'commit'), '1 коммит');
+    assert.equal(S.change.kind(2, 'tree'), '2 дерева');
+    assert.equal(S.change.kind(5, 'blob'), '5 блобов');
+    assert.equal(S.change.kind(21, 'tag'), '21 метка');
+    assert.equal(S.change.kind(11, 'whatever'), '11 объектов');
+    assert.match(
+      S.status.tally(3, 2, { commit: 1, tree: 1, blob: 1, tag: 1 }, 0, 0),
+      /2 коммита · 1c 1t 1b 1g/,
+    );
+    await setLanguage('en');
+  });
+});
+
 describe('a note out of a step', () => {
   it('puts the numbers the step carried into the sentence', () => {
     assert.match(renderNote({ id: 'refsOutside', args: [3] }), /^3 refs point outside/);

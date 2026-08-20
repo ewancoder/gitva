@@ -110,7 +110,9 @@ reload — and so does a tree you folded shut, which is the same answer about a 
 
 The help dialog holds the legend and the keys. Beside it, settings, which survive a reload:
 whether clicking centres the view, whether a new commit arrives expanded, whether pins wear a
-pushpin, and whether the canvas refits the width when the repository changes.
+pushpin, and whether the canvas refits the width when the repository changes. In the same
+corner, **EN** and **RU** switch the language: the words are yours, like the view — nobody
+else's canvas changes, and a recorded step reads in whichever language you are set to.
 
 ## The recording survives a restart
 
