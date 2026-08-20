@@ -106,7 +106,7 @@ step — expanding and paging redraw in place and add nothing. Pause and the rec
 behind you, so a demo can be **replayed instead of redone**; stepping backwards highlights the
 change in reverse, which is how you show a reset twice without doing it twice. Expansions are
 the exception to stepping: what you expanded stays expanded wherever you stand, and across a
-reload.
+reload — and so does a tree you folded shut, which is the same answer about a different shape.
 
 The help dialog holds the legend and the keys. Beside it, settings, which survive a reload:
 whether clicking centres the view, whether a new commit arrives expanded, whether pins wear a

@@ -65,13 +65,21 @@ const savePrefs = () => localStorage.setItem('gitva.prefs', JSON.stringify(prefs
 // --- the tape: every state seen, where we stand in it, and the view we ask
 // with. It owns all three, so nothing here keeps a second copy to drift.
 const tape = new Tape();
-tape.view = { ...tape.view, showIndex: prefs.showIndex };
 // Which commits this person has opened and folded is an answer they gave, so
-// it outlives the page the way the preferences do.
+// it outlives the page the way the preferences do — and a tree they shut is the
+// same answer about a different kind of shape.
 // ponytail: one key for the origin, so two repositories served on the same
 // port share it — harmless, the shas of one are never the shas of the other.
 tape.answers = JSON.parse(localStorage.getItem('gitva.folds') ?? '{}');
-const saveFolds = () => localStorage.setItem('gitva.folds', JSON.stringify(tape.answers));
+tape.view = {
+  ...tape.view,
+  showIndex: prefs.showIndex,
+  folded: JSON.parse(localStorage.getItem('gitva.trees') ?? '[]'),
+};
+const saveFolds = () => {
+  localStorage.setItem('gitva.folds', JSON.stringify(tape.answers));
+  localStorage.setItem('gitva.trees', JSON.stringify(tape.view.folded ?? []));
+};
 const pins = new Pins();
 // How wide the reader has dragged each band. A hand-set width, like a pin, so
 // it outlives the page — and like the folds, one key for the origin.

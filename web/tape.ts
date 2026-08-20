@@ -100,7 +100,14 @@ export class Tape {
       // Everything otherwise starts folded: opening a repository should cost
       // nothing to draw, and unfolding a commit is the gesture the tutorial
       // wants asked.
-      this.view = { ...s.view, showIndex: prefs.showIndex, expanded: this.answered(openAll), folded: [] };
+      // `folded` is this browser's and nobody else's — a tree it shut before a
+      // reload is still shut, the same way a commit it folded is.
+      this.view = {
+        ...s.view,
+        showIndex: prefs.showIndex,
+        expanded: this.answered(openAll),
+        folded: this.view.folded ?? [],
+      };
       if (wants(this.view.expanded, s.view.expanded)) post = this.view;
     } else if (replay && last) {
       // A commit born during the replayed session keeps whatever the room last

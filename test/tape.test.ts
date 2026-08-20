@@ -491,6 +491,15 @@ describe('folding a tree', () => {
     t.unfoldAll();
     assert.deepEqual(t.view.folded, []);
   });
+
+  // The reload path: the browser writes its folds out and hands them back on
+  // the next load, and the first state to arrive used to wipe them.
+  it('leaves a tree folded that was folded before the page was reloaded', () => {
+    const t = new Tape();
+    t.view = { ...t.view, folded: [oid('t2')] };
+    t.arrive(state(1, ['a']), OPEN);
+    assert.deepEqual(t.view.folded, [oid('t2')], 'still shut, without anyone asking again');
+  });
 });
 
 describe('what the right button can mark', () => {
