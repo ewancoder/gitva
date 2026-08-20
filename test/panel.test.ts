@@ -151,6 +151,7 @@ describe('the panel on screen', () => {
     asked[0].fail();
     await settle();
     assert.equal(el.find('pre')!.textContent, 'could not read it');
+    assert.equal(el.find('pre')!.className, 'unreadable danger', 'a failure reads as a warning');
   });
 
   it('marks the sha field alone, so a click can hand the key over', () => {

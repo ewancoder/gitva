@@ -114,7 +114,10 @@ export function renderPanel(el: HTMLElement, snap: Snapshot | null, node: SceneN
       if (mine === token) pre.textContent = bodyText(body);
     })
     .catch(() => {
-      if (mine === token) pre.textContent = S.inspector.unreadable;
+      if (mine !== token) return;
+      pre.textContent = S.inspector.unreadable;
+      // A failure to read is a warning, not content: chrome red, like `clear`.
+      pre.className = 'unreadable danger';
     });
 }
 
