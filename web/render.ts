@@ -29,6 +29,8 @@ export interface Paint {
   marked: Set<string>;
   /** Whether a pinned node wears a pushpin. Off unless the reader asked. */
   showPins: boolean;
+  /** Whether a tree's links carry the names. On unless the reader turned them off. */
+  showNames: boolean;
   /** 0→1 while new things grow out of where they came from. */
   enter: number;
   /** Nodes that have gone, drawn at their old place while they fade. */
@@ -337,7 +339,7 @@ function drawEdge(
     ctx.stroke();
     arrowhead(ctx, b.x, b.y + b.h / 2, 0, theme.faint);
     // Names live in trees, not in blobs — so the arrow carries the name.
-    if (e.label && p.camera.scale >= TIER.names) {
+    if (e.label && p.showNames && p.camera.scale >= TIER.names) {
       ctx.font = `10px ${theme.mono}`;
       ctx.fillStyle = theme.muted;
       ctx.textAlign = 'center';

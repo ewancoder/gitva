@@ -53,6 +53,7 @@ interface Prefs {
   openNewCommits: boolean;
   refitOnChange: boolean;
   showPins: boolean;
+  showNames: boolean;
   panelWidth: number;
 }
 const prefs: Prefs = {
@@ -62,6 +63,7 @@ const prefs: Prefs = {
   openNewCommits: true,
   refitOnChange: true,
   showPins: false,
+  showNames: true,
   panelWidth: 430,
   ...JSON.parse(localStorage.getItem('gitva.prefs') ?? '{}'),
 };
@@ -208,6 +210,7 @@ function paint() {
     selected,
     marked,
     showPins: prefs.showPins,
+    showNames: prefs.showNames,
     enter,
     ghosts,
     exit,
@@ -461,6 +464,19 @@ $('toggle-orphans').addEventListener('click', () => {
 $('toggle-cross').addEventListener('click', () => {
   tape.view = { ...tape.view, showCrossLinks: !tape.view.showCrossLinks };
   pushView();
+});
+// The names on a tree's links are painting, not a question for the server: it
+// is a preference, so turning them off is nobody else's business.
+const namesBtn = $('toggle-names');
+const showNames = () => {
+  namesBtn.setAttribute('aria-pressed', String(prefs.showNames));
+  schedule();
+};
+showNames();
+namesBtn.addEventListener('click', () => {
+  prefs.showNames = !prefs.showNames;
+  savePrefs();
+  showNames();
 });
 $('load-all').addEventListener('click', () => {
   if (tape.loadAll()) pushView();

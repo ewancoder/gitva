@@ -196,6 +196,7 @@ describe('painting', () => {
     selected: null,
     marked: new Set<string>(),
     showPins: true,
+    showNames: true,
     enter: 1,
     ghosts: [],
     exit: 1,
@@ -263,6 +264,24 @@ describe('painting', () => {
     const loose = { ...put, nodes: [node({ id: 'b1', kind: 'blob' })] };
     assert.ok(!strokes(loose).includes(theme.mark), 'an unpinned node gets none');
     assert.ok(!strokes(put, { showPins: false }).includes(theme.mark), 'nor does one with pins turned off');
+  });
+
+  it("puts a tree entry's name on the link, unless the names are turned off", () => {
+    const written = (over: Partial<Paint> = {}) => {
+      const said: string[] = [];
+      const ctx = new Proxy(
+        {
+          measureText: (t: string) => ({ width: t.length * 7 }),
+          fillText: (t: string) => said.push(t),
+        } as Record<string, unknown>,
+        { get: (t, k) => (k in t ? t[k as string] : () => {}) },
+      ) as unknown as CanvasRenderingContext2D;
+      snapPositions();
+      draw(ctx, full, { ...paint(), ...over });
+      return said;
+    };
+    assert.ok(written().includes('a.txt'), 'the name is on the link, not in the blob');
+    assert.ok(!written({ showNames: false }).includes('a.txt'));
   });
 
   it('draws every kind, at every tier of detail, without falling over', () => {

@@ -48,6 +48,8 @@ export const en = {
     'unreachable.title': 'Show unreachable objects',
     'cross-links': 'links from unreachable',
     'cross-links.title': 'Show links from unreachable objects to reachable ones',
+    names: 'names',
+    'names.title': 'Show the names tree entries carry, on the links',
     help: 'help',
     settings: 'settings',
 
