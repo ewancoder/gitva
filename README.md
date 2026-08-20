@@ -28,6 +28,12 @@ cd some-repo
 gitva
 ```
 
+To see what it draws without a repository of your own, run `./demo.sh` from the source folder: it
+starts gitva on a throwaway repo in `./example`, opens the browser, and walks through 22 steps —
+staging, committing, branching, a conflict, a reset, tags, `pack-refs`, `gc` — one per second.
+`./demo.sh 3` slows it down, `./demo.sh 0` waits for a keypress at each step, and enter at the
+end stops gitva.
+
 `gitva [repo] [--port N] [--no-open] [--serve [HOST:PORT]] [--learning] [--id NAME] [--fresh]` — repo defaults to `.`,
 port to a free one, and the browser opens itself. Node ≥20, no runtime dependencies.
 

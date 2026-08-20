@@ -1,20 +1,26 @@
 #!/usr/bin/env bash
-# A guided tour of everything gitva draws, run against a throwaway repo in ./example.
+# A guided tour of everything gitva draws. Starts gitva on a throwaway repo in
+# ./example, runs the tour against it, and stops gitva when you are done.
 #
-#   ./demo.sh                             enter for each step
-#   ./demo.sh [seconds-between-steps]     on a timer; enter skips ahead, any other key pauses
+#   ./demo.sh                             on a 1s timer; enter skips ahead, any other key pauses
+#   ./demo.sh [seconds-between-steps]     same, at your own pace
+#   ./demo.sh 0                           untimed: enter for each step
 #
-# q quits, at a step or at a pause. Watch ./example in gitva while it runs:
-#
-#   node dist/src/cli.js example &
-#   ./demo.sh 2
+# q quits, at a step or at a pause.
 set -eu
 
-DELAY=${1:-}
+DELAY=${1:-1}
+# Zero or less means untimed — one step per keypress.
+awk -v d="$DELAY" 'BEGIN { exit !(d > 0) }' || DELAY=
 REPO="$(cd "$(dirname "$0")" && pwd)/example"
 
 # The author's global config signs commits, and a signing prompt would hang the tour.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+# ./example sits inside gitva's own checkout, so before `git init` runs, git
+# discovery would walk up and answer with *this* repository — gitva would draw
+# it, and a step that ran before the init would commit into it. The ceiling
+# stops the walk at the folder above.
+export GIT_CEILING_DIRECTORIES="$(cd "$(dirname "$0")" && pwd)"
 export GIT_AUTHOR_NAME=Ada GIT_AUTHOR_EMAIL=ada@example.com
 export GIT_COMMITTER_NAME=Ada GIT_COMMITTER_EMAIL=ada@example.com
 
@@ -70,13 +76,40 @@ run() {                       # run "shell line"  — echoed now, executed after
 	queued+=("$1")
 }
 
-echo "gitva demo — repo: $REPO, ${DELAY:+${DELAY}s between steps}${DELAY:-enter for each step}"
+# The tour starts before the repository does, so `git init` itself is a step on
+# screen. Empty the folder rather than remove it: gitva is about to watch it.
+mkdir -p "$REPO"
+find "$REPO" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+[ -f "$HERE/dist/src/cli.js" ] || (cd "$HERE" && npm run build)
+
+LOG=$(mktemp)
+gitva_pid=
+stop_gitva() { [ -n "$gitva_pid" ] && kill "$gitva_pid" 2>/dev/null; rm -f "$LOG"; }
+trap stop_gitva EXIT
+
+# --port 0 so a second copy of the tour does not collide; --fresh so the
+# recording starts at this run rather than replaying the last one.
+node "$HERE/dist/src/cli.js" "$REPO" --port 0 --learning --fresh > "$LOG" 2>&1 &
+gitva_pid=$!
+URL=
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+	URL=$(sed -n 2p "$LOG"); [ -n "$URL" ] && break
+	sleep 0.5
+done
+[ -n "$URL" ] || { cat "$LOG"; echo "gitva did not start"; exit 1; }
+
+cd "$REPO"
+
+echo "gitva demo — repo: $REPO, watching at $URL"
+if [ -n "$DELAY" ]; then
+	echo "${DELAY}s between steps — enter skips ahead, any other key pauses, q quits"
+else
+	echo "enter for each step, q quits"
+fi
 
 step "A fresh empty repository: nothing but HEAD, pointing at a branch that does not exist yet."
-mkdir -p "$REPO"
-# Empty it rather than remove it: gitva may already be watching this path.
-find "$REPO" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-cd "$REPO"
 run "git init -q -b main ."
 run "git config user.name Ada; git config user.email ada@example.com"
 
@@ -163,8 +196,11 @@ pause_or_wait
 flush
 
 echo
-echo "${bold}done.${off} ${n} steps. Things to try by hand now:"
+echo "${bold}done.${off} ${n} steps. Things to try by hand now, at $URL:"
 echo "  · click a blob, a tree, a commit, a tag, a ref chip — read the panel"
-echo "  · search by message (feature), author (Grace), path (lib/f.py), content (alpha)"
-echo "  · toolbar: chosen branches · fold/unfold all · hide the index · unpin all"
-echo "  · f fit · [ ] step through the tape · space pause · i index"
+echo "  · double-click a commit or a tree to expand it, right-click to mark, drag to pin"
+echo "  · view toolbar: expand/collapse all · index · unreachable · links from unreachable"
+echo "  · f fit · [ ] step through the recording · space pause · i index"
+echo
+printf '%s[enter to stop gitva]%s\n' "$dim" "$off"
+[ -t 0 ] && read -r _ || true
