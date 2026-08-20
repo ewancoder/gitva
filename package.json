@@ -1,7 +1,22 @@
 {
   "name": "gitva",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "A visual tutorial for git, taught from the internals upward: a live picture of .git in your browser.",
+  "license": "MIT",
+  "author": "Ivan Zyranau",
+  "keywords": [
+    "git",
+    "visualisation",
+    "visualization",
+    "dag",
+    "graph",
+    "tutorial",
+    "teaching",
+    "object-graph",
+    "plumbing",
+    "internals",
+    "cli"
+  ],
   "type": "module",
   "repository": "github:ewancoder/gitva",
   "bin": {
@@ -10,6 +25,7 @@
   "files": [
     "dist/src",
     "dist/web",
+    "!**/*.map",
     "web/index.html",
     "web/favicon.png"
   ],

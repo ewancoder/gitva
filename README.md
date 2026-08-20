@@ -22,10 +22,16 @@ right-clicked wearing its mark, and one unreachable blob drawn as a ghost.
 ## Run
 
 ```
-npm install && npm run build
-npm install -g          # puts gitva on your PATH
+npm install -g gitva
 cd some-repo
 gitva
+```
+
+From a clone instead:
+
+```
+npm install && npm run build
+npm install -g          # puts gitva on your PATH
 ```
 
 To see what it draws without a repository of your own, run `./demo.sh` from the source folder: it
