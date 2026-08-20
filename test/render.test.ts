@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import type { Scene, SceneEdge, SceneNode } from '../src/layout.js';
 import { EMPTY_CHANGE } from '../src/diff.js';
 import { bandEdgeAt, draw, hitTest, path, snapPositions, type Paint } from '../web/render.js';
-import { chipHue, hueFor, theme } from '../web/theme.js';
+import { chipHue, hueFor, setTheme, theme } from '../web/theme.js';
 
 /** c2 → c1 → c0, and c2 holds a tree holding a blob. */
 const edges: SceneEdge[] = [
@@ -128,6 +128,29 @@ describe('hues', () => {
     assert.equal(chipHue('ref', 'ref:refs/tags/v1'), theme.refTag);
     assert.equal(chipHue('index', 'index:0:a.txt'), theme.muted);
   });
+
+  // Every module holds this one object, so the swap has to happen in place —
+  // and it has to go back, or a light session would leave the dark palette
+  // half-written for the next thing that reads it.
+  it('swaps the ground in place, and keeps the three object hues across it', () => {
+    const dark = { ...theme };
+    try {
+      setTheme('light');
+      assert.notEqual(theme.ground, dark.ground);
+      assert.equal(theme.ink, '#1a1d24');
+      assert.deepEqual(
+        [theme.commit, theme.tree, theme.blob],
+        [dark.commit, dark.tree, dark.blob],
+        'a kind is recognised by its hue, so the ground must not move it',
+      );
+      setTheme('matrix');
+      assert.equal(theme.commit, theme.blob, 'one ground tells no kind from another');
+      setTheme('dark');
+      assert.deepEqual({ ...theme }, dark);
+    } finally {
+      setTheme('dark');
+    }
+  });
 });
 
 /**
@@ -196,8 +219,10 @@ describe('painting', () => {
     selected: null,
     marked: new Set<string>(),
     showPins: true,
+    showNames: true,
     enter: 1,
     ghosts: [],
+    exit: 1,
     motion: true,
     ...over,
   });
@@ -264,8 +289,26 @@ describe('painting', () => {
     assert.ok(!strokes(put, { showPins: false }).includes(theme.mark), 'nor does one with pins turned off');
   });
 
+  it("puts a tree entry's name on the link, unless the names are turned off", () => {
+    const written = (over: Partial<Paint> = {}) => {
+      const said: string[] = [];
+      const ctx = new Proxy(
+        {
+          measureText: (t: string) => ({ width: t.length * 7 }),
+          fillText: (t: string) => said.push(t),
+        } as Record<string, unknown>,
+        { get: (t, k) => (k in t ? t[k as string] : () => {}) },
+      ) as unknown as CanvasRenderingContext2D;
+      snapPositions();
+      draw(ctx, full, { ...paint(), ...over });
+      return said;
+    };
+    assert.ok(written().includes('a.txt'), 'the name is on the link, not in the blob');
+    assert.ok(!written({ showNames: false }).includes('a.txt'));
+  });
+
   it('draws every kind, at every tier of detail, without falling over', () => {
-    for (const scale of [0.3, 0.6, 1.2, 1.5]) {
+    for (const scale of [0.1, 0.2, 0.3, 0.5, 1.2, 1.5]) {
       snapPositions();
       settle(full, paint({ camera: { x: 0, y: 0, scale } }));
     }
@@ -279,6 +322,7 @@ describe('painting', () => {
         change: { added: new Set(['b1']), removed: new Set(['old']), updated: new Set(['c1']), moved: new Set() },
         flash: 1,
         enter: 0.5,
+        exit: 0.5,
         hover: 'c1',
         selected: 'b1',
         marked: new Set(['b1']),

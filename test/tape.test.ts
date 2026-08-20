@@ -329,15 +329,61 @@ describe('what the header says', () => {
     assert.deepEqual(new Tape().notes(), []);
   });
 
+  // The bug: switch the index off, walk back through the recording, switch it
+  // on again — every step was drawn with the toggle it was recorded under, so
+  // the index stayed off, and the steps recorded while it was off held no index
+  // to draw. Same for unreachable and the links out of it: they are the
+  // viewer's, and the recording is git's.
+  it('keeps the view toolbar’s toggles yours, wherever you stand in the recording', () => {
+    const t = new Tape();
+    for (const i of [1, 2, 3]) t.arrive(state(i, ['c' + i]), SHUT);
+    t.view = { ...t.view, showIndex: false, showUnreachable: false, showCrossLinks: true };
+
+    t.scrubTo(0);
+    assert.equal(t.view.showIndex, false);
+    assert.equal(t.view.showUnreachable, false);
+    assert.equal(t.view.showCrossLinks, true);
+
+    t.view = { ...t.view, showIndex: true };
+    t.goLive();
+    assert.equal(t.view.showIndex, true, 'the step put the toggle back');
+    t.scrubTo(1);
+    assert.equal(t.view.showIndex, true);
+  });
+
+  it('does not let a state arriving turn a toggle back on', () => {
+    const t = new Tape();
+    t.arrive(state(1, ['a']), SHUT);
+    t.view = { ...t.view, showIndex: false };
+    // A second browser posted a view of its own; the server broadcasts it to
+    // everyone, and it is nobody else's business.
+    t.arrive(state(2, ['b'], { showIndex: true }), SHUT, true);
+    assert.equal(t.view.showIndex, false);
+  });
+
+  it('says what this browser is hiding, and only while it is hiding it', () => {
+    const t = new Tape();
+    t.arrive(state(1, ['a']), SHUT);
+    t.view = { ...t.view, showIndex: false, showUnreachable: false };
+    const notes = t.notes();
+    assert.equal(notes.length, 2);
+    assert.match(notes[0], /index/i);
+    assert.match(notes[1], /[Uu]nreachable/);
+    t.view = { ...t.view, showIndex: true, showUnreachable: true };
+    assert.deepEqual(t.notes(), []);
+  });
+
   it('passes on the server’s reasons, and owns up to what the tape itself dropped', () => {
     const t = new Tape();
     for (let i = 1; i <= TAPE_CAP + 1; i++) {
       const s = state(i, ['c' + i]);
-      s.notes = ['Unreachable detection is off in a repository this size.'];
+      s.notes = [{ id: 'noUnreachableDetection', args: [12_345] }];
       t.arrive(s, SHUT);
     }
     const notes = t.notes();
-    assert.equal(notes[0], 'Unreachable detection is off in a repository this size.');
+    // The step carries an id and a number; the sentence is put together here,
+    // in the language this browser is set to.
+    assert.match(notes[0], /Unreachable detection is off: repository is too big - 12,345 objects/);
     assert.match(notes[1], /400 steps kept, 1 older ones dropped/);
   });
 });
@@ -376,6 +422,20 @@ describe('pins', () => {
     assert.deepEqual(pins.at(9), { b2: { x: 5, y: 5 } });
     pins.clear();
     assert.equal(pins.count, 0);
+  });
+
+  // The reload path: the browser writes its pins out and hands them back.
+  it('brings pins back after a reload, holding from the first step there is', () => {
+    const before = new Pins();
+    before.put(4, 'b1', 10, 20);
+    before.put(7, 'b2', 30, 40);
+
+    const after = new Pins();
+    after.restore(JSON.parse(JSON.stringify(before.all)) as { id: string; x: number; y: number }[]);
+    // Not waiting for step 4 to come round again: a recording that was cleared
+    // is back at step one, and a pin nobody can see is a pin nobody can undo.
+    assert.deepEqual(after.at(1), { b1: { x: 10, y: 20 }, b2: { x: 30, y: 40 } });
+    assert.equal(after.count, 2);
   });
 });
 
@@ -490,6 +550,15 @@ describe('folding a tree', () => {
     // "unfold all" means everything open, and a folded tree is not open.
     t.unfoldAll();
     assert.deepEqual(t.view.folded, []);
+  });
+
+  // The reload path: the browser writes its folds out and hands them back on
+  // the next load, and the first state to arrive used to wipe them.
+  it('leaves a tree folded that was folded before the page was reloaded', () => {
+    const t = new Tape();
+    t.view = { ...t.view, folded: [oid('t2')] };
+    t.arrive(state(1, ['a']), OPEN);
+    assert.deepEqual(t.view.folded, [oid('t2')], 'still shut, without anyone asking again');
   });
 });
 

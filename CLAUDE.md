@@ -78,7 +78,7 @@ Everything horizontal across the top is a **toolbar**, each named for its job, n
 
 | region | holds |
 |---|---|
-| **view toolbar** | repo name, load all commits (shown only while more remain), expand/collapse, index · unreachable · links from unreachable, help. Every control here is a `View` field. The question — branches and search — is built but hidden behind `QUESTIONS_ENABLED` in `src/types.ts`, because one shared view means one viewer's filter is everyone's. |
+| **view toolbar** | repo name (the path is its tooltip), the recording's identifier — a click copies it — load all commits (shown only while more remain), expand/collapse, index · unreachable · links from unreachable, then the light/dark toggle, help, settings and the language buttons in the corner. Everything that changes what is drawn is a `View` field; the four in the corner are not — they open a dialog, change the words, or turn the ground over, and all three of those are yours alone. The question — branches and search — is built but hidden behind `QUESTIONS_ENABLED` in `src/types.ts`, because one shared view means one viewer's filter is everyone's. |
 | **recording toolbar** | `reset view` · step back · pause · step forward · scrub · live · tally · what changed. `reset view` leads it, in its own group: it is the most-used control, and one button never earned a row of its own |
 | **notes toolbar** | what the canvas isn't showing, what gitva won't do to your repo, and why |
 | **canvas** | the object graph |
@@ -150,11 +150,14 @@ dependency passes the one-sentence test in `INITIAL_DESIGN.md` §14.
 
 | | |
 |---|---|
+| `src/strings-en.ts` | **every user-facing string**: the toolbars, tooltips, help, teaching text, notes, what the CLI prints. `ui` is one flat entry per `data-t*` key in `web/index.html`; the rest is what code asks for by name, a string or an arrow function where a number sits in the sentence. |
+| `src/strings.ts` | the localization framework: `LANGUAGES` (the registry the buttons are drawn from), a loader per language, the live binding `S`, `setLanguage`, and `renderNote`. No language but English is loaded until it is chosen. |
 | `src/types.ts` | shared vocabulary: `Snapshot`, `View`, `Capabilities`. Imported by both sides. |
 | `src/git.ts` | the **only** place that spawns git. Parsers, `measure`, `changeSignal`, `snapshot`, `findUnreachable`, `readBody`. |
 | `src/layout.ts` | `layout(snapshot, view, pins) → Scene`. Pure. Knows nothing about painting. |
 | `src/diff.ts` | `diffScenes` (what to flash), `describe` (the recording toolbar's change line). Pure. |
-| `src/explain.ts` | the teaching text, per shape kind (`NodeKind` in code). Pure. |
+| `src/explain.ts` | the inspector's facts, per shape kind (`NodeKind` in code); the wording is in `strings-en.ts`. Pure. |
+| `src/store.ts` | the recording on disk: where the system keeps it, `recordingKey` (the ten-character identifier, shown in the view toolbar), one file per key, load and save. Server-only. |
 | `src/server.ts` | `node:http`: static files, SSE `/events`, `POST /view`, `GET /object`. |
 | `src/cli.ts` | `parseArgs` (pure), `main`; opens the browser. Runs only when it *is* the command, so importing it for a test starts nothing. |
 | `web/` | `index.html` (all CSS), `tape.ts` (the recording: steps, cursor, view, pins, paging — no DOM), `camera.ts` (where the object graph sits under the canvas — arithmetic only), `panel.ts` (the inspector: `panelModel` pure, then the elements), `render.ts` (canvas), `theme.ts`, `app.ts` (DOM, events, painting — and nothing else). |
@@ -162,7 +165,7 @@ dependency passes the one-sentence test in `INITIAL_DESIGN.md` §14.
 
 `src/*` is compiled to `dist/src` and served to the browser too — `web/app.ts` imports
 `../src/{diff,layout,types,explain}.js`. **Nothing under `src/` that the browser imports may
-touch `node:` builtins.** `git.ts` and `server.ts` are server-only and never imported by `web/`.
+touch `node:` builtins.** `git.ts`, `store.ts` and `server.ts` are server-only and never imported by `web/`.
 
 `dist/` is build output and gitignored.
 
@@ -200,6 +203,32 @@ That is affordable *because* the view is bounded, and it is what keeps diffing, 
 change highlighting simple. If profiling ever argues for deltas, the burden of proof is on the
 delta.
 
+**The recording outlives the process.** It is written to the user's own state directory —
+never into the observed repository — keyed by the repository's full path unless `--id` named
+something else, along with the change signal it was built at, so a restart onto an untouched
+repository adds no step. `src/store.ts`.
+
+The key is the sha of the identifier, cut to ten characters, and it is **itself an identifier**:
+`recordingKey` hands a key straight back, which is what makes the one the view toolbar shows —
+and copies on a click — worth copying. A folder that moved is resumed with `--id <that key>`.
+It reaches the browser in its own `event: recording` frame, because it is a fact about the
+recording rather than about a step, and a step scrubbed back to must not change it.
+
+**The view belongs to the run, not to the recording.** A `Snapshot` carries the `View` it was
+answered under, so a kept recording's newest step is still answering the last run's question.
+`serve()` answers it again — a *view* rebuild, which replaces that step rather than adding one —
+before it listens, so `--learning` and the toolbar's toggles are this run's. Only while the
+change signal still matches what was kept: if the repository has moved on, the poller is about to
+build a step of its own under this run's view, and replacing the newest kept step would throw
+away a step of something that has since changed. This was a bug: restarting with `--learning`
+opened nothing, and restarting was the only way to change your mind, because a rebuild stamps
+this run's view on.
+
+**Starting the recording over is the presenter's, not a viewer's.** `--fresh` skips the kept
+steps at startup and the first step of the run overwrites the file. There is no button and no
+`POST /clear`: the recording is shared, so one browser must not be able to end everyone's
+session — the same reason filtering is off (`QUESTIONS_ENABLED`).
+
 **Capabilities, not modes.** `measure()` runs once at startup and derives what is on offer.
 Above `LIMITS.fullLoad` (12,000 objects) unreachable detection is off; above `LIMITS.indexNodes`
 (400) the index is drawn as its delta from HEAD. Both limits are estimates from the expensive
@@ -211,6 +240,16 @@ by faking the `Capabilities` object, not by building a huge repo.
 **The change signal** hashes `for-each-ref` + HEAD + `count-objects -v` + `stat(.git/index)`.
 It must keep noticing a bare new object nothing points at, and an index rewrite — those are the
 first two things the tutorial teaches.
+
+**The words are the viewer's.** A step carries note **ids** — `{ id, args }`, `Note` in
+`types.ts` — never sentences, so the same recorded step reads in whatever language the browser
+holding it is set to, including a language added long after the step was recorded. The choice is
+a preference in `localStorage`, never posted: switching it changes nobody else's canvas, and
+needs no round trip because `web/*` already imports the strings module. `S` is a live binding, so
+nothing may cache a sentence — `setLanguage` swaps the words and the caller says everything
+again (`applyWords` in `app.ts`). A language arrives when it is chosen, one module, the way every
+i18n framework does it; the server's own prose — the CLI, and the one `trouble` message — stays
+in the language the process was built with.
 
 **Object bodies are fetched on selection** via `/object?oid=`, never broadcast.
 
@@ -231,6 +270,14 @@ first two things the tutorial teaches.
 
 ## Conventions
 
+- **No user-facing string is written anywhere but `src/strings-en.ts`.** `web/index.html` holds
+  keys — `data-t` for text, `data-t-title`, `data-t-placeholder`, and `data-t-html` for the
+  handful that carry a `<kbd>` — and `web/app.ts` fills them in on load. `test/strings.test.ts` fails if a
+  key has no string, if a string is unused, or if a `data-t-html` value smuggles in a tag other
+  than `<kbd>`. New copy goes there and is reached through `S`; the strings module is pure data,
+  so `src/` files the browser imports may use it freely. **A sentence never crosses the wire**:
+  what the server has to say about a step is a `Note` id plus its numbers, and the browser makes
+  the sentence — which is also why a count is passed raw and `toLocaleString()`d where it is read.
 - Small, obvious code — the codebase is part of the teaching material. If an optimisation stops
   reading as an explanation of how git works, it has to justify itself.
 - Comments explain *why* (usually citing the design brief), not what.
@@ -261,11 +308,36 @@ first two things the tutorial teaches.
 - Never write a performance number down that you did not measure. There is no benchmark in this
   repo and the README no longer claims any timings; if you add a real one, add the script that
   produced it in the same pass.
-- **Finish every change by asking whether it added or altered something a user would want to
-  know about** — a gesture, a key, a toolbar control, a flag, a limit, a new thing on screen.
-  If so, update the README in the same pass. The README stays minimal: only what someone needs
-  to understand the project, run it, and know the features they would look for. Internal
-  refactors, bug fixes and anything invisible from the browser get no mention.
+- **Neither CLAUDE.md nor the README is updated by default.** Touching them on every change
+  muddles the diff; the code is the record, and a future session can read it. Both have their
+  own bar, below.
+
+### When to update the README
+
+It is a user-facing document. Update it only when one of these is true, and in the same pass:
+
+- a **new feature** appears that someone would look for — a gesture, a key, a toolbar control,
+  a flag, a limit, a new thing on screen;
+- an existing feature **changed or broke** compatibility;
+- something in it is **outdated** or now wrong.
+
+The README stays minimal: only what someone needs to understand the project, run it, and know
+the features they would look for — **what the tool does, never what it is made of**. Internal
+refactors, bug fixes, where a file lives and anything invisible from the browser get no mention,
+however useful it would be to someone editing the code: that belongs here, or in a CONTRIBUTING
+file if one is ever written. When in doubt, leave it alone.
+
+### When to update CLAUDE.md
+
+It is this file: what a future session needs that the code cannot tell it. Update it only when
+one of these is true:
+
+- a **core concept** changed — the vocabulary, an invariant, the architecture, a convention;
+- something here is now **contradictory or outdated**;
+- a fact is **important enough to belong here** and is not inferable from the code.
+
+Everything else — a minor change, a bug fix, an implementation detail — goes unrecorded, because
+future sessions can infer it from the code.
 
 ## The canonical scenario
 
@@ -288,6 +360,10 @@ git reset b.txt       → the index entry goes; the blob survives, now marked un
   design: today it is a list of pre-built snapshots made under whatever view was current, and
   per-viewer views mean it has to hold the repository's state and let each browser ask its own
   question of it.
+- **`--serve` has no authentication.** Any browser that reaches the port reads the whole
+  repository. It can no longer throw the recording away — that moved to `--fresh`, in the
+  presenter's hands — but the honest fix for the rest is the same one the view needs: know which
+  browser is the presenter's.
 - **The visual pass has been looked at once**, on a small repository — `docs/small-demo.png`, now
   at the top of the README. It has not been seen on a repo with a couple of hundred commits,
   which is the bar `INITIAL_DESIGN.md` §12 sets, and the column labels (`pointers and tags`,

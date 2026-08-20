@@ -13,7 +13,7 @@
 
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { stat } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import type {
   Capabilities,
@@ -21,6 +21,7 @@ import type {
   GitObject,
   Head,
   IndexEntry,
+  Note,
   ObjectType,
   Oid,
   Ref,
@@ -41,11 +42,12 @@ const READ_ONLY = new Set([
   'ls-files',
   'count-objects',
   'diff-index',
+  'show-index',
 ]);
 
 export class GitError extends Error {}
 
-function run(repo: string, args: string[], stdin?: string): Promise<Buffer> {
+function run(repo: string, args: string[], stdin?: string | Buffer): Promise<Buffer> {
   const cmd = args[0];
   if (!READ_ONLY.has(cmd)) throw new GitError(`refusing to run non-read-only git ${cmd}`);
   return new Promise((resolve, reject) => {
@@ -501,7 +503,10 @@ export async function snapshot(
     commits,
     trees,
     tags,
-    index: view.showIndex ? index : [],
+    // Always, whether or not this view draws it: hiding the index is a drawing
+    // decision the browser makes, and a step recorded while it was hidden is
+    // scrubbed back to later with it shown.
+    index,
     indexElided,
     unreachable: reach?.unreachable ?? null,
     stagedOnly: reach?.stagedOnly ?? null,
@@ -513,7 +518,7 @@ export async function snapshot(
       refsOutside,
     },
     view,
-    notes: notesFor(caps, { more, shown: windowCommits.length, refsOutside, view, indexElided }),
+    notes: notesFor(caps, { more, shown: windowCommits.length, refsOutside, indexElided }),
   };
 }
 
@@ -591,57 +596,73 @@ function notesFor(
     more: boolean;
     shown: number;
     refsOutside: number;
-    view: View;
     indexElided?: { shown: number; total: number };
   },
-): string[] {
-  const notes: string[] = [];
+): Note[] {
+  const notes: Note[] = [];
   if (!caps.fullLoad) {
-    notes.push(
-      `Unreachable detection is off: ${caps.objectCount.toLocaleString()} objects, and finding an unreachable object means reading every one. Everything drawn here is reachable by construction.`,
-    );
-    notes.push('Trees load only for the commits you expand — nothing walks the object database.');
+    notes.push({ id: 'noUnreachableDetection', args: [caps.objectCount] });
+    notes.push({ id: 'treesOnDemand' });
   }
   if (ctx.indexElided) {
-    notes.push(
-      `Index: showing the ${ctx.indexElided.shown} entries that differ from HEAD, of ${ctx.indexElided.total} staged paths.`,
-    );
+    notes.push({ id: 'indexElided', args: [ctx.indexElided.shown, ctx.indexElided.total] });
   }
-  if (ctx.more) notes.push(`Showing ${ctx.shown} commits — click "load more history" for the rest.`);
-  if (ctx.refsOutside > 0)
-    notes.push(`${ctx.refsOutside} refs point outside this window and are left out.`);
-  if (!ctx.view.showIndex) notes.push('The index is hidden.');
-  if (ctx.view.showUnreachable === false && caps.fullLoad)
-    notes.push('Unreachable objects are hidden — they are still in the object database.');
-  if (!caps.commitGraph && caps.objectCount > LIMITS.fullLoad) {
-    // Teaching the user about a git internal they didn't know existed is gitva
-    // working as designed. Detect it, hint at it, never build it — that would
-    // be a write.
-    notes.push(
-      'This repo has no commit-graph. `git commit-graph write --reachable` would make walking history much faster — gitva will not write it for you.',
-    );
-  }
+  if (ctx.more) notes.push({ id: 'more', args: [ctx.shown] });
+  if (ctx.refsOutside > 0) notes.push({ id: 'refsOutside', args: [ctx.refsOutside] });
+  // Nothing here about what the view toolbar's toggles hide: those are the
+  // viewer's, so the sentence is theirs to make too (`Tape.notes`), and a step
+  // must not still claim the index is hidden once they show it again.
+  // Teaching the user about a git internal they didn't know existed is gitva
+  // working as designed. Detect it, hint at it, never build it — that would be
+  // a write.
+  if (!caps.commitGraph && caps.objectCount > LIMITS.fullLoad) notes.push({ id: 'noCommitGraph' });
   if (caps.looseCount > 0 && caps.objectCount > 5_000)
-    notes.push(
-      `${caps.looseCount.toLocaleString()} loose objects. \`git gc\` would pack them — gitva will not run it for you.`,
-    );
-  notes.push('Object contents are fetched when you select something, not shipped every update.');
+    notes.push({ id: 'looseObjects', args: [caps.looseCount] });
+  notes.push({ id: 'bodiesOnSelection' });
   return notes;
 }
 
-/** A body is for reading one thing. Fetched on selection, never broadcast. */
+/**
+ * Where the object's bytes actually sit, relative to .git: the loose file named
+ * by its own sha, or the pack that swallowed it. Loose is one stat; packed is a
+ * question for each pack's index, asked with `show-index` — git parsing its own
+ * index file so gitva never has to. It wants that file on stdin, and reads the
+ * whole of it: only on selection, and only for something already packed.
+ */
+export async function objectPath(h: RepoHandle, oid: Oid): Promise<string | null> {
+  const loose = `objects/${oid.slice(0, 2)}/${oid.slice(2)}`;
+  if (await stat(join(h.gitDir, loose)).then(() => true, () => false)) return loose;
+  const dir = join(h.gitDir, 'objects/pack');
+  const idxs = await readdir(dir).then(
+    (names) => names.filter((n) => n.endsWith('.idx')).sort(),
+    () => [] as string[],
+  );
+  for (const idx of idxs) {
+    const listing = await run(h.repo, ['show-index'], await readFile(join(dir, idx)));
+    // One line per object: <offset> SP <sha> SP (<crc>).
+    if (listing.includes(` ${oid} `)) return `objects/pack/${idx.slice(0, -4)}.pack`;
+  }
+  // An alternate object database, or a submodule's commit: git can find it,
+  // this repository does not hold it.
+  return null;
+}
+
+/** A body is for reading one thing. Fetched on selection, never broadcast —
+ *  and with it, where in .git that one thing is kept. */
 export async function readBody(h: RepoHandle, oid: Oid): Promise<{
   type: ObjectType;
   size: number;
   text: string | null;
   truncated?: boolean;
   entries?: TreeEntry[];
+  path: string | null;
 }> {
   const batch = parseBatch(await run(h.repo, ['cat-file', '--batch'], oid + '\n'));
   const got = batch.get(oid);
   if (!got) throw new GitError(`no such object ${oid}`);
+  const path = await objectPath(h, oid);
   if (got.type === 'tree') {
-    return { type: 'tree', size: got.body.length, text: null, entries: parseTree(got.body, h.hashLen) };
+    return { type: 'tree', size: got.body.length, text: null, entries: parseTree(got.body, h.hashLen), path };
   }
   const slice = got.body.subarray(0, 64 * 1024);
   const binary = slice.includes(0);
@@ -651,5 +672,6 @@ export async function readBody(h: RepoHandle, oid: Oid): Promise<{
     text: binary ? null : slice.toString('utf8'),
     // The panel must not present the first 64 KiB of a blob as the whole blob.
     truncated: got.body.length > slice.length,
+    path,
   };
 }

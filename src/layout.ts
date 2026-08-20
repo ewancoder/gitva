@@ -11,6 +11,7 @@
  * here: generality bought nothing and cost slow, jumpy and generic-looking.
  */
 
+import { S } from './strings.js';
 import type { Oid, Snapshot, TreeEntry, View } from './types.js';
 
 export type NodeKind =
@@ -109,7 +110,7 @@ const short = (oid: Oid) => oid.slice(0, 7);
 const entryLabel = (e: { name: string; mode: string }) =>
   `${e.name}${e.mode === '100755' ? ' +x' : e.mode === '120000' ? ' ->' : ''}`;
 const refLabel = (name: string) =>
-  name.replace(/^refs\/heads\//, '').replace(/^refs\/tags\//, 'tag: ').replace(/^refs\//, '');
+  name.replace(/^refs\/heads\//, '').replace(/^refs\/tags\//, S.canvas.tagPrefix).replace(/^refs\//, '');
 
 // ---------------------------------------------------------------------------
 // Lanes
@@ -181,7 +182,9 @@ export function objectGraph(
 ): ObjectGraph {
   const depth = new Map<Oid, number>([[root, 0]]);
   const order: Oid[] = [root];
-  const edges = new Map<string, { from: Oid; to: Oid; label: string }>();
+  // One blob can sit in a tree under several names — same from, same to, one
+  // arrow, so the names go on it together rather than on top of each other.
+  const edges = new Map<string, { from: Oid; to: Oid; names: Set<string> }>();
   const queue: Oid[] = folded.has(root) ? [] : [root];
   let guard = 20_000;
 
@@ -189,7 +192,10 @@ export function objectGraph(
     const t = queue.shift()!;
     const d = depth.get(t)!;
     for (const e of trees[t] ?? []) {
-      edges.set(`${t}>${e.oid}:${e.name}`, { from: t, to: e.oid, label: entryLabel(e) });
+      const key = `${t}>${e.oid}`;
+      let edge = edges.get(key);
+      if (!edge) edges.set(key, (edge = { from: t, to: e.oid, names: new Set<string>() }));
+      edge.names.add(entryLabel(e));
       if (!depth.has(e.oid)) order.push(e.oid);
       if ((depth.get(e.oid) ?? -1) < d + 1) {
         depth.set(e.oid, d + 1);
@@ -206,7 +212,11 @@ export function objectGraph(
     (columns[d] ??= []).push(oid);
   }
   for (let i = 0; i < columns.length; i++) columns[i] ??= [];
-  return { depth, columns, edges: [...edges.values()] };
+  return {
+    depth,
+    columns,
+    edges: [...edges.values()].map(({ from, to, names }) => ({ from, to, label: [...names].join(', ') })),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +235,7 @@ export function layout(
   const expanded = new Set(view.expanded);
   const folded = new Set(view.folded ?? []);
   /** A folded tree looks like an empty one, so it says how much it holds. */
-  const heldBack = (oid: Oid) => `tree +${snap.trees[oid]?.length ?? 0}`;
+  const heldBack = (oid: Oid) => S.canvas.heldBack(snap.trees[oid]?.length ?? 0);
   const unreachable = new Set(snap.unreachable ?? []);
   const stagedOnly = new Set(snap.stagedOnly ?? []);
 
@@ -393,10 +403,10 @@ export function layout(
       y: y + 8,
       w: 210,
       h: 30,
-      label: 'load more history',
+      label: S.canvas.more.label,
       sub: snap.window.totalCommits
-        ? `${commits.length} of ${snap.window.totalCommits} commits`
-        : `${commits.length} commits shown`,
+        ? S.canvas.more.of(commits.length, snap.window.totalCommits)
+        : S.canvas.more.shown(commits.length),
     });
     y += 46;
   }
@@ -525,9 +535,13 @@ export function layout(
           if (!strayed.has(p)) edges.push({ id: `p:${oid}:${p}`, from: oid, to: p, kind: 'parent' });
         }
         if (folded.has(oid)) continue;
+        const names = new Map<Oid, string[]>();
         for (const e of snap.trees[oid] ?? []) {
           if (strayed.has(e.oid)) continue;
-          edges.push({ id: `x:${oid}:${e.oid}:${e.name}`, from: oid, to: e.oid, kind: 'entry', label: e.name });
+          names.set(e.oid, [...(names.get(e.oid) ?? []), e.name]);
+        }
+        for (const [to, ns] of names) {
+          edges.push({ id: `x:${oid}:${to}`, from: oid, to, kind: 'entry', label: ns.join(', ') });
         }
       }
     }
@@ -691,11 +705,11 @@ export function layout(
     nodes,
     edges: edges.filter((e) => at.has(e.from) && at.has(e.to)),
     bands: [
-      { key: 'pointers', label: 'pointers and tags', x: M.gutterX, w: gutterW },
-      { key: 'commits', label: 'commits', x: lanesX, w: lanesW },
-      { key: 'objects', label: 'trees and blobs', x: objectsX, w: objectsW },
+      { key: 'pointers', label: S.canvas.bands.pointers, x: M.gutterX, w: gutterW },
+      { key: 'commits', label: S.canvas.bands.commits, x: lanesX, w: lanesW },
+      { key: 'objects', label: S.canvas.bands.objects, x: objectsX, w: objectsW },
       ...(view.showIndex
-        ? [{ key: 'index' as const, label: 'index', x: indexX, w: indexW }]
+        ? [{ key: 'index' as const, label: S.canvas.bands.index, x: indexX, w: indexW }]
         : []),
     ],
     width: (view.showIndex ? indexX + indexW : objectsX + objectsW) + 40,

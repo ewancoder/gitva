@@ -8,6 +8,7 @@ import {
   parseCommit,
   parseTag,
   parseTree,
+  objectPath,
   readBody,
   revListArgs,
   snapshot,
@@ -172,10 +173,19 @@ describe('a repository read through its own plumbing', () => {
     assert.ok(!snap.unreachable.includes(snap.head.oid!), 'HEAD is not');
   });
 
-  it('says out loud when orphans are switched off, and still counts them', async () => {
+  it('counts the orphans whether or not the view draws them', async () => {
     const s = await snapshot(handle, { ...DEFAULT_VIEW, showUnreachable: false }, caps, 4);
     assert.ok(s.unreachable!.length > 0, 'hiding is a drawing decision, not a lie about the repo');
-    assert.ok(s.notes.some((n) => /Unreachable objects are hidden/.test(n)));
+  });
+
+  // The bug: a step recorded with the index switched off held no index at all,
+  // so scrubbing back to it with the index switched on drew an empty column —
+  // and the toggle is the viewer's, made long after the step was recorded.
+  it('carries the index whether or not the view draws it', async () => {
+    const s = await snapshot(handle, { ...DEFAULT_VIEW, showIndex: false }, caps, 4);
+    assert.ok(s.index.length > 0);
+    assert.deepEqual(s.index, snap.index);
+    assert.ok(!s.notes.some((n) => n.id === 'indexHidden'), 'what a viewer hides is not the step’s to say');
   });
 
   it('stores one blob for two names, because names live in trees', () => {
@@ -287,14 +297,14 @@ describe('degrading the documented way above a limit', () => {
 
   it('turns orphan detection off and says why', () => {
     assert.equal(snap.unreachable, null);
-    assert.ok(snap.notes.some((n) => /Unreachable detection is off/.test(n)));
+    assert.ok(snap.notes.some((n) => n.id === 'noUnreachableDetection'));
   });
 
   it('draws the index as the delta from HEAD, and counts the rest', () => {
     assert.ok(snap.indexElided);
     assert.equal(snap.indexElided!.total, 4);
     assert.ok(snap.indexElided!.shown < snap.indexElided!.total);
-    assert.ok(snap.notes.some((n) => /differ from HEAD/.test(n)));
+    assert.ok(snap.notes.some((n) => n.id === 'indexElided'));
   });
 
   it('still draws the commits it was asked for', () => {
@@ -323,5 +333,37 @@ describe('degrading the documented way above a limit', () => {
       2,
     );
     assert.ok(Object.keys(opened.trees).length > 0);
+  });
+});
+
+
+/**
+ * A key hands you a value, and the value is a file — until git packs it away
+ * and the file is gone. Getting this wrong points a viewer at a path that is
+ * not there, which teaches the opposite of the lesson.
+ */
+describe('where git actually keeps an object', () => {
+  let repo: Repo;
+  let handle: RepoHandle;
+
+  before(async () => {
+    repo = plumbedRepo();
+    handle = await open(repo.dir);
+  });
+  after(() => repo.dispose());
+
+  it('names the loose file an object starts life as', async () => {
+    const oid = repo.git('hash-object', 'a.txt');
+    assert.equal(await objectPath(handle, oid), `objects/${oid.slice(0, 2)}/${oid.slice(2)}`);
+  });
+
+  it('names the pack it moves into once the file is gone', async () => {
+    const oid = repo.git('rev-parse', 'HEAD');
+    repo.git('repack', '-ad');
+    assert.match((await objectPath(handle, oid))!, /^objects\/pack\/pack-[0-9a-f]+\.pack$/);
+  });
+
+  it('has nothing to say about an object this repository does not hold', async () => {
+    assert.equal(await objectPath(handle, 'f'.repeat(40)), null);
   });
 });

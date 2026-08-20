@@ -50,12 +50,17 @@ describe('the view arriving from the browser', () => {
   });
 });
 
-/** The snapshots off an event stream, one frame at a time. */
-async function* snapshots(res: Response) {
+/** The snapshots off an event stream, one frame at a time. `quietMs` ends it
+ *  when nothing more arrives, which is how a test asserts that nothing did. */
+async function* snapshots(res: Response, quietMs = 0) {
   const reader = res.body!.getReader();
   let buf = '';
+  try {
   for (;;) {
-    const { value, done } = await reader.read();
+    const read = reader.read();
+    const { value, done } = await (quietMs
+      ? Promise.race([read, quiet<typeof read>(quietMs)])
+      : read);
     if (done) return;
     buf += new TextDecoder().decode(value);
     let end: number;
@@ -69,6 +74,14 @@ async function* snapshots(res: Response) {
       else if (frame.startsWith('event: snapshot')) yield JSON.parse(data);
     }
   }
+  } finally {
+    await reader.cancel();
+  }
+}
+
+/** Silence, as an end of stream. */
+function quiet<T>(ms: number): Promise<Awaited<T>> {
+  return new Promise((r) => setTimeout(() => r({ value: undefined, done: true } as Awaited<T>), ms));
 }
 
 describe('the server', () => {
@@ -323,7 +336,8 @@ describe('the history everyone shares', () => {
   const state = (seq: number, extra: Partial<Snapshot> = {}) => JSON.stringify(fakeState({ seq, ...extra }));
   const seqs = (history: string[]) => history.map((s) => JSON.parse(s).seq);
   /** A state of a repository big enough for the byte ceiling to be the one that bites. */
-  const heavy = (seq: number, mb: number) => state(seq, { notes: ['x'.repeat(mb << 20)] });
+  const heavy = (seq: number, mb: number) =>
+    state(seq, { notes: [{ id: 'more', args: ['x'.repeat(mb << 20)] }] });
 
   it('replaces the top rather than stepping when the same state is asked a different question', () => {
     const history: string[] = [];
@@ -431,5 +445,252 @@ describe('the page the server hands the browser', () => {
     );
     assert.equal(rows.length, 4, 'one track per row of the page');
     assert.equal(rows[rows.length - 1], '1fr', 'the canvas is last and takes the rest');
+  });
+});
+
+/**
+ * Restarting gitva is not a step. The recording belongs to the repository, so
+ * everything the last run recorded is still there — and the run that recorded
+ * it having ended is not something git did.
+ */
+describe('a recording that outlives the process', () => {
+  /** Every state a browser is handed before the stream goes quiet. */
+  async function watch(port: number): Promise<Snapshot[]> {
+    const seen: Snapshot[] = [];
+    for await (const s of snapshots(await fetch(`http://127.0.0.1:${port}/events`), 900)) seen.push(s);
+    return seen;
+  }
+
+  it('picks the same one back up, and carries on numbering steps of the repository', async () => {
+    const repo = plumbedRepo();
+    try {
+      const first = await serve(repo.dir, 0);
+      const before = await watch(first.port);
+      assert.equal(before.length, 1);
+      await first.close();
+
+      // Off the air while git works: the step is missed, as it always was, but
+      // the ones already recorded are not lost with the process.
+      repo.write('e.txt', 'epsilon\n');
+      repo.git('hash-object', '-w', 'e.txt');
+
+      const second = await serve(repo.dir, 0);
+      try {
+        const after = await watch(second.port);
+        assert.deepEqual(
+          after.map((s) => s.seq),
+          [before[0].seq, before[0].seq + 1],
+          'the replayed step, then the one the repository moved to while nobody was watching',
+        );
+      } finally {
+        await second.close();
+      }
+    } finally {
+      repo.dispose();
+    }
+  });
+
+  it('does not record a step for a restart onto a repository nothing happened to', async () => {
+    const repo = plumbedRepo();
+    try {
+      const first = await serve(repo.dir, 0);
+      await watch(first.port);
+      await first.close();
+
+      const second = await serve(repo.dir, 0);
+      try {
+        assert.equal((await watch(second.port)).length, 1, 'still one step, not one per run');
+      } finally {
+        await second.close();
+      }
+    } finally {
+      repo.dispose();
+    }
+  });
+
+  it('files it under --id when given one, so the folder may move or be cloned', async () => {
+    const one = plumbedRepo();
+    const two = plumbedRepo();
+    try {
+      const first = await serve(one.dir, 0, '127.0.0.1', false, 'teaching');
+      const before = await watch(first.port);
+      await first.close();
+
+      // A different folder entirely, and the same recording: the identifier is
+      // the repository, not the path it happens to be sitting at.
+      const second = await serve(two.dir, 0, '127.0.0.1', false, 'teaching');
+      try {
+        const after = await watch(second.port);
+        assert.equal(after[0].repo, one.dir.split('/').pop());
+        assert.equal(after.at(-1)!.seq, before[0].seq + 1);
+      } finally {
+        await second.close();
+      }
+    } finally {
+      one.dispose();
+      two.dispose();
+    }
+  });
+
+  /** The identifier the header shows, which is what a click on it copies. */
+  async function recordingId(port: number): Promise<string> {
+    const res = await fetch(`http://127.0.0.1:${port}/events`);
+    const reader = res.body!.getReader();
+    let buf = '';
+    let found: RegExpExecArray | null = null;
+    while (!(found = /event: recording\ndata: (.*)\n/.exec(buf))) {
+      const { value, done } = await reader.read();
+      if (done) assert.fail('the stream never said which recording it is');
+      buf += new TextDecoder().decode(value);
+    }
+    await reader.cancel();
+    return (JSON.parse(found[1]) as { id: string }).id;
+  }
+
+  // What the identifier in the header is for: copy it before you move the
+  // folder, and the recording is still yours afterwards.
+  it('tells the browser what it filed the recording under, and takes it back as --id', async () => {
+    const here = plumbedRepo();
+    const moved = plumbedRepo();
+    try {
+      const first = await serve(here.dir, 0);
+      const id = await recordingId(first.port);
+      assert.match(id, /^[0-9a-f]{10}$/);
+      const before = await watch(first.port);
+      await first.close();
+
+      const second = await serve(moved.dir, 0, '127.0.0.1', false, id);
+      try {
+        assert.equal(await recordingId(second.port), id, 'the identifier survives being handed back');
+        const after = await watch(second.port);
+        assert.equal(after[0].repo, here.dir.split('/').pop(), 'the step recorded before the move');
+        assert.equal(after.at(-1)!.seq, before[0].seq + 1);
+      } finally {
+        await second.close();
+      }
+    } finally {
+      here.dispose();
+      moved.dispose();
+    }
+  });
+
+  it('starts the recording over with --fresh, and lets no browser do it', async () => {
+    const repo = plumbedRepo();
+    const server = await serve(repo.dir, 0);
+    try {
+      assert.equal((await watch(server.port)).length, 1, 'a step to throw away');
+      // No browser may end everyone's session: the recording is shared, and
+      // clearing it is the presenter's call at startup.
+      const res = await fetch(`http://127.0.0.1:${server.port}/clear`, { method: 'POST' });
+      assert.equal(res.status, 404);
+      await res.text();
+      assert.equal((await watch(server.port)).length, 1, 'and the step is still there');
+    } finally {
+      await server.close();
+    }
+
+    // What `--fresh` leaves: the repository as it is now, step one, with the
+    // kept steps gone from disk too.
+    const again = await serve(repo.dir, 0, '127.0.0.1', false, undefined, true);
+    try {
+      assert.deepEqual((await watch(again.port)).map((s) => s.seq), [1]);
+    } finally {
+      await again.close();
+    }
+
+    const back = await serve(repo.dir, 0);
+    try {
+      assert.deepEqual((await watch(back.port)).map((s) => s.seq), [1]);
+    } finally {
+      await back.close();
+      repo.dispose();
+    }
+  });
+
+  /** The whole kept recording, as a browser is handed it on connect. */
+  async function historyOf(port: number): Promise<Snapshot[]> {
+    const res = await fetch(`http://127.0.0.1:${port}/events`);
+    const reader = res.body!.getReader();
+    let buf = '';
+    let found: RegExpExecArray | null = null;
+    while (!(found = /event: history\ndata: (.*)\n/.exec(buf))) {
+      const { value, done } = await reader.read();
+      if (done) assert.fail('the stream handed over no recording');
+      buf += new TextDecoder().decode(value);
+    }
+    await reader.cancel();
+    return JSON.parse(found[1]) as Snapshot[];
+  }
+
+  // The bug this exists for: a step carries the view it was answered under, so
+  // a resumed recording used to answer with the *last* run's view. Restarting
+  // with `--learning` opened nothing, restarting without it left everything
+  // open, and clicking `clear` was the only way to change your mind — because
+  // clearing rebuilds and rebuilding stamps the current view on.
+  it('answers a kept recording with this run\'s view, not the one it was recorded under', async () => {
+    const repo = plumbedRepo();
+    try {
+      const plain = await serve(repo.dir, 0);
+      const before = await watch(plain.port);
+      assert.equal(before.at(-1)!.view.learning, false);
+      await plain.close();
+
+      const learning = await serve(repo.dir, 0, '127.0.0.1', true);
+      const kept = await historyOf(learning.port);
+      // Answered again, not recorded again: restarting is still not a step.
+      assert.equal(kept.length, before.length);
+      assert.equal(kept.at(-1)!.seq, before.at(-1)!.seq);
+      assert.equal(kept.at(-1)!.view.learning, true);
+      assert.equal(kept.at(-1)!.view.showCrossLinks, true, 'links from unreachable, the same way');
+      await learning.close();
+
+      // And back the other way: without the flag, nothing arrives expanded
+      // because the last run said it should.
+      const again = await serve(repo.dir, 0);
+      const back = await historyOf(again.port);
+      assert.equal(back.at(-1)!.view.learning, false);
+      assert.equal(back.at(-1)!.view.showCrossLinks, false);
+
+      // It is not only the flags: every part of the view is this run's. A
+      // window a browser widened last time is not one this run has asked for.
+      await fetch(`http://127.0.0.1:${again.port}/view`, { method: 'POST', body: JSON.stringify({ limit: 3 }) });
+      await again.close();
+
+      const fresh = await serve(repo.dir, 0);
+      try {
+        assert.equal((await historyOf(fresh.port)).at(-1)!.view.limit, DEFAULT_VIEW.limit);
+      } finally {
+        await fresh.close();
+      }
+    } finally {
+      repo.dispose();
+    }
+  });
+
+  it('keeps the steps when the repository they were recorded from has gone', async () => {
+    const repo = plumbedRepo();
+    const first = await serve(repo.dir, 0);
+    const before = await watch(first.port);
+    await first.close();
+    // Nothing to re-answer the newest step against, and nothing to say about
+    // it: the recording is what is left of the repository, so it stands.
+    repo.dispose();
+    const second = await serve(repo.dir, 0);
+    try {
+      assert.deepEqual((await historyOf(second.port)).map((s) => s.seq), before.map((s) => s.seq));
+    } finally {
+      await second.close();
+    }
+  });
+
+  it('starts a recording of its own for a folder nothing was kept for', async () => {
+    const repo = plumbedRepo();
+    const server = await serve(repo.dir, 0);
+    try {
+      assert.equal((await watch(server.port))[0].seq, 1, 'step one');
+    } finally {
+      await server.close();
+      repo.dispose();
+    }
   });
 });

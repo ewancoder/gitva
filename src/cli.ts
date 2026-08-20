@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { serve, type Server } from './server.js';
+import { S } from './strings.js';
 
 export interface Options {
   repo: string;
@@ -13,14 +14,22 @@ export interface Options {
   open: boolean;
   /** Commits arrive unfolded — for demonstrating to a room. */
   learning: boolean;
+  /** Throw the kept recording away and start it at the repository as it is now. */
+  fresh: boolean;
+  /** What the kept recording is filed under. The folder's full path when this
+   *  is undefined; name one to keep the same recording across a move or a
+   *  second clone of the same repository. */
+  id?: string;
 }
 
 export function parseArgs(args: string[]): Options {
   const positional: string[] = [];
   let port = 0;
   let host = '127.0.0.1';
+  let id: string | undefined;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--port') port = Number(args[++i]);
+    else if (args[i] === '--id') id = args[++i];
     else if (args[i] === '--serve') {
       // `--serve [HOST:PORT]`, bare meaning every interface on 4200. A shared
       // address is no use if the port moves every run, so this one is fixed.
@@ -38,18 +47,20 @@ export function parseArgs(args: string[]): Options {
     host,
     open: !args.includes('--no-open'),
     learning: args.includes('--learning'),
+    fresh: args.includes('--fresh'),
+    id,
   };
 }
 
 export async function main(args: string[]): Promise<Server> {
-  const { repo, port, host, open, learning } = parseArgs(args);
-  const server = await serve(repo, port, host, learning);
+  const { repo, port, host, open, learning, fresh, id } = parseArgs(args);
+  const server = await serve(repo, port, host, learning, id, fresh);
   const url = browseUrl(host, server.port);
-  process.stdout.write(`gitva watching ${repo}\n${url}\n`);
+  process.stdout.write(S.cli.watching(repo, url));
   // Reaching other machines has no authentication: whoever reaches the port
   // reads the whole repository.
   if (host !== '127.0.0.1')
-    process.stdout.write(`serving ${host}:${server.port} to the network — no auth\n`);
+    process.stdout.write(S.cli.serving(host, server.port));
   if (open) openBrowser(url);
   process.on('SIGINT', () => void server.close().then(() => process.exit(0)));
   return server;

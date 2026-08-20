@@ -29,17 +29,21 @@ export interface Paint {
   marked: Set<string>;
   /** Whether a pinned node wears a pushpin. Off unless the reader asked. */
   showPins: boolean;
+  /** Whether a tree's links carry the names. On unless the reader turned them off. */
+  showNames: boolean;
   /** 0→1 while new things grow out of where they came from. */
   enter: number;
   /** Nodes that have gone, drawn at their old place while they fade. */
   ghosts: SceneNode[];
+  /** 0→1 while the ghosts fade. Slower than `enter` when git caused it. */
+  exit: number;
   /** False under prefers-reduced-motion: everything snaps to its end state. */
   motion: boolean;
   /** The band whose seam is under the pointer or being dragged. */
   resizing?: string | null;
 }
 
-const TIER = { none: 0.45, sha: 0.75, kind: 1.05, names: 1.35 };
+const TIER = { none: 0.15, sha: 0.25, kind: 0.4, names: 0.55 };
 
 // Hover dimming eases rather than snapping. The dimmed graph is an answer to
 // "what connects to what"; arriving at it instantly reads as a glitch instead.
@@ -92,6 +96,9 @@ export function draw(ctx: CanvasRenderingContext2D, scene: Scene, p: Paint): boo
   if (dimming.size > 4000) dimming.clear();
   ctx.save();
   ctx.setTransform(p.dpr, 0, 0, p.dpr, 0, 0);
+  // Cleared first: a ground may be translucent, and a fill alone would leave
+  // the last frame under it.
+  ctx.clearRect(0, 0, p.width, p.height);
   ctx.fillStyle = theme.ground;
   ctx.fillRect(0, 0, p.width, p.height);
   ctx.translate(cam.x, cam.y);
@@ -156,9 +163,9 @@ export function draw(ctx: CanvasRenderingContext2D, scene: Scene, p: Paint): boo
   }
 
   // Removed things fade in place rather than vanishing.
-  if (p.enter < 1) {
+  if (p.exit < 1) {
     ctx.save();
-    ctx.globalAlpha = 1 - p.enter;
+    ctx.globalAlpha = 1 - p.exit;
     for (const g of p.ghosts) drawNode(ctx, g, p, new Set());
     ctx.restore();
   }
@@ -187,7 +194,7 @@ function drawBands(
     // The band fills the whole viewport, not just the content it holds, so a
     // short history still reads as a column running edge to edge — and so the
     // caption below has color under it everywhere it might be pinned.
-    ctx.fillStyle = band.key === 'index' ? theme.panel : 'rgba(255,255,255,0.014)';
+    ctx.fillStyle = band.key === 'index' ? theme.panel : theme.bandTint;
     ctx.fillRect(band.x - 10, v.y0, band.w + 20, v.y1 - v.y0);
     // Furniture, not content: the caption stays the same size on screen at any
     // zoom, so it is divided back out of the camera's scale.
@@ -335,7 +342,7 @@ function drawEdge(
     ctx.stroke();
     arrowhead(ctx, b.x, b.y + b.h / 2, 0, theme.faint);
     // Names live in trees, not in blobs — so the arrow carries the name.
-    if (e.label && p.camera.scale >= TIER.names) {
+    if (e.label && p.showNames && p.camera.scale >= TIER.names) {
       ctx.font = `10px ${theme.mono}`;
       ctx.fillStyle = theme.muted;
       ctx.textAlign = 'center';

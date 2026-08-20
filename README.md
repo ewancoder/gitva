@@ -28,7 +28,13 @@ cd some-repo
 gitva
 ```
 
-`gitva [repo] [--port N] [--no-open] [--serve [HOST:PORT]] [--learning]` — repo defaults to `.`,
+To see what it draws without a repository of your own, run `./demo.sh` from the source folder: it
+starts gitva on a throwaway repo in `./example`, opens the browser, and walks through 22 steps —
+staging, committing, branching, a conflict, a reset, tags, `pack-refs`, `gc` — one per second.
+`./demo.sh 3` slows it down, `./demo.sh 0` waits for a keypress at each step, and enter at the
+end stops gitva.
+
+`gitva [repo] [--port N] [--no-open] [--serve [HOST:PORT]] [--learning] [--id NAME] [--fresh]` — repo defaults to `.`,
 port to a free one, and the browser opens itself. Node ≥20, no runtime dependencies.
 
 The directory need not be a repository yet: start in an empty one and gitva waits, then draws
@@ -37,6 +43,12 @@ the repository the moment you run `git init`.
 `--serve` binds every interface instead of loopback, so a room can watch one repository from
 their own browsers. Bare it takes `0.0.0.0:4200`; give it `HOST:PORT` to choose. There is no
 authentication — anyone who reaches the port reads the whole repository.
+
+`--id NAME` files the recording under a name of your own instead of the folder's full path, so a
+repository that moved, or a second clone of one, keeps its steps. Any string will do. See below.
+
+`--fresh` throws the kept recording away and starts it again at the repository as it is now.
+Nothing in the repository changes — gitva does not write to it.
 
 `--learning` starts with every commit in the window expanded, in every browser including one
 that joins late, and with links from unreachable showing, so a small repository being
@@ -84,9 +96,13 @@ line inside a ref.
 | right-click | mark with a red outline, to follow something as the object graph moves |
 | double-click a commit | expand or collapse what it links to |
 | double-click a tree | expand or collapse that subtree; collapsed it says how many entries it holds back (`tree +3`) |
-| drag anything | pin it where you put it; shift+click unpins |
+| drag anything | pin it where you put it, across a reload too; shift+click unpins |
 | drag a column seam | widen the left column, for room to arrange pins |
+| drag the inspector's edge | widen or narrow the inspector; the width is kept |
+| click a sha in the inspector | copies it |
+| click the file in the inspector | where the object's bytes are kept — its loose file, or the pack holding it — shown inside `.git`; the click copies the whole path |
 | *reset view* | drops every pin and puts the columns back |
+| click the identifier | copies what the recording is filed under, for `--id` |
 | <kbd>f</kbd> <kbd>←</kbd>/<kbd>[</kbd> <kbd>→</kbd>/<kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |
 
 The view toolbar loads the whole history, expands or collapses every commit at once, hides the
@@ -101,11 +117,40 @@ step — expanding and paging redraw in place and add nothing. Pause and the rec
 behind you, so a demo can be **replayed instead of redone**; stepping backwards highlights the
 change in reverse, which is how you show a reset twice without doing it twice. Expansions are
 the exception to stepping: what you expanded stays expanded wherever you stand, and across a
-reload.
+reload — and so does a tree you folded shut, which is the same answer about a different shape.
 
-The help dialog holds the legend and the keys. Beside it, settings, which survive a reload:
-whether clicking centres the view, whether a new commit arrives expanded, whether pins wear a
-pushpin, and whether the canvas refits the width when the repository changes.
+☾ / ☀ turns the ground light or dark, and the glyph is the one you are in. The three object
+hues do not move with it — a commit is warm, a tree green, a blob blue on either ground, because
+that is what you recognise a kind by. Beside it, the help dialog holds the legend and the keys,
+then settings, which survive a reload: whether clicking centres the view, whether a new
+commit arrives expanded, whether pins wear a pushpin, and whether the canvas refits the width when the repository changes. In the same
+corner, **EN** and **RU** switch the language: the words are yours, like the view — nobody
+else's canvas changes, and a recorded step reads in whichever language you are set to.
+
+## The recording survives a restart
+
+The recording is kept outside the repository, so stopping gitva and starting it again on the
+same folder walks back into the same steps instead of starting the tutorial over. A restart is
+not a step: if git did nothing while gitva was off, nothing is added.
+
+It is filed under the folder's full path, one file per repository, in the directory your system
+keeps a program's own state in — `~/.local/state/gitva` (or `$XDG_STATE_HOME`),
+`~/Library/Application Support/gitva` on macOS, `%LOCALAPPDATA%\gitva` on Windows. The identifier
+is hashed to ten characters, the way git names an object after its content, and that is the
+filename. `GITVA_STATE_DIR` moves the lot somewhere else.
+
+**The identifier is in the top-left corner, beside the repository name, and a click copies it.**
+Hand it back with `--id` and the same recording comes up from anywhere: copy it before you move
+the folder, or before you clone it onto another machine. `--id` takes any string, so
+`--id teaching` is a name you can choose and remember instead — it is hashed the same way, and a
+key you copied out of the header is taken as itself.
+
+The view is not part of the recording. `--learning`, the index and unreachable toggles, how much
+history is loaded — those are whatever the run you are in says, so you can stop gitva and start it
+again in the other mode and the picture follows. What is kept is what git did.
+
+To start it over, restart gitva with `--fresh`. There is no button for it: the recording is
+everyone's, and no viewer's browser should be able to end the room's session.
 
 ## Two promises
 

@@ -27,8 +27,42 @@
         --blob: #5aa7ea;
         --staged: #8f86e6;
         --accent: #ff5ea8;
+        --hover: #2b3140;
+        --danger: #f2685e;
         --sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
         --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+      }
+      /* The light ground, the same palette web/theme.ts hands the canvas. The
+         three object hues do not move: they are fills with dark text on them,
+         and a kind you recognise by hue must not change with the ground. */
+      :root[data-theme='light'] {
+        --ground: #fbfbfd;
+        --panel: #f1f2f6;
+        --raised: #e5e7ee;
+        --line: #d2d6e0;
+        --ink: #1a1d24;
+        --muted: #5c6472;
+        --faint: #8b93a3;
+        --accent: #d81b7c;
+        --hover: #d5d9e4;
+        --danger: #c0392f;
+      }
+      :root[data-theme='matrix'] {
+        --ground: #000600;
+        --panel: #01120a;
+        --raised: #04240f;
+        --line: #0d4a1e;
+        --ink: #4dff7c;
+        --muted: #22a343;
+        --faint: #14682c;
+        --commit: #54f07a;
+        --tree: #54f07a;
+        --blob: #54f07a;
+        --staged: #9dffb8;
+        --accent: #c9ff2e;
+        --hover: #0a3317;
+        --danger: #b6ff2e;
+        --sans: var(--mono);
       }
       * { box-sizing: border-box; }
       html, body { height: 100%; margin: 0; }
@@ -56,16 +90,25 @@
       .group + .group { padding-left: calc(var(--u) * 2); border-left: 1px solid var(--line); }
       .group.right { margin-left: auto; }
       .repo-name { font-weight: 600; }
-      .repo-dir { color: var(--faint); font-family: var(--mono); font-size: 11px; }
+      /* The identifier the recording is filed under — machine text, so mono,
+         and a click copies it the way a click on a shape copies a sha. */
+      .recording-id { color: var(--faint); font-family: var(--mono); font-size: 11px; cursor: pointer; }
+      .recording-id:hover { color: var(--muted); }
+      /* Chrome, not canvas: red here is a warning about a button, and joins
+         neither the three object hues nor the one accent. */
+      .danger { color: var(--danger); }
 
       button, select, input {
         font: inherit; color: var(--ink);
         background: var(--raised);
         border: 1px solid var(--line); border-radius: var(--r);
         padding: 3px var(--u);
+        /* The scrub track and the settings checkboxes are the only controls the
+           browser paints itself: without this they stay its blue in every ground. */
+        accent-color: var(--muted);
       }
       button { cursor: pointer; }
-      button:not(:disabled):hover, button[aria-pressed='true'] { background: #2b3140; }
+      button:not(:disabled):hover, button[aria-pressed='true'] { background: var(--hover); }
       button[aria-pressed='true'] { border-color: var(--muted); }
       /* A control whose subject is off screen: still readable, still shows
          whether it is pressed, but there is nothing for it to act on. */
@@ -103,8 +146,14 @@
       #notes li { list-style: none; }
       #notes ul { display: contents; margin: 0; padding: 0; }
 
-      main { display: grid; grid-template-columns: 1fr auto; min-height: 0; }
+      main { display: grid; grid-template-columns: 1fr auto auto; min-height: 0; }
       #graph { display: block; width: 100%; height: 100%; cursor: grab; }
+      /* Behind the object graph, in the same cell: on that one ground the
+         graph's own ground is painted translucent, so this shows through it
+         and never over a shape. Nothing on it is information. */
+      #graph, #rain { grid-column: 1; grid-row: 1; }
+      #rain { display: none; width: 100%; height: 100%; pointer-events: none; }
+      :root[data-theme='matrix'] #rain { display: block; }
       #copied {
         position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
         background: var(--raised); border: 1px solid var(--line); border-radius: var(--r);
@@ -114,9 +163,11 @@
       #copied.show { opacity: 1; }
       #graph.dragging { cursor: grabbing; }
 
-      /* The details panel is where the teaching lives, so it earns width. */
+      /* The details panel is where the teaching lives, so it earns width —
+         and how much is yours to drag, the way a canvas band's width is. */
+      #panel-seam { width: 5px; cursor: col-resize; background: var(--line); }
       aside {
-        width: 380px; background: var(--panel); border-left: 1px solid var(--line);
+        width: 430px; background: var(--panel);
         overflow-y: auto; scroll-behavior: smooth; padding: calc(var(--u) * 2);
         display: flex; flex-direction: column; gap: calc(var(--u) * 1.5);
       }
@@ -130,10 +181,18 @@
       aside dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px var(--u); margin: 0; }
       aside dt { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
       aside dd { margin: 0; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
+      /* The sha is the key to the store, and a click hands it over — so it is
+         drawn as the one field you can take, not as another fact. */
+      aside dd.sha {
+        background: var(--raised); border: 1px solid var(--line); border-radius: var(--r);
+        padding: 2px 6px; margin: -2px 0; cursor: pointer;
+      }
+      aside dd.sha:hover { border-color: var(--muted); }
       aside pre {
         background: var(--raised); border-radius: var(--r); padding: var(--u);
         margin: 0; max-height: 40vh; overflow: auto; font-size: 12px;
       }
+      aside pre.unreadable { font-weight: 700; }
       aside .empty { color: var(--faint); }
 
       /* `body` is a grid, so a dialog left to flow would be placed in a row
@@ -146,7 +205,7 @@
         border: 1px solid var(--line); border-radius: var(--r);
         padding: calc(var(--u) * 2);
       }
-      dialog::backdrop { background: rgba(0, 0, 0, .6); }
+      dialog::backdrop { background: rgba(0, 0, 0, .45); }
       dialog label { display: block; margin-bottom: var(--u); }
       dialog h2 { font-size: 13px; margin: calc(var(--u) * 2) 0 var(--u); }
       dialog h2:first-child { margin-top: 0; }
@@ -173,50 +232,80 @@
     </style>
   </head>
   <body>
+    <!--
+      Not a word of copy lives in here. Every visible string is keyed:
+      `data-t` sets the text, `data-t-title` the tooltip, `data-t-placeholder`
+      the placeholder, and `data-t-html` the text of the handful that carry a
+      <kbd> inside them. The words themselves are in `src/strings-en.ts`, and
+      `app.ts` fills them in on load.
+    -->
     <header>
       <div class="group">
         <span class="repo-name" id="repo-name">…</span>
-        <span class="repo-dir" id="repo-dir"></span>
+        <span class="recording-id" id="recording-id" data-t-title="recording-id.title"></span>
       </div>
 
       <div class="group">
-        <select id="question" title="What this view is asking">
-          <option value="all">everything</option>
-          <option value="branches">branches…</option>
-          <option value="message">search: message</option>
-          <option value="author">search: author</option>
-          <option value="path">search: path</option>
-          <option value="content">search: content</option>
+        <select id="question" data-t-title="question.title">
+          <option value="all" data-t="question.all"></option>
+          <option value="branches" data-t="question.branches"></option>
+          <option value="message" data-t="question.message"></option>
+          <option value="author" data-t="question.author"></option>
+          <option value="path" data-t="question.path"></option>
+          <option value="content" data-t="question.content"></option>
         </select>
-        <input id="search" placeholder="search" size="14" hidden />
+        <input id="search" data-t-placeholder="search.placeholder" size="14" hidden />
         <select id="branches" multiple size="1" hidden></select>
-        <button id="load-all" title="Load the whole history, not just the first page" hidden>load all commits</button>
-        <button id="unfold" title="Expand every commit (double-click one commit for just it)">expand all</button>
-        <button id="fold" title="Collapse everything back to the commit DAG">collapse all</button>
-        <button id="toggle-index" aria-pressed="true" title="The index is the sandbox beside the object graph">index</button>
-        <button id="toggle-orphans" aria-pressed="true" title="Objects nothing points at — still in the object database either way">unreachable</button>
-        <button id="toggle-cross" aria-pressed="false" title="What unreachable objects still point at: a tree's entries, and a discarded commit's parent. Nothing points at them; they still point at plenty">links from unreachable</button>
+        <button id="load-all" data-t="load-all" data-t-title="load-all.title" hidden></button>
+        <button id="unfold" data-t="expand-all" data-t-title="expand-all.title"></button>
+        <button id="fold" data-t="collapse-all" data-t-title="collapse-all.title"></button>
+        <button id="toggle-index" aria-pressed="true" data-t="index" data-t-title="index.title"></button>
+        <button
+          id="toggle-orphans"
+          aria-pressed="true"
+          data-t="unreachable"
+          data-t-title="unreachable.title"
+        ></button>
+        <button
+          id="toggle-cross"
+          aria-pressed="false"
+          data-t="cross-links"
+          data-t-title="cross-links.title"
+        ></button>
+        <button
+          id="toggle-names"
+          aria-pressed="true"
+          data-t="names"
+          data-t-title="names.title"
+        ></button>
       </div>
 
-      <div class="group">
-        <button id="legend-btn">help</button>
-        <button id="settings-btn">settings</button>
+      <div class="group right">
+        <!-- The glyph is the state: what you are in now, the way ◀ and ▶ are
+             glyphs rather than copy. Only its tooltip is a string. -->
+        <button id="theme-btn" data-t-title="theme.title"></button>
+        <button id="legend-btn" data-t="help"></button>
+        <button id="settings-btn" data-t="settings"></button>
       </div>
+
+      <!-- One button per language on offer, rendered from the registry in
+           src/strings.ts: a language names itself, so no copy in here. -->
+      <div class="group" id="languages"></div>
     </header>
 
     <div id="transport">
       <div class="group">
-        <button id="unpin" title="Send everything you dragged, and every widened column, back to where the layout puts it">reset view</button>
+        <button id="unpin" data-t="reset-view" data-t-title="reset-view.title"></button>
       </div>
       <div class="group">
-        <button id="step-back" title="Previous step">◀</button>
-        <button id="play" aria-pressed="false" title="Pause following new steps">pause</button>
-        <button id="step-fwd" title="Next step">▶</button>
+        <button id="step-back" data-t-title="step-back.title">◀</button>
+        <button id="play" aria-pressed="false" data-t-title="pause.title"></button>
+        <button id="step-fwd" data-t-title="step-forward.title">▶</button>
         <input type="range" id="scrub" min="0" max="0" value="0" />
         <span class="tally" id="tape-pos"></span>
       </div>
       <div class="group right">
-        <span class="live"><span class="dot" id="live-dot"></span><span id="live-text">connecting</span></span>
+        <span class="live"><span class="dot" id="live-dot"></span><span id="live-text"></span></span>
         <span class="tally" id="tally"></span>
         <span class="change" id="change"></span>
       </div>
@@ -225,64 +314,60 @@
     <div id="notes"><ul id="notes-list"></ul></div>
 
     <main>
+      <canvas id="rain" aria-hidden="true"></canvas>
       <canvas id="graph"></canvas>
       <div id="copied" aria-live="polite"></div>
-      <aside id="panel"><p class="empty">Click anything to find out what it is.</p></aside>
+      <div id="panel-seam"></div>
+      <!-- The empty state is the inspector's own words; app.ts renders it on load. -->
+      <aside id="panel"></aside>
     </main>
 
     <dialog id="legend">
-      <h2>what you are looking at</h2>
-      <p class="lede">A live object graph of a repository.</p>
+      <h2 data-t="help.title"></h2>
+      <p class="lede" data-t="help.lede"></p>
       <div class="legend">
-        <span><span class="swatch commit"></span>commit</span>
-        <span><span class="swatch tree"></span>tree</span>
-        <span><span class="swatch blob"></span>blob</span>
-        <span><span class="swatch staged"></span>staged blob</span>
-        <span><span class="swatch ref"></span>ref / HEAD</span>
-        <span><span class="swatch tag"></span>annotated tag</span>
-        <span><span class="swatch index"></span>index entry</span>
-        <span><span class="swatch ghost"></span>unreachable</span>
-        <span><span class="swatch changed"></span>just changed</span>
+        <span><span class="swatch commit"></span><span data-t="help.legend.commit"></span></span>
+        <span><span class="swatch tree"></span><span data-t="help.legend.tree"></span></span>
+        <span><span class="swatch blob"></span><span data-t="help.legend.blob"></span></span>
+        <span><span class="swatch staged"></span><span data-t="help.legend.staged"></span></span>
+        <span><span class="swatch ref"></span><span data-t="help.legend.ref"></span></span>
+        <span><span class="swatch tag"></span><span data-t="help.legend.tag"></span></span>
+        <span><span class="swatch index"></span><span data-t="help.legend.index"></span></span>
+        <span><span class="swatch ghost"></span><span data-t="help.legend.unreachable"></span></span>
+        <span><span class="swatch changed"></span><span data-t="help.legend.changed"></span></span>
       </div>
-      <h2>keyboard</h2>
+      <h2 data-t="help.keyboard"></h2>
       <div class="keys">
-        <span>wheel</span><span>pan &middot; hold <kbd>ctrl</kbd> to zoom</span>
-        <span>drag background</span><span>pan</span>
-        <span>double-click background</span><span>fit the canvas to the width again</span>
-        <span>click</span><span>select it &mdash; read what it is, and copy its sha</span>
-        <span>right-click</span><span>mark it, to follow it as the object graph moves</span>
-        <span>double-click commit</span><span>expand or collapse &mdash; show what this commit links to</span>
-        <span>double-click tree</span><span>expand or collapse that subtree</span>
-        <span>drag anything</span><span>pin it where you put it (&ldquo;reset view&rdquo; drops every pin)</span>
-        <span>shift-click it</span><span>unpin it again</span>
-        <span>drag a column seam</span><span>widen that column (&ldquo;reset view&rdquo; puts it back)</span>
-        <span><kbd>f</kbd></span><span>the same fit, from the keyboard</span>
-        <span><kbd>i</kbd></span><span>show or hide the index</span>
-        <span><kbd>&larr;</kbd> or <kbd>[</kbd></span><span>step back through the recording</span>
-        <span><kbd>&rarr;</kbd> or <kbd>]</kbd></span><span>step forward again</span>
-        <span><kbd>space</kbd></span><span>pause, or go live</span>
+        <span data-t="help.keys.wheel"></span><span data-t-html="help.keys.wheel.does"></span>
+        <span data-t="help.keys.dragBackground"></span><span data-t="help.keys.dragBackground.does"></span>
+        <span data-t="help.keys.doubleBackground"></span><span data-t="help.keys.doubleBackground.does"></span>
+        <span data-t="help.keys.click"></span><span data-t="help.keys.click.does"></span>
+        <span data-t="help.keys.rightClick"></span><span data-t="help.keys.rightClick.does"></span>
+        <span data-t="help.keys.doubleCommit"></span><span data-t="help.keys.doubleCommit.does"></span>
+        <span data-t="help.keys.doubleTree"></span><span data-t="help.keys.doubleTree.does"></span>
+        <span data-t="help.keys.drag"></span><span data-t="help.keys.drag.does"></span>
+        <span data-t="help.keys.shiftClick"></span><span data-t="help.keys.shiftClick.does"></span>
+        <span data-t="help.keys.seam"></span><span data-t="help.keys.seam.does"></span>
+        <span><kbd>f</kbd></span><span data-t="help.keys.fit.does"></span>
+        <span><kbd>i</kbd></span><span data-t="help.keys.index.does"></span>
+        <span><kbd>&larr;</kbd> or <kbd>[</kbd></span><span data-t="help.keys.back.does"></span>
+        <span><kbd>&rarr;</kbd> or <kbd>]</kbd></span><span data-t="help.keys.forward.does"></span>
+        <span><kbd>space</kbd></span><span data-t="help.keys.space.does"></span>
       </div>
       <footer>
-        <button onclick="this.closest('dialog').close()">close</button>
+        <button data-t="close" onclick="this.closest('dialog').close()"></button>
         <a href="https://github.com/ewancoder/gitva" target="_blank" rel="noreferrer">github.com/ewancoder/gitva</a>
       </footer>
     </dialog>
 
     <dialog id="settings">
-      <h2>settings</h2>
-      <p class="lede">
-        These are about how you like to work, not about this session, so they survive a reload.
-      </p>
-      <label><input type="checkbox" id="centre-on-click" /> clicking something centres the view on it</label>
-      <label
-        ><input type="checkbox" id="refit-on-change" /> the canvas refits the width when the repository
-        changes</label
-      >
-      <label><input type="checkbox" id="show-pins" /> anything you pinned wears a pushpin</label>
-      <label
-        ><input type="checkbox" id="open-new-commits" /> a commit git just made arrives expanded</label
-      >
-      <footer><button onclick="this.closest('dialog').close()">close</button></footer>
+      <h2 data-t="settings.title"></h2>
+      <p class="lede" data-t="settings.lede"></p>
+      <label><input type="checkbox" id="centre-on-click" /> <span data-t="settings.centreOnClick"></span></label>
+      <label><input type="checkbox" id="refit-on-change" /> <span data-t="settings.refitOnChange"></span></label>
+      <label><input type="checkbox" id="show-pins" /> <span data-t="settings.showPins"></span></label>
+      <label><input type="checkbox" id="open-new-commits" /> <span data-t="settings.openNewCommits"></span></label>
+      <footer><button data-t="close" onclick="this.closest('dialog').close()"></button></footer>
     </dialog>
 
     <script type="module" src="/web/app.js"></script>

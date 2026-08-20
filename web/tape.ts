@@ -9,6 +9,7 @@
  */
 
 import type { NodeKind } from '../src/layout.js';
+import { renderNote, S } from '../src/strings.js';
 import { DEFAULT_VIEW, TAPE_CAP, type Oid, type Question, type Snapshot, type TreeEntry, type View } from '../src/types.js';
 
 /** What the caller has to repaint after a state arrived. */
@@ -57,6 +58,19 @@ export class Tape {
    *  they left it rather than at its default. */
   answers: Record<Oid, boolean> = {};
 
+  /** The view toolbar's toggles are the viewer's, never the step's: what a
+   *  step was drawn with when git made it says nothing about what this browser
+   *  wants to see now. Held across arrivals and jumps exactly as `expanded` and
+   *  `folded` are, so walking the whole recording back with the index switched
+   *  on shows every step's index. */
+  private get mine(): Pick<View, 'showIndex' | 'showUnreachable' | 'showCrossLinks'> {
+    return {
+      showIndex: this.view.showIndex,
+      showUnreachable: this.view.showUnreachable,
+      showCrossLinks: this.view.showCrossLinks,
+    };
+  }
+
   /** Their answers over whatever the defaults worked out to. */
   private answered(open: Oid[]): Oid[] {
     const on = new Set(open);
@@ -100,7 +114,14 @@ export class Tape {
       // Everything otherwise starts folded: opening a repository should cost
       // nothing to draw, and unfolding a commit is the gesture the tutorial
       // wants asked.
-      this.view = { ...s.view, showIndex: prefs.showIndex, expanded: this.answered(openAll), folded: [] };
+      // `folded` is this browser's and nobody else's — a tree it shut before a
+      // reload is still shut, the same way a commit it folded is.
+      this.view = {
+        ...s.view,
+        showIndex: prefs.showIndex,
+        expanded: this.answered(openAll),
+        folded: this.view.folded ?? [],
+      };
       if (wants(this.view.expanded, s.view.expanded)) post = this.view;
     } else if (replay && last) {
       // A commit born during the replayed session keeps whatever the room last
@@ -111,7 +132,7 @@ export class Tape {
       if (s.seq !== last.seq) for (const c of s.window.commits) if (!this.seen.has(c)) this.born.add(c);
       this.view = {
         ...s.view,
-        showIndex: prefs.showIndex,
+        ...this.mine,
         expanded: this.answered(
           s.view.learning ? openAll : prefs.openNewCommits ? s.view.expanded.filter((c) => this.born.has(c)) : [],
         ),
@@ -130,7 +151,7 @@ export class Tape {
         this.view = { ...this.view, expanded: [...this.view.expanded, ...fresh] };
         // Paused, the question on screen belongs to an older state while the
         // server is still on its own: only the folds travel.
-        post = this.following ? this.view : { ...s.view, expanded: this.view.expanded };
+        post = this.following ? this.view : { ...s.view, ...this.mine, expanded: this.view.expanded };
       }
     }
 
@@ -169,7 +190,7 @@ export class Tape {
     // in the head of the person watching, across the whole tape: a commit they
     // opened stays open wherever they stand, and one they folded stays folded,
     // until they say otherwise.
-    this.view = { ...this.states[i].view, expanded: this.view.expanded, folded: this.view.folded };
+    this.view = { ...this.states[i].view, ...this.mine, expanded: this.view.expanded, folded: this.view.folded };
     return { prev };
   }
 
@@ -254,21 +275,23 @@ export class Tape {
     if (!snap) return '';
     const kinds = { commit: 0, tree: 0, blob: 0, tag: 0 };
     for (const o of Object.values(snap.objects)) kinds[o.type]++;
-    return (
-      `${drawn} on screen · ${snap.window.commits.length} commits` +
-      (snap.caps.fullLoad
-        ? ` · ${kinds.commit}c ${kinds.tree}t ${kinds.blob}b${kinds.tag ? ` ${kinds.tag}g` : ''}` +
-          ` · ${(snap.unreachable ?? []).length} unreachable`
-        : ` · ${snap.caps.objectCount.toLocaleString()} objects`) +
-      ` · ${snap.index.length} index`
-    );
+    const commits = snap.window.commits.length;
+    return snap.caps.fullLoad
+      ? S.status.tally(drawn, commits, kinds, (snap.unreachable ?? []).length, snap.index.length)
+      : S.status.tallyBig(drawn, commits, snap.caps.objectCount, snap.index.length);
   }
 
   /** What this picture is not showing — the server's reasons, plus our own. */
   notes(): string[] {
-    const notes = [...(this.current?.notes ?? [])];
+    const notes = (this.current?.notes ?? []).map(renderNote);
+    // What this browser is hiding is this browser's to say — the step cannot,
+    // because the same step is read by a viewer who has the index on.
+    if (!this.view.showIndex) notes.push(renderNote({ id: 'indexHidden' }));
+    if (this.view.showUnreachable === false && this.current?.caps.fullLoad) {
+      notes.push(renderNote({ id: 'unreachableHidden' }));
+    }
     if (this.dropped > 0) {
-      notes.push(`Recording: ${this.states.length} steps kept, ${this.dropped} older ones dropped.`);
+      notes.push(S.status.stepsDropped(this.states.length, this.dropped));
     }
     return notes;
   }
@@ -306,6 +329,19 @@ export class Pins {
       at.x = x;
       at.y = y;
     } else this.list.push({ seq, id, x, y });
+  }
+
+  /** Every pin, for a browser to write out and hand back after a reload. */
+  get all(): readonly { seq: number; id: Oid; x: number; y: number }[] {
+    return this.list;
+  }
+
+  /** Pins from before a reload. They come back holding from the first step
+   *  there is, not the one they were made at: a recording that has been cleared
+   *  or has dropped its oldest steps would otherwise leave a pin waiting for a
+   *  step number that is not coming back. */
+  restore(pins: readonly { id: Oid; x: number; y: number }[]) {
+    for (const p of pins) this.put(0, p.id, p.x, p.y);
   }
 
   /** Shift-clicking a node is the undo of dragging it, at every moment. */
