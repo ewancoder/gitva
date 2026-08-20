@@ -100,7 +100,47 @@ const light: Partial<Theme> = {
 
 const dark: Partial<Theme> = { ...theme };
 
-export type Mode = 'dark' | 'light';
+/**
+ * One hue, and it is green. Every rule the other two grounds keep — a kind is
+ * a hue, a state is not, the accent is spent only on change — is off here on
+ * purpose: nothing is told apart by colour, only by silhouette and by the name
+ * it carries, and everything is machine text.
+ */
+const matrix: Partial<Theme> = {
+  // The only translucent ground: the rain canvas is behind this one, and this
+  // is the veil that keeps it faint enough to read shapes over.
+  ground: 'rgba(0,6,0,0.45)',
+  panel: '#01120a',
+  raised: '#04240f',
+  line: '#0d4a1e',
+
+  ink: '#4dff7c',
+  muted: '#22a343',
+  faint: '#14682c',
+
+  commit: '#54f07a',
+  tree: '#54f07a',
+  blob: '#54f07a',
+  staged: '#9dffb8',
+
+  accent: '#c9ff2e',
+
+  head: '#8dff9f',
+  refLocal: '#3ee06a',
+  refRemote: '#3ee06a',
+  refTag: '#3ee06a',
+  tagObject: '#3ee06a',
+
+  mark: '#e8ffe8',
+
+  ghost: '#1b7a33',
+
+  bandTint: 'rgba(0,255,90,0.025)',
+
+  sans: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+};
+
+export type Mode = 'dark' | 'light' | 'matrix';
 
 /**
  * The palette is mutated in place, because every module holds this one object:
@@ -108,7 +148,7 @@ export type Mode = 'dark' | 'light';
  * page's own colours are CSS variables, so switching those is app.ts's job.
  */
 export const setTheme = (mode: Mode): void => {
-  Object.assign(theme, mode === 'light' ? light : dark);
+  Object.assign(theme, dark, mode === 'light' ? light : mode === 'matrix' ? matrix : {});
 };
 
 export const hueFor = (kind: string): string =>

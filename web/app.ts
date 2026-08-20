@@ -75,13 +75,59 @@ const savePrefs = () => localStorage.setItem('gitva.prefs', JSON.stringify(prefs
 // never posted, so nobody else's canvas turns white when yours does. Chosen
 // before the first paint, because the canvas is painted from it.
 const themeBtn = $('theme-btn');
+
+// Rain, on its own canvas over the object graph. The only thing gitva draws
+// that says nothing about the repository, so it is kept where it can be left
+// out: a separate canvas, faint, and running only while that ground is on —
+// idle still costs nothing everywhere else.
+const rain = $<HTMLCanvasElement>('rain');
+const GLYPHS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789abcdef';
+const CELL = 10;
+let drops: number[] = [];
+let raining = 0;
+function rainFrame() {
+  const g = rain.getContext('2d')!;
+  const w = rain.width / devicePixelRatio;
+  const h = rain.height / devicePixelRatio;
+  g.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  // Not a clear: the fade is what leaves a trail behind each drop.
+  g.fillStyle = 'rgba(0,6,0,0.04)';
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = theme.ink;
+  g.font = `${CELL}px ${theme.mono}`;
+  // Whole cells only: a drop on a fractional row lands between pixels, and a
+  // column of glyphs each blurred a different way reads as jitter.
+  for (let i = 0; i < Math.ceil(w / CELL); i++) {
+    drops[i] ??= -Math.floor(Math.random() * 40);
+    g.fillText(GLYPHS[Math.floor(Math.random() * GLYPHS.length)], i * CELL, drops[i] * CELL);
+    if (drops[i] * CELL > h && Math.random() > 0.975) drops[i] = 0;
+    drops[i]++;
+  }
+}
+function setRain(on: boolean) {
+  clearInterval(raining);
+  raining = on && !reduceMotion ? (setInterval(rainFrame, 35) as unknown as number) : 0;
+  if (!raining) {
+    drops = [];
+    rain.getContext('2d')!.clearRect(0, 0, rain.width, rain.height);
+  }
+}
+
 function applyTheme() {
   setTheme(prefs.theme);
+  setRain(prefs.theme === 'matrix');
   document.documentElement.dataset.theme = prefs.theme;
-  themeBtn.textContent = prefs.theme === 'light' ? '☀' : '☾';
+  themeBtn.textContent = prefs.theme === 'matrix' ? 'ﾊ' : prefs.theme === 'light' ? '☀' : '☾';
 }
+let clicks: number[] = [];
 themeBtn.addEventListener('click', () => {
-  prefs.theme = prefs.theme === 'light' ? 'dark' : 'light';
+  const now = Date.now();
+  clicks = [...clicks, now].filter((t) => now - t < 1500);
+  if (prefs.theme === 'matrix') prefs.theme = 'dark';
+  else if (clicks.length >= 5) {
+    prefs.theme = 'matrix';
+    clicks = [];
+  } else prefs.theme = prefs.theme === 'light' ? 'dark' : 'light';
   savePrefs();
   applyTheme();
   schedule();
@@ -769,6 +815,8 @@ panel.addEventListener('click', (e) => {
 new ResizeObserver(() => {
   canvas.width = Math.round(canvas.clientWidth * devicePixelRatio);
   canvas.height = Math.round(canvas.clientHeight * devicePixelRatio);
+  rain.width = Math.round(canvas.clientWidth * devicePixelRatio);
+  rain.height = Math.round(canvas.clientHeight * devicePixelRatio);
   schedule();
 }).observe(canvas);
 

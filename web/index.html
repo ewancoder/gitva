@@ -47,6 +47,23 @@
         --hover: #d5d9e4;
         --danger: #c0392f;
       }
+      :root[data-theme='matrix'] {
+        --ground: #000600;
+        --panel: #01120a;
+        --raised: #04240f;
+        --line: #0d4a1e;
+        --ink: #4dff7c;
+        --muted: #22a343;
+        --faint: #14682c;
+        --commit: #54f07a;
+        --tree: #54f07a;
+        --blob: #54f07a;
+        --staged: #9dffb8;
+        --accent: #c9ff2e;
+        --hover: #0a3317;
+        --danger: #b6ff2e;
+        --sans: var(--mono);
+      }
       * { box-sizing: border-box; }
       html, body { height: 100%; margin: 0; }
       body {
@@ -128,6 +145,12 @@
 
       main { display: grid; grid-template-columns: 1fr auto auto; min-height: 0; }
       #graph { display: block; width: 100%; height: 100%; cursor: grab; }
+      /* Behind the object graph, in the same cell: on that one ground the
+         graph's own ground is painted translucent, so this shows through it
+         and never over a shape. Nothing on it is information. */
+      #graph, #rain { grid-column: 1; grid-row: 1; }
+      #rain { display: none; width: 100%; height: 100%; pointer-events: none; }
+      :root[data-theme='matrix'] #rain { display: block; }
       #copied {
         position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
         background: var(--raised); border: 1px solid var(--line); border-radius: var(--r);
@@ -288,6 +311,7 @@
     <div id="notes"><ul id="notes-list"></ul></div>
 
     <main>
+      <canvas id="rain" aria-hidden="true"></canvas>
       <canvas id="graph"></canvas>
       <div id="copied" aria-live="polite"></div>
       <div id="panel-seam"></div>

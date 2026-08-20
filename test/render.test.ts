@@ -143,6 +143,8 @@ describe('hues', () => {
         [dark.commit, dark.tree, dark.blob],
         'a kind is recognised by its hue, so the ground must not move it',
       );
+      setTheme('matrix');
+      assert.equal(theme.commit, theme.blob, 'one ground tells no kind from another');
       setTheme('dark');
       assert.deepEqual({ ...theme }, dark);
     } finally {

@@ -96,6 +96,9 @@ export function draw(ctx: CanvasRenderingContext2D, scene: Scene, p: Paint): boo
   if (dimming.size > 4000) dimming.clear();
   ctx.save();
   ctx.setTransform(p.dpr, 0, 0, p.dpr, 0, 0);
+  // Cleared first: a ground may be translucent, and a fill alone would leave
+  // the last frame under it.
+  ctx.clearRect(0, 0, p.width, p.height);
   ctx.fillStyle = theme.ground;
   ctx.fillRect(0, 0, p.width, p.height);
   ctx.translate(cam.x, cam.y);
