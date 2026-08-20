@@ -94,6 +94,7 @@ line inside a ref.
 | drag a column seam | widen the left column, for room to arrange pins |
 | drag the inspector's edge | widen or narrow the inspector; the width is kept |
 | click a sha in the inspector | copies it |
+| click the file in the inspector | where the object's bytes are kept — its loose file, or the pack holding it — shown inside `.git`; the click copies the whole path |
 | *reset view* | drops every pin and puts the columns back |
 | click the identifier | copies what the recording is filed under, for `--id` |
 | <kbd>f</kbd> <kbd>←</kbd>/<kbd>[</kbd> <kbd>→</kbd>/<kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |

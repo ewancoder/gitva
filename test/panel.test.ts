@@ -74,10 +74,15 @@ describe('the bytes the snapshot already has', () => {
 class El {
   className = '';
   textContent = '';
+  dataset: Record<string, string> = {};
   children: El[] = [];
   constructor(readonly tag: string) {}
   append(...kids: El[]) {
     this.children.push(...kids);
+  }
+  insertBefore(kid: El, before: El | null) {
+    const at = before ? this.children.indexOf(before) : this.children.length;
+    this.children.splice(at, 0, kid);
   }
   replaceChildren(...kids: El[]) {
     this.children = kids;
@@ -163,6 +168,30 @@ describe('the panel on screen', () => {
       fields.map((c) => [c.textContent, c.className]),
       [['b1', 'sha'], ['3 B', '']],
     );
+  });
+
+  it('puts the file it is stored in under the sha, whole path hidden behind it', async () => {
+    const el = new El('aside');
+    const asked = held();
+    renderPanel(el as unknown as HTMLElement, state, blob('b1'));
+    asked[0].answer({ text: 'alpha\n', path: 'objects/b1/xyz' });
+    await settle();
+    const rows = el.find('dl')!.children.map((c) => c.textContent);
+    assert.deepEqual(rows, ['sha', 'b1', 'stored in', 'objects/b1/xyz', 'size', '3 B']);
+    const dd = el.find('dl')!.children.find((c) => c.textContent === 'objects/b1/xyz')!;
+    // Shown inside .git, copied in full — the sha field's own bargain.
+    assert.equal(dd.className, 'sha');
+    assert.equal(dd.dataset.copy, '/tmp/fake/.git/objects/b1/xyz');
+  });
+
+  it('puts it last when there is no sha to put it under', async () => {
+    const el = new El('aside');
+    const asked = held();
+    const staged = fakeState({ index: [{ path: 'a.txt', oid: 'b1', mode: '100644', stage: 0 }] });
+    renderPanel(el as unknown as HTMLElement, staged, node({ kind: 'index', id: 'index:0:a.txt', oid: 'b1' }));
+    asked[0].answer({ text: 'alpha\n', path: 'objects/b1/xyz' });
+    await settle();
+    assert.deepEqual(el.find('dl')!.children.map((c) => c.textContent).slice(-2), ['stored in', 'objects/b1/xyz']);
   });
 
   it('shows a ref’s bytes without asking the server for anything', () => {

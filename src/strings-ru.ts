@@ -224,6 +224,7 @@ export const ru: Strings = {
       peelsTo: 'в итоге указывает на',
       resolvesTo: 'разрешается в',
       stored: 'хранится',
+      storedIn: 'лежит в',
       path: 'путь',
       blob: 'блоб',
       mode: 'режим доступа',

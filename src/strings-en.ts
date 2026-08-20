@@ -244,6 +244,7 @@ export const en = {
       peelsTo: 'peels to',
       resolvesTo: 'resolves to',
       stored: 'stored',
+      storedIn: 'stored in',
       path: 'path',
       blob: 'blob',
       mode: 'mode',

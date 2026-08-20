@@ -8,6 +8,7 @@ import {
   parseCommit,
   parseTag,
   parseTree,
+  objectPath,
   readBody,
   revListArgs,
   snapshot,
@@ -332,5 +333,37 @@ describe('degrading the documented way above a limit', () => {
       2,
     );
     assert.ok(Object.keys(opened.trees).length > 0);
+  });
+});
+
+
+/**
+ * A key hands you a value, and the value is a file — until git packs it away
+ * and the file is gone. Getting this wrong points a viewer at a path that is
+ * not there, which teaches the opposite of the lesson.
+ */
+describe('where git actually keeps an object', () => {
+  let repo: Repo;
+  let handle: RepoHandle;
+
+  before(async () => {
+    repo = plumbedRepo();
+    handle = await open(repo.dir);
+  });
+  after(() => repo.dispose());
+
+  it('names the loose file an object starts life as', async () => {
+    const oid = repo.git('hash-object', 'a.txt');
+    assert.equal(await objectPath(handle, oid), `objects/${oid.slice(0, 2)}/${oid.slice(2)}`);
+  });
+
+  it('names the pack it moves into once the file is gone', async () => {
+    const oid = repo.git('rev-parse', 'HEAD');
+    repo.git('repack', '-ad');
+    assert.match((await objectPath(handle, oid))!, /^objects\/pack\/pack-[0-9a-f]+\.pack$/);
+  });
+
+  it('has nothing to say about an object this repository does not hold', async () => {
+    assert.equal(await objectPath(handle, 'f'.repeat(40)), null);
   });
 });

@@ -815,10 +815,15 @@ seamEl.addEventListener('pointerdown', (e) => {
   );
 });
 
-/** A click on the sha hands you the key, exactly as a click on a shape does. */
+/** A click on the sha hands you the key, exactly as a click on a shape does —
+ *  and a field carrying more than it shows, like the path inside .git, hands
+ *  over the whole of it. */
 panel.addEventListener('click', (e) => {
   const el = e.target as HTMLElement;
-  if (el.classList.contains('sha')) copied(el.textContent ?? '');
+  if (!el.classList.contains('sha')) return;
+  const shown = el.textContent ?? '';
+  const whole = el.dataset.copy;
+  copied(whole ?? shown, whole ? shown : shown.slice(0, 7));
 });
 
 // ---------------------------------------------------------------------------
