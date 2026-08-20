@@ -287,11 +287,34 @@ first two things the tutorial teaches.
 - Never write a performance number down that you did not measure. There is no benchmark in this
   repo and the README no longer claims any timings; if you add a real one, add the script that
   produced it in the same pass.
-- **Finish every change by asking whether it added or altered something a user would want to
-  know about** — a gesture, a key, a toolbar control, a flag, a limit, a new thing on screen.
-  If so, update the README in the same pass. The README stays minimal: only what someone needs
-  to understand the project, run it, and know the features they would look for. Internal
-  refactors, bug fixes and anything invisible from the browser get no mention.
+- **Neither CLAUDE.md nor the README is updated by default.** Touching them on every change
+  muddles the diff; the code is the record, and a future session can read it. Both have their
+  own bar, below.
+
+### When to update the README
+
+It is a user-facing document. Update it only when one of these is true, and in the same pass:
+
+- a **new feature** appears that someone would look for — a gesture, a key, a toolbar control,
+  a flag, a limit, a new thing on screen;
+- an existing feature **changed or broke** compatibility;
+- something in it is **outdated** or now wrong.
+
+The README stays minimal: only what someone needs to understand the project, run it, and know
+the features they would look for. Internal refactors, bug fixes and anything invisible from the
+browser get no mention. When in doubt, leave it alone.
+
+### When to update CLAUDE.md
+
+It is this file: what a future session needs that the code cannot tell it. Update it only when
+one of these is true:
+
+- a **core concept** changed — the vocabulary, an invariant, the architecture, a convention;
+- something here is now **contradictory or outdated**;
+- a fact is **important enough to belong here** and is not inferable from the code.
+
+Everything else — a minor change, a bug fix, an implementation detail — goes unrecorded, because
+future sessions can infer it from the code.
 
 ## The canonical scenario
 
