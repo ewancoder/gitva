@@ -9,7 +9,7 @@
  */
 
 import type { NodeKind } from '../src/layout.js';
-import { S } from '../src/strings.js';
+import { renderNote, S } from '../src/strings.js';
 import { DEFAULT_VIEW, TAPE_CAP, type Oid, type Question, type Snapshot, type TreeEntry, type View } from '../src/types.js';
 
 /** What the caller has to repaint after a state arrived. */
@@ -265,17 +265,12 @@ export class Tape {
     const commits = snap.window.commits.length;
     return snap.caps.fullLoad
       ? S.status.tally(drawn, commits, kinds, (snap.unreachable ?? []).length, snap.index.length)
-      : S.status.tallyBig(
-          drawn,
-          commits,
-          snap.caps.objectCount.toLocaleString(),
-          snap.index.length,
-        );
+      : S.status.tallyBig(drawn, commits, snap.caps.objectCount, snap.index.length);
   }
 
   /** What this picture is not showing — the server's reasons, plus our own. */
   notes(): string[] {
-    const notes = [...(this.current?.notes ?? [])];
+    const notes = (this.current?.notes ?? []).map(renderNote);
     if (this.dropped > 0) {
       notes.push(S.status.stepsDropped(this.states.length, this.dropped));
     }

@@ -15,13 +15,13 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { S } from './strings.js';
 import type {
   Capabilities,
   Commit,
   GitObject,
   Head,
   IndexEntry,
+  Note,
   ObjectType,
   Oid,
   Ref,
@@ -595,29 +595,26 @@ function notesFor(
     view: View;
     indexElided?: { shown: number; total: number };
   },
-): string[] {
-  const notes: string[] = [];
-  const N = S.notes;
+): Note[] {
+  const notes: Note[] = [];
   if (!caps.fullLoad) {
-    notes.push(N.noUnreachableDetection(caps.objectCount.toLocaleString()));
-    notes.push(N.treesOnDemand);
+    notes.push({ id: 'noUnreachableDetection', args: [caps.objectCount] });
+    notes.push({ id: 'treesOnDemand' });
   }
   if (ctx.indexElided) {
-    notes.push(N.indexElided(ctx.indexElided.shown, ctx.indexElided.total));
+    notes.push({ id: 'indexElided', args: [ctx.indexElided.shown, ctx.indexElided.total] });
   }
-  if (ctx.more) notes.push(N.more(ctx.shown));
-  if (ctx.refsOutside > 0) notes.push(N.refsOutside(ctx.refsOutside));
-  if (!ctx.view.showIndex) notes.push(N.indexHidden);
-  if (ctx.view.showUnreachable === false && caps.fullLoad) notes.push(N.unreachableHidden);
-  if (!caps.commitGraph && caps.objectCount > LIMITS.fullLoad) {
-    // Teaching the user about a git internal they didn't know existed is gitva
-    // working as designed. Detect it, hint at it, never build it — that would
-    // be a write.
-    notes.push(N.noCommitGraph);
-  }
+  if (ctx.more) notes.push({ id: 'more', args: [ctx.shown] });
+  if (ctx.refsOutside > 0) notes.push({ id: 'refsOutside', args: [ctx.refsOutside] });
+  if (!ctx.view.showIndex) notes.push({ id: 'indexHidden' });
+  if (ctx.view.showUnreachable === false && caps.fullLoad) notes.push({ id: 'unreachableHidden' });
+  // Teaching the user about a git internal they didn't know existed is gitva
+  // working as designed. Detect it, hint at it, never build it — that would be
+  // a write.
+  if (!caps.commitGraph && caps.objectCount > LIMITS.fullLoad) notes.push({ id: 'noCommitGraph' });
   if (caps.looseCount > 0 && caps.objectCount > 5_000)
-    notes.push(N.looseObjects(caps.looseCount.toLocaleString()));
-  notes.push(N.bodiesOnSelection);
+    notes.push({ id: 'looseObjects', args: [caps.looseCount] });
+  notes.push({ id: 'bodiesOnSelection' });
   return notes;
 }
 

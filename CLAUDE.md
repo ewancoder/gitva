@@ -78,7 +78,7 @@ Everything horizontal across the top is a **toolbar**, each named for its job, n
 
 | region | holds |
 |---|---|
-| **view toolbar** | repo name (the path is its tooltip), the recording's identifier — a click copies it — load all commits (shown only while more remain), expand/collapse, index · unreachable · links from unreachable, help. Every control here is a `View` field. The question — branches and search — is built but hidden behind `QUESTIONS_ENABLED` in `src/types.ts`, because one shared view means one viewer's filter is everyone's. |
+| **view toolbar** | repo name (the path is its tooltip), the recording's identifier — a click copies it — load all commits (shown only while more remain), expand/collapse, index · unreachable · links from unreachable, then help, settings and the language buttons in the corner. Everything that changes what is drawn is a `View` field; the three in the corner are not — they open a dialog, or change the words. The question — branches and search — is built but hidden behind `QUESTIONS_ENABLED` in `src/types.ts`, because one shared view means one viewer's filter is everyone's. |
 | **recording toolbar** | `reset view` · step back · pause · step forward · scrub · live · tally · what changed · `clear`. `reset view` leads it, in its own group: it is the most-used control, and one button never earned a row of its own |
 | **notes toolbar** | what the canvas isn't showing, what gitva won't do to your repo, and why |
 | **canvas** | the object graph |
@@ -151,7 +151,7 @@ dependency passes the one-sentence test in `INITIAL_DESIGN.md` §14.
 | | |
 |---|---|
 | `src/strings-en.ts` | **every user-facing string**: the toolbars, tooltips, help, teaching text, notes, what the CLI prints. `ui` is one flat entry per `data-t*` key in `web/index.html`; the rest is what code asks for by name, a string or an arrow function where a number sits in the sentence. |
-| `src/strings.ts` | which language the words come from. `S` and the `Strings` type; one language per run. |
+| `src/strings.ts` | the localization framework: `LANGUAGES` (the registry the buttons are drawn from), a loader per language, the live binding `S`, `setLanguage`, and `renderNote`. No language but English is loaded until it is chosen. |
 | `src/types.ts` | shared vocabulary: `Snapshot`, `View`, `Capabilities`. Imported by both sides. |
 | `src/git.ts` | the **only** place that spawns git. Parsers, `measure`, `changeSignal`, `snapshot`, `findUnreachable`, `readBody`. |
 | `src/layout.ts` | `layout(snapshot, view, pins) → Scene`. Pure. Knows nothing about painting. |
@@ -240,6 +240,16 @@ by faking the `Capabilities` object, not by building a huge repo.
 It must keep noticing a bare new object nothing points at, and an index rewrite — those are the
 first two things the tutorial teaches.
 
+**The words are the viewer's.** A step carries note **ids** — `{ id, args }`, `Note` in
+`types.ts` — never sentences, so the same recorded step reads in whatever language the browser
+holding it is set to, including a language added long after the step was recorded. The choice is
+a preference in `localStorage`, never posted: switching it changes nobody else's canvas, and
+needs no round trip because `web/*` already imports the strings module. `S` is a live binding, so
+nothing may cache a sentence — `setLanguage` swaps the words and the caller says everything
+again (`applyWords` in `app.ts`). A language arrives when it is chosen, one module, the way every
+i18n framework does it; the server's own prose — the CLI, and the one `trouble` message — stays
+in the language the process was built with.
+
 **Object bodies are fetched on selection** via `/object?oid=`, never broadcast.
 
 ## Visual rules that are load-bearing
@@ -264,7 +274,9 @@ first two things the tutorial teaches.
   handful that carry a `<kbd>` — and `web/app.ts` fills them in on load. `test/strings.test.ts` fails if a
   key has no string, if a string is unused, or if a `data-t-html` value smuggles in a tag other
   than `<kbd>`. New copy goes there and is reached through `S`; the strings module is pure data,
-  so `src/` files the browser imports may use it freely.
+  so `src/` files the browser imports may use it freely. **A sentence never crosses the wire**:
+  what the server has to say about a step is a `Note` id plus its numbers, and the browser makes
+  the sentence — which is also why a count is passed raw and `toLocaleString()`d where it is read.
 - Small, obvious code — the codebase is part of the teaching material. If an optimisation stops
   reading as an explanation of how git works, it has to justify itself.
 - Comments explain *why* (usually citing the design brief), not what.

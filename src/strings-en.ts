@@ -14,8 +14,8 @@
  *             are, though you may reorder them.
  *
  * To add a language: copy this file to `src/strings-<code>.ts`, translate the
- * right-hand sides, and point `src/strings.ts` at it. The type comes from this
- * file, so a translation that forgets an entry fails the build.
+ * right-hand sides, and register it in `src/strings.ts`. The type comes from
+ * this file, so a translation that forgets an entry fails the build.
  *
  * Keep the vocabulary in CLAUDE.md: object, pointer, tree, blob, commit,
  * index, unreachable are git's own words, and gitva does not improve on them.
@@ -161,8 +161,8 @@ export const en = {
       ` · ${counts.commit}c ${counts.tree}t ${counts.blob}b${counts.tag ? ` ${counts.tag}g` : ''}` +
       ` · ${unreachable} unreachable · ${index} index`,
     /** The same line where unreachable detection is off: objects, not kinds. */
-    tallyBig: (drawn: number, commits: number, objects: string, index: number) =>
-      `${drawn} on screen · ${commits} commits · ${objects} objects · ${index} index`,
+    tallyBig: (drawn: number, commits: number, objects: number, index: number) =>
+      `${drawn} on screen · ${commits} commits · ${objects.toLocaleString()} objects · ${index} index`,
     stepsDropped: (kept: number, dropped: number) =>
       `Recording: ${kept} steps kept, ${dropped} older ones dropped.`,
   },
@@ -193,8 +193,8 @@ export const en = {
   // The notes toolbar: what the canvas is not showing, and why
   // -------------------------------------------------------------------------
   notes: {
-    noUnreachableDetection: (objects: string) =>
-      `Unreachable detection is off: ${objects} objects, and finding an unreachable object means reading every one. Everything drawn here is reachable by construction.`,
+    noUnreachableDetection: (objects: number) =>
+      `Unreachable detection is off: ${objects.toLocaleString()} objects, and finding an unreachable object means reading every one. Everything drawn here is reachable by construction.`,
     treesOnDemand: 'Trees load only for the commits you expand — nothing walks the object database.',
     indexElided: (shown: number, total: number) =>
       `Index: showing the ${shown} entries that differ from HEAD, of ${total} staged paths.`,
@@ -205,8 +205,8 @@ export const en = {
       'Unreachable objects are hidden — they are still in the object database.',
     noCommitGraph:
       'This repo has no commit-graph. `git commit-graph write --reachable` would make walking history much faster — gitva will not write it for you.',
-    looseObjects: (loose: string) =>
-      `${loose} loose objects. \`git gc\` would pack them — gitva will not run it for you.`,
+    looseObjects: (loose: number) =>
+      `${loose.toLocaleString()} loose objects. \`git gc\` would pack them — gitva will not run it for you.`,
     bodiesOnSelection:
       'Object contents are fetched when you select something, not shipped every update.',
   },
@@ -319,6 +319,11 @@ export const en = {
         made: 'git rev-list -n <more>',
       },
     },
+  },
+
+  /** The buttons in the corner. A language names itself; this says what one does. */
+  language: {
+    switchTo: (name: string) => `Show gitva in ${name}`,
   },
 
   // -------------------------------------------------------------------------

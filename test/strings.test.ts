@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { S } from '../src/strings.js';
+import { language, LANGUAGES, renderNote, S, setLanguage } from '../src/strings.js';
 
 const html = readFileSync(fileURLToPath(new URL('../../web/index.html', import.meta.url)), 'utf8');
 const keys = [...html.matchAll(/data-t(?:-html|-title|-placeholder)?="([^"]+)"/g)].map((m) => m[1]);
@@ -41,3 +41,35 @@ describe('the strings behind the chrome', () => {
   });
 });
 
+
+describe('the language in force', () => {
+  it('has words for every language it offers', async () => {
+    for (const l of LANGUAGES) {
+      await setLanguage(l.code);
+      assert.equal(language, l.code, l.code);
+      assert.ok(Object.keys(S.ui).length > 0, l.code);
+    }
+    await setLanguage('en');
+  });
+
+  it('falls back to English for a language nobody wrote', async () => {
+    // The code comes out of a stored preference, which can outlive a language.
+    await setLanguage('kx');
+    assert.equal(language, 'en');
+  });
+});
+
+describe('a note out of a step', () => {
+  it('puts the numbers the step carried into the sentence', () => {
+    assert.match(renderNote({ id: 'refsOutside', args: [3] }), /^3 refs point outside/);
+  });
+
+  it('says a note that needs no numbers', () => {
+    assert.equal(renderNote({ id: 'indexHidden' }), S.notes.indexHidden);
+  });
+
+  // Recordings kept from before notes became ids hold the sentence itself.
+  it('shows prose from an older recording as it was written', () => {
+    assert.equal(renderNote('The index is hidden.'), 'The index is hidden.');
+  });
+});

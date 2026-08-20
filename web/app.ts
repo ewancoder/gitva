@@ -12,7 +12,7 @@
 
 import { diffScenes, describe, EMPTY_CHANGE, type Change } from '../src/diff.js';
 import { layout, M, type Scene, type SceneNode } from '../src/layout.js';
-import { S } from '../src/strings.js';
+import { language, LANGUAGES, S, setLanguage } from '../src/strings.js';
 import { QUESTIONS_ENABLED, type Snapshot, type View } from '../src/types.js';
 import { bounded, centre, fit, glideStep, refit, toWorld, zoom, zoomOut, type Camera } from './camera.js';
 import { renderPanel } from './panel.js';
@@ -27,23 +27,6 @@ const canvas = $<HTMLCanvasElement>('graph');
 const ctx = canvas.getContext('2d')!;
 const panel = $('panel');
 const port = () => ({ width: canvas.clientWidth, height: canvas.clientHeight });
-
-/**
- * The words. index.html carries keys, not copy: everything visible in it is
- * filled in from `strings-en.ts` here, so one file holds the language. The
- * `data-t-html` handful may contain a <kbd> and nothing else — they come from
- * that file, not from anything a viewer or a repository can write.
- */
-const words = S.ui as Record<string, string>;
-for (const el of document.querySelectorAll<HTMLElement>('[data-t]'))
-  el.textContent = words[el.dataset.t!] ?? '';
-for (const el of document.querySelectorAll<HTMLElement>('[data-t-html]'))
-  el.innerHTML = words[el.dataset.tHtml!] ?? '';
-for (const el of document.querySelectorAll<HTMLElement>('[data-t-title]'))
-  el.title = words[el.dataset.tTitle!] ?? '';
-for (const el of document.querySelectorAll<HTMLInputElement>('[data-t-placeholder]'))
-  el.placeholder = words[el.dataset.tPlaceholder!] ?? '';
-$('live-text').textContent = S.status.connecting;
 
 /** Copy a sha and say so briefly; a clipboard the browser refuses is not worth
  *  a dialog. `said` is what to show having copied it: a sha is shown short, and
@@ -64,6 +47,7 @@ function copied(oid: string, said = oid.slice(0, 7)) {
 
 // --- preferences: about how this person likes to work, not about this session
 interface Prefs {
+  language: string;
   showIndex: boolean;
   centreOnClick: boolean;
   openNewCommits: boolean;
@@ -71,6 +55,7 @@ interface Prefs {
   showPins: boolean;
 }
 const prefs: Prefs = {
+  language: 'en',
   showIndex: true,
   centreOnClick: false,
   openNewCommits: true,
@@ -79,6 +64,62 @@ const prefs: Prefs = {
   ...JSON.parse(localStorage.getItem('gitva.prefs') ?? '{}'),
 };
 const savePrefs = () => localStorage.setItem('gitva.prefs', JSON.stringify(prefs));
+
+// --- the words. The language is this viewer's, like every other preference:
+// it is never posted, and nobody else's canvas changes when it does. Chosen
+// before the first paint, because every label on screen comes out of it.
+await setLanguage(prefs.language);
+
+/**
+ * index.html carries keys, not copy: everything visible in it is filled in
+ * from the language in force. The `data-t-html` handful may contain a <kbd>
+ * and nothing else — they come from the strings file, not from anything a
+ * viewer or a repository can write.
+ */
+function applyWords() {
+  const words = S.ui as Record<string, string>;
+  for (const el of document.querySelectorAll<HTMLElement>('[data-t]'))
+    el.textContent = words[el.dataset.t!] ?? '';
+  for (const el of document.querySelectorAll<HTMLElement>('[data-t-html]'))
+    el.innerHTML = words[el.dataset.tHtml!] ?? '';
+  for (const el of document.querySelectorAll<HTMLElement>('[data-t-title]'))
+    el.title = words[el.dataset.tTitle!] ?? '';
+  for (const el of document.querySelectorAll<HTMLInputElement>('[data-t-placeholder]'))
+    el.placeholder = words[el.dataset.tPlaceholder!] ?? '';
+  // What language this page is in, for anything reading it out loud.
+  document.documentElement.lang = language;
+
+  // One button per language on offer, the one in force pressed. Rendered here
+  // rather than written into index.html so that registering a language is the
+  // whole of adding it.
+  const box = $('languages');
+  box.replaceChildren();
+  for (const l of LANGUAGES) {
+    const b = document.createElement('button');
+    b.textContent = l.label;
+    b.title = S.language.switchTo(l.name);
+    b.setAttribute('aria-pressed', String(l.code === language));
+    b.onclick = () => void chooseLanguage(l.code);
+    box.append(b);
+  }
+}
+
+/** A different language: swap the words, then say everything again. Nothing is
+ *  asked of the server — a step carries note *ids*, and the words are already
+ *  here. The inspector does re-read the selected object's body, because that is
+ *  how `renderPanel` gets one at all; it is one object, on demand, and the same
+ *  fetch a click makes. */
+async function chooseLanguage(code: string) {
+  prefs.language = code;
+  savePrefs();
+  await setLanguage(code);
+  applyWords();
+  live(source.readyState !== 2);
+  updateHeader();
+  renderPanel(panel, tape.current, scene?.nodes.find((n) => n.id === selected) ?? null);
+  renderHeaderChange(tape.current ? describe(shownFrom, tape.current) : '');
+  relayout(false, false);
+}
 
 // --- the tape: every state seen, where we stand in it, and the view we ask
 // with. It owns all three, so nothing here keeps a second copy to drift.
@@ -119,6 +160,9 @@ let enterAt = -1e9;
 let camera: Camera = { x: 24, y: 24, scale: 1 };
 let hover: string | null = null;
 let selected: string | null = null;
+/** The step the change line was worked out from, so it can be said again in
+ *  another language without the recording moving. */
+let shownFrom: Snapshot | null = null;
 /** The last click, waiting to see whether a second one joins it. */
 let lastClick: Click | null = null;
 
@@ -202,6 +246,7 @@ function relayout(animate: boolean, repoChanged: boolean) {
 
 /** The tape moved: draw where it stands now, having come from `prev`. */
 function shown(prev: Snapshot | null) {
+  shownFrom = prev;
   const changed = describe(prev, tape.current!);
   renderHeaderChange(prev ? changed : S.change.first);
   relayout(true, prev !== null && changed !== S.change.none);
@@ -656,4 +701,6 @@ new ResizeObserver(() => {
   schedule();
 }).observe(canvas);
 
+applyWords();
+$('live-text').textContent = S.status.connecting;
 renderPanel(panel, null, null);

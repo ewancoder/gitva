@@ -4,6 +4,8 @@
  * "commit", "ref" and "view".
  */
 
+import type { Strings } from './strings.js';
+
 export type Oid = string;
 export type ObjectType = 'blob' | 'tree' | 'commit' | 'tag';
 
@@ -166,6 +168,20 @@ export interface Snapshot {
     refsOutside: number;
   };
   view: View;
-  /** What this picture is not showing, and why. Always shown, out loud. */
-  notes: string[];
+  /** What the canvas is not showing, and why. Always shown, out loud. */
+  notes: Note[];
+}
+
+/**
+ * One note, as what to say plus what goes in the sentence — never the sentence
+ * itself. A step is read by every viewer, each in their own language, and by a
+ * viewer scrubbing back through steps recorded before that language existed:
+ * prose in a step would be prose in whatever language the server happened to
+ * be in when git moved.
+ */
+export type NoteId = keyof Strings['notes'];
+
+export interface Note {
+  id: NoteId;
+  args?: (string | number)[];
 }

@@ -336,7 +336,8 @@ describe('the history everyone shares', () => {
   const state = (seq: number, extra: Partial<Snapshot> = {}) => JSON.stringify(fakeState({ seq, ...extra }));
   const seqs = (history: string[]) => history.map((s) => JSON.parse(s).seq);
   /** A state of a repository big enough for the byte ceiling to be the one that bites. */
-  const heavy = (seq: number, mb: number) => state(seq, { notes: ['x'.repeat(mb << 20)] });
+  const heavy = (seq: number, mb: number) =>
+    state(seq, { notes: [{ id: 'more', args: ['x'.repeat(mb << 20)] }] });
 
   it('replaces the top rather than stepping when the same state is asked a different question', () => {
     const history: string[] = [];
