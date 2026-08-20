@@ -266,7 +266,7 @@ describe('painting', () => {
   });
 
   it('draws every kind, at every tier of detail, without falling over', () => {
-    for (const scale of [0.3, 0.6, 1.2, 1.5]) {
+    for (const scale of [0.1, 0.2, 0.3, 0.5, 1.2, 1.5]) {
       snapPositions();
       settle(full, paint({ camera: { x: 0, y: 0, scale } }));
     }

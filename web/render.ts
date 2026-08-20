@@ -41,7 +41,7 @@ export interface Paint {
   resizing?: string | null;
 }
 
-const TIER = { none: 0.45, sha: 0.75, kind: 1.05, names: 1.35 };
+const TIER = { none: 0.15, sha: 0.25, kind: 0.4, names: 0.55 };
 
 // Hover dimming eases rather than snapping. The dimmed graph is an answer to
 // "what connects to what"; arriving at it instantly reads as a glitch instead.
