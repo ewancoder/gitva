@@ -26,10 +26,8 @@ export const en = {
   // The chrome: keyed from web/index.html
   // -------------------------------------------------------------------------
   ui: {
-    'recording-id.title':
-      'What this recording is filed under. Click to copy: `gitva --id <it>` picks the same recording up from anywhere',
-
-    'question.title': 'What this view is asking',
+    'recording-id.title': 'Unique ID of a repository recording. Click to copy: `gitva --id ID` picks the same recording up from anywhere',
+    'question.title': 'filter objects',
     'question.all': 'everything',
     'question.branches': 'branches…',
     'question.message': 'search: message',
@@ -39,18 +37,17 @@ export const en = {
     'search.placeholder': 'search',
 
     'load-all': 'load all commits',
-    'load-all.title': 'Load the whole history, not just the first page',
+    'load-all.title': 'Load the whole history of commits',
     'expand-all': 'expand all',
-    'expand-all.title': 'Expand every commit (double-click one commit for just it)',
+    'expand-all.title': 'Expand every commit and tree (double-click a commit/tree to expand/collapse)',
     'collapse-all': 'collapse all',
-    'collapse-all.title': 'Collapse everything back to the commit DAG',
+    'collapse-all.title': 'Collapse all commits (trees always stay expanded)',
     index: 'index',
-    'index.title': 'The index is the sandbox beside the object graph',
+    'index.title': 'Show Index on the right',
     unreachable: 'unreachable',
-    'unreachable.title': 'Objects nothing points at — still in the object database either way',
+    'unreachable.title': 'Show unreachable objects',
     'cross-links': 'links from unreachable',
-    'cross-links.title':
-      "What unreachable objects still point at: a tree's entries, and a discarded commit's parent. Nothing points at them; they still point at plenty",
+    'cross-links.title': 'Show links from unreachable objects to reachable ones',
     help: 'help',
     settings: 'settings',
 
@@ -58,13 +55,13 @@ export const en = {
     'reset-view.title':
       'Send everything you dragged, and every widened column, back to where the layout puts it',
     'step-back.title': 'Previous step',
-    'pause.title': 'Pause following new steps',
+    'pause.title': 'Pause following live steps',
     'step-forward.title': 'Next step',
     clear: 'clear',
-    'clear.title': 'Throw away every recorded step and start again at the repository as it is now',
+    'clear.title': 'Clear the recording steps to start fresh',
 
     'help.title': 'what you are looking at',
-    'help.lede': 'A live object graph of a repository.',
+    'help.lede': 'A live object graph of the repository.',
     'help.legend.commit': 'commit',
     'help.legend.tree': 'tree',
     'help.legend.blob': 'blob',
@@ -76,13 +73,13 @@ export const en = {
     'help.legend.changed': 'just changed',
     'help.keyboard': 'keyboard',
     'help.keys.wheel': 'wheel',
-    'help.keys.wheel.does': 'pan · hold <kbd>ctrl</kbd> to zoom',
+    'help.keys.wheel.does': 'scroll up/down · hold <kbd>ctrl</kbd> to zoom',
     'help.keys.dragBackground': 'drag background',
     'help.keys.dragBackground.does': 'pan',
     'help.keys.doubleBackground': 'double-click background',
-    'help.keys.doubleBackground.does': 'fit the canvas to the width again',
+    'help.keys.doubleBackground.does': 'fit the canvas to the width',
     'help.keys.click': 'click',
-    'help.keys.click.does': 'select it — read what it is, and copy its sha',
+    'help.keys.click.does': 'select it — show what it is, and copy its sha',
     'help.keys.rightClick': 'right-click',
     'help.keys.rightClick.does': 'mark it, to follow it as the object graph moves',
     'help.keys.doubleCommit': 'double-click commit',
@@ -93,28 +90,28 @@ export const en = {
     'help.keys.drag.does': 'pin it where you put it (“reset view” drops every pin)',
     'help.keys.shiftClick': 'shift-click it',
     'help.keys.shiftClick.does': 'unpin it again',
-    'help.keys.seam': 'drag a column seam',
+    'help.keys.seam': 'drag a column edge',
     'help.keys.seam.does': 'widen that column (“reset view” puts it back)',
-    'help.keys.fit.does': 'the same fit, from the keyboard',
+    'help.keys.fit.does': 'fit the canvas to the width',
     'help.keys.index.does': 'show or hide the index',
     'help.keys.back.does': 'step back through the recording',
-    'help.keys.forward.does': 'step forward again',
+    'help.keys.forward.does': 'step forward through the recording',
     'help.keys.space.does': 'pause, or go live',
     close: 'close',
 
     'clear-confirm.title': 'Clear the recording?',
     'clear-confirm.lede':
-      'Every step recorded of this repository goes — for every viewer, not just this browser — and the recording starts again at the repository as it is now. Nothing in the repository itself changes: gitva does not write to it.',
+      'Deletes every step recorded of this repository and the recording starts again. Nothing in the repository itself changes: gitva does not write to it. This will reset the recording for everyone (server-level), not just this view.',
     'clear-confirm.yes': 'clear the recording',
     'clear-confirm.no': 'keep it',
 
     'settings.title': 'settings',
     'settings.lede':
-      'These are about how you like to work, not about this session, so they survive a reload.',
+      'Personal settings for your viewing experience.',
     'settings.centreOnClick': 'clicking something centres the view on it',
-    'settings.refitOnChange': 'the canvas refits the width when the repository changes',
-    'settings.showPins': 'anything you pinned wears a pushpin',
-    'settings.openNewCommits': 'a commit git just made arrives expanded',
+    'settings.refitOnChange': 'auto-zoom the view when something happens in the repository',
+    'settings.showPins': 'visual pins for everything you moved manually',
+    'settings.openNewCommits': 'new commits expanded by default',
   },
 
   // -------------------------------------------------------------------------
@@ -194,8 +191,8 @@ export const en = {
   // -------------------------------------------------------------------------
   notes: {
     noUnreachableDetection: (objects: number) =>
-      `Unreachable detection is off: ${objects.toLocaleString()} objects, and finding an unreachable object means reading every one. Everything drawn here is reachable by construction.`,
-    treesOnDemand: 'Trees load only for the commits you expand — nothing walks the object database.',
+      `Unreachable detection is off: repository is too big - ${objects.toLocaleString()} objects',
+    treesOnDemand: 'Trees load only for the commits you expand',
     indexElided: (shown: number, total: number) =>
       `Index: showing the ${shown} entries that differ from HEAD, of ${total} staged paths.`,
     more: (shown: number) => `Showing ${shown} commits — click "load more history" for the rest.`,
@@ -208,7 +205,7 @@ export const en = {
     looseObjects: (loose: number) =>
       `${loose.toLocaleString()} loose objects. \`git gc\` would pack them — gitva will not run it for you.`,
     bodiesOnSelection:
-      'Object contents are fetched when you select something, not shipped every update.',
+      'Object contents are fetched when you select something.',
   },
 
   // -------------------------------------------------------------------------
@@ -286,7 +283,7 @@ export const en = {
       tree: {
         title: 'Tree',
         what: 'A tree is one directory: a sorted list of names, each with a mode and the sha of what it holds — a blob for a file, another tree for a subdirectory. Names live in trees. This is the whole of how git stores a directory.',
-        made: 'git write-tree  (from the index)',
+        made: 'git write-tree  (from the index), or git mktree',
       },
       commit: {
         title: 'Commit',
