@@ -717,6 +717,9 @@ describe('the scene', () => {
     const scene = layout(s, DEFAULT_VIEW);
     const ms = performance.now() - t0;
     assert.equal(scene.rows.length, 20_000);
-    assert.ok(ms < 100, `deciding where 20,000 commits go took ${ms.toFixed(1)}ms`);
+    // A guard against layout going quadratic, not a benchmark: the budget is
+    // loose because a shared CI runner is several times slower than a laptop,
+    // and anything worse than linear here costs seconds, not milliseconds.
+    assert.ok(ms < 1000, `deciding where 20,000 commits go took ${ms.toFixed(1)}ms`);
   });
 });
