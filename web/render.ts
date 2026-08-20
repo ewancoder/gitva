@@ -33,6 +33,8 @@ export interface Paint {
   enter: number;
   /** Nodes that have gone, drawn at their old place while they fade. */
   ghosts: SceneNode[];
+  /** 0→1 while the ghosts fade. Slower than `enter` when git caused it. */
+  exit: number;
   /** False under prefers-reduced-motion: everything snaps to its end state. */
   motion: boolean;
   /** The band whose seam is under the pointer or being dragged. */
@@ -156,9 +158,9 @@ export function draw(ctx: CanvasRenderingContext2D, scene: Scene, p: Paint): boo
   }
 
   // Removed things fade in place rather than vanishing.
-  if (p.enter < 1) {
+  if (p.exit < 1) {
     ctx.save();
-    ctx.globalAlpha = 1 - p.enter;
+    ctx.globalAlpha = 1 - p.exit;
     for (const g of p.ghosts) drawNode(ctx, g, p, new Set());
     ctx.restore();
   }

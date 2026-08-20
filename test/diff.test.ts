@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { describe as describeChange, diffScenes } from '../src/diff.js';
+import { describe as describeChange, diffScenes, isVisible } from '../src/diff.js';
 import type { Scene } from '../src/layout.js';
 import type { Snapshot } from '../src/types.js';
 
@@ -39,6 +39,16 @@ describe('diffing whole states', () => {
     const d = diffScenes(scene([node('a', 0, 0, 'old')]), scene([node('a', 0, 0, 'new')]));
     assert.deepEqual([...d.updated], ['a']);
     assert.equal(d.moved.size, 0);
+  });
+
+  it('counts a git status — same shapes, new step — as nothing to show', () => {
+    const one = scene([node('a')]);
+    assert.equal(isVisible(diffScenes(one, scene([node('a')]))), false);
+    // A band resize moves everything and changes nothing.
+    assert.equal(isVisible(diffScenes(one, scene([node('a', 40)]))), false);
+    assert.equal(isVisible(diffScenes(one, scene([node('a'), node('b')]))), true);
+    assert.equal(isVisible(diffScenes(one, scene([node('a', 0, 0, 'new')]))), true);
+    assert.equal(isVisible(diffScenes(one, scene([]))), true);
   });
 
   it('runs backwards, which is how a reset is shown twice without doing it twice', () => {

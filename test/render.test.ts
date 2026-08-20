@@ -198,6 +198,7 @@ describe('painting', () => {
     showPins: true,
     enter: 1,
     ghosts: [],
+    exit: 1,
     motion: true,
     ...over,
   });
@@ -279,6 +280,7 @@ describe('painting', () => {
         change: { added: new Set(['b1']), removed: new Set(['old']), updated: new Set(['c1']), moved: new Set() },
         flash: 1,
         enter: 0.5,
+        exit: 0.5,
         hover: 'c1',
         selected: 'b1',
         marked: new Set(['b1']),

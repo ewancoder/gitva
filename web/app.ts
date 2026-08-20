@@ -10,7 +10,7 @@
  * gestures make is in `tape.ts` and `camera.ts`, where it is tested.
  */
 
-import { diffScenes, describe, EMPTY_CHANGE, type Change } from '../src/diff.js';
+import { diffScenes, isVisible, describe, EMPTY_CHANGE, type Change } from '../src/diff.js';
 import { layout, M, type Scene, type SceneNode } from '../src/layout.js';
 import { language, LANGUAGES, S, setLanguage } from '../src/strings.js';
 import { QUESTIONS_ENABLED, type Snapshot, type View } from '../src/types.js';
@@ -159,6 +159,9 @@ let ghosts: SceneNode[] = [];
 let change: Change = EMPTY_CHANGE;
 let flashAt = -1e9;
 let enterAt = -1e9;
+// A shape you removed yourself is gone the moment you asked; one git removed has
+// to be seen going, or the lesson leaves the screen before you read it.
+let exitMs = theme.duration;
 let camera: Camera = { x: 24, y: 24, scale: 1 };
 let hover: string | null = null;
 let selected: string | null = null;
@@ -186,8 +189,9 @@ function paint() {
   running = false;
   if (!scene) return;
   const now = performance.now();
-  const flash = reduceMotion ? 0 : Math.max(0, 1 - (now - flashAt) / 1100);
+  const flash = reduceMotion ? 0 : Math.max(0, 1 - (now - flashAt) / 5000);
   const enter = reduceMotion ? 1 : Math.min(1, (now - enterAt) / theme.duration);
+  const exit = reduceMotion ? 1 : Math.min(1, (now - enterAt) / exitMs);
   if (glide) {
     const step = glideStep(camera, glide, reduceMotion ? 1 : 0.22);
     camera = step.camera;
@@ -206,10 +210,11 @@ function paint() {
     showPins: prefs.showPins,
     enter,
     ghosts,
+    exit,
     motion: !reduceMotion,
     resizing: seam,
   });
-  if (flash > 0 || enter < 1 || settling || glide) schedule();
+  if (flash > 0 || enter < 1 || exit < 1 || settling || glide) schedule();
 }
 
 /** Where wheel panning is heading. Every other camera move is direct, and
@@ -229,11 +234,17 @@ function relayout(animate: boolean, repoChanged: boolean) {
   // travels instead — see `snapPositions`. Dragging is the one move that must
   // not lag the cursor, so it snaps.
   if (!animate) snapPositions();
-  change = diffScenes(scene, next);
-  ghosts = scene ? scene.nodes.filter((n) => change.removed.has(n.id)) : [];
+  const fresh = diffScenes(scene, next);
+  const same = scene !== null && !isVisible(fresh);
+  const going = scene ? scene.nodes.filter((n) => fresh.removed.has(n.id)) : [];
   scene = next;
+  // A step that draws the same shapes leaves the flash and any fade alone.
+  if (same) return schedule();
+  change = fresh;
+  ghosts = going;
   if (animate) {
     enterAt = performance.now();
+    exitMs = repoChanged ? 2500 : theme.duration;
     // The one reserved accent, spent on nothing but "this just changed".
     if (repoChanged) flashAt = performance.now();
   } else {

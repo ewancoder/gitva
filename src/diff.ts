@@ -50,6 +50,15 @@ export function diffScenes(prev: Scene | null, next: Scene): Change {
   return { added, removed, moved, updated };
 }
 
+/** Whether a diff has anything to show. A step can arrive that draws exactly
+ *  the same shapes — `git status` rewrites the index's stat cache, and the
+ *  change signal moves — and such a step must not cancel the flash, or a fade,
+ *  that the last real change started. `moved` does not count: a band resize
+ *  moves everything and changes nothing. */
+export function isVisible(c: Change): boolean {
+  return c.added.size > 0 || c.removed.size > 0 || c.updated.size > 0;
+}
+
 /** The sentence in the header: what the last update actually did. */
 export function describe(prev: Snapshot | null, next: Snapshot): string {
   const T = S.change;
