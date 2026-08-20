@@ -502,7 +502,10 @@ export async function snapshot(
     commits,
     trees,
     tags,
-    index: view.showIndex ? index : [],
+    // Always, whether or not this view draws it: hiding the index is a drawing
+    // decision the browser makes, and a step recorded while it was hidden is
+    // scrubbed back to later with it shown.
+    index,
     indexElided,
     unreachable: reach?.unreachable ?? null,
     stagedOnly: reach?.stagedOnly ?? null,
@@ -514,7 +517,7 @@ export async function snapshot(
       refsOutside,
     },
     view,
-    notes: notesFor(caps, { more, shown: windowCommits.length, refsOutside, view, indexElided }),
+    notes: notesFor(caps, { more, shown: windowCommits.length, refsOutside, indexElided }),
   };
 }
 
@@ -592,7 +595,6 @@ function notesFor(
     more: boolean;
     shown: number;
     refsOutside: number;
-    view: View;
     indexElided?: { shown: number; total: number };
   },
 ): Note[] {
@@ -606,8 +608,9 @@ function notesFor(
   }
   if (ctx.more) notes.push({ id: 'more', args: [ctx.shown] });
   if (ctx.refsOutside > 0) notes.push({ id: 'refsOutside', args: [ctx.refsOutside] });
-  if (!ctx.view.showIndex) notes.push({ id: 'indexHidden' });
-  if (ctx.view.showUnreachable === false && caps.fullLoad) notes.push({ id: 'unreachableHidden' });
+  // Nothing here about what the view toolbar's toggles hide: those are the
+  // viewer's, so the sentence is theirs to make too (`Tape.notes`), and a step
+  // must not still claim the index is hidden once they show it again.
   // Teaching the user about a git internal they didn't know existed is gitva
   // working as designed. Detect it, hint at it, never build it — that would be
   // a write.

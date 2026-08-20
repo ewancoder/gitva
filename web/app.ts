@@ -358,6 +358,17 @@ function postView(v: View) {
   }, 60) as unknown as number;
 }
 
+/** A toggle in the view toolbar changes what is drawn, not what is asked of
+ *  git: the server reads the index and works out the unreachable set either
+ *  way. So it is never posted — which is what keeps it yours, and keeps a
+ *  step's own toggles out of the recording. */
+function drawView() {
+  prefs.showIndex = tape.view.showIndex;
+  savePrefs();
+  relayout(true, false);
+  updateHeader();
+}
+
 function pushView() {
   prefs.showIndex = tape.view.showIndex;
   savePrefs();
@@ -520,15 +531,15 @@ $('search').addEventListener('input', () => {
 $('branches').addEventListener('change', askFromToolbar);
 $('toggle-index').addEventListener('click', () => {
   tape.view = { ...tape.view, showIndex: !tape.view.showIndex };
-  pushView();
+  drawView();
 });
 $('toggle-orphans').addEventListener('click', () => {
   tape.view = { ...tape.view, showUnreachable: tape.view.showUnreachable === false };
-  pushView();
+  drawView();
 });
 $('toggle-cross').addEventListener('click', () => {
   tape.view = { ...tape.view, showCrossLinks: !tape.view.showCrossLinks };
-  pushView();
+  drawView();
 });
 // The names on a tree's links are painting, not a question for the server: it
 // is a preference, so turning them off is nobody else's business.

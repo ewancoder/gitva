@@ -172,10 +172,19 @@ describe('a repository read through its own plumbing', () => {
     assert.ok(!snap.unreachable.includes(snap.head.oid!), 'HEAD is not');
   });
 
-  it('says out loud when orphans are switched off, and still counts them', async () => {
+  it('counts the orphans whether or not the view draws them', async () => {
     const s = await snapshot(handle, { ...DEFAULT_VIEW, showUnreachable: false }, caps, 4);
     assert.ok(s.unreachable!.length > 0, 'hiding is a drawing decision, not a lie about the repo');
-    assert.ok(s.notes.some((n) => n.id === 'unreachableHidden'));
+  });
+
+  // The bug: a step recorded with the index switched off held no index at all,
+  // so scrubbing back to it with the index switched on drew an empty column —
+  // and the toggle is the viewer's, made long after the step was recorded.
+  it('carries the index whether or not the view draws it', async () => {
+    const s = await snapshot(handle, { ...DEFAULT_VIEW, showIndex: false }, caps, 4);
+    assert.ok(s.index.length > 0);
+    assert.deepEqual(s.index, snap.index);
+    assert.ok(!s.notes.some((n) => n.id === 'indexHidden'), 'what a viewer hides is not the step’s to say');
   });
 
   it('stores one blob for two names, because names live in trees', () => {

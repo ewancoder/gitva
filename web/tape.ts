@@ -58,6 +58,19 @@ export class Tape {
    *  they left it rather than at its default. */
   answers: Record<Oid, boolean> = {};
 
+  /** The view toolbar's toggles are the viewer's, never the step's: what a
+   *  step was drawn with when git made it says nothing about what this browser
+   *  wants to see now. Held across arrivals and jumps exactly as `expanded` and
+   *  `folded` are, so walking the whole recording back with the index switched
+   *  on shows every step's index. */
+  private get mine(): Pick<View, 'showIndex' | 'showUnreachable' | 'showCrossLinks'> {
+    return {
+      showIndex: this.view.showIndex,
+      showUnreachable: this.view.showUnreachable,
+      showCrossLinks: this.view.showCrossLinks,
+    };
+  }
+
   /** Their answers over whatever the defaults worked out to. */
   private answered(open: Oid[]): Oid[] {
     const on = new Set(open);
@@ -119,7 +132,7 @@ export class Tape {
       if (s.seq !== last.seq) for (const c of s.window.commits) if (!this.seen.has(c)) this.born.add(c);
       this.view = {
         ...s.view,
-        showIndex: prefs.showIndex,
+        ...this.mine,
         expanded: this.answered(
           s.view.learning ? openAll : prefs.openNewCommits ? s.view.expanded.filter((c) => this.born.has(c)) : [],
         ),
@@ -138,7 +151,7 @@ export class Tape {
         this.view = { ...this.view, expanded: [...this.view.expanded, ...fresh] };
         // Paused, the question on screen belongs to an older state while the
         // server is still on its own: only the folds travel.
-        post = this.following ? this.view : { ...s.view, expanded: this.view.expanded };
+        post = this.following ? this.view : { ...s.view, ...this.mine, expanded: this.view.expanded };
       }
     }
 
@@ -177,7 +190,7 @@ export class Tape {
     // in the head of the person watching, across the whole tape: a commit they
     // opened stays open wherever they stand, and one they folded stays folded,
     // until they say otherwise.
-    this.view = { ...this.states[i].view, expanded: this.view.expanded, folded: this.view.folded };
+    this.view = { ...this.states[i].view, ...this.mine, expanded: this.view.expanded, folded: this.view.folded };
     return { prev };
   }
 
@@ -271,6 +284,12 @@ export class Tape {
   /** What this picture is not showing — the server's reasons, plus our own. */
   notes(): string[] {
     const notes = (this.current?.notes ?? []).map(renderNote);
+    // What this browser is hiding is this browser's to say — the step cannot,
+    // because the same step is read by a viewer who has the index on.
+    if (!this.view.showIndex) notes.push(renderNote({ id: 'indexHidden' }));
+    if (this.view.showUnreachable === false && this.current?.caps.fullLoad) {
+      notes.push(renderNote({ id: 'unreachableHidden' }));
+    }
     if (this.dropped > 0) {
       notes.push(S.status.stepsDropped(this.states.length, this.dropped));
     }

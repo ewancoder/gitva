@@ -329,6 +329,50 @@ describe('what the header says', () => {
     assert.deepEqual(new Tape().notes(), []);
   });
 
+  // The bug: switch the index off, walk back through the recording, switch it
+  // on again — every step was drawn with the toggle it was recorded under, so
+  // the index stayed off, and the steps recorded while it was off held no index
+  // to draw. Same for unreachable and the links out of it: they are the
+  // viewer's, and the recording is git's.
+  it('keeps the view toolbar’s toggles yours, wherever you stand in the recording', () => {
+    const t = new Tape();
+    for (const i of [1, 2, 3]) t.arrive(state(i, ['c' + i]), SHUT);
+    t.view = { ...t.view, showIndex: false, showUnreachable: false, showCrossLinks: true };
+
+    t.scrubTo(0);
+    assert.equal(t.view.showIndex, false);
+    assert.equal(t.view.showUnreachable, false);
+    assert.equal(t.view.showCrossLinks, true);
+
+    t.view = { ...t.view, showIndex: true };
+    t.goLive();
+    assert.equal(t.view.showIndex, true, 'the step put the toggle back');
+    t.scrubTo(1);
+    assert.equal(t.view.showIndex, true);
+  });
+
+  it('does not let a state arriving turn a toggle back on', () => {
+    const t = new Tape();
+    t.arrive(state(1, ['a']), SHUT);
+    t.view = { ...t.view, showIndex: false };
+    // A second browser posted a view of its own; the server broadcasts it to
+    // everyone, and it is nobody else's business.
+    t.arrive(state(2, ['b'], { showIndex: true }), SHUT, true);
+    assert.equal(t.view.showIndex, false);
+  });
+
+  it('says what this browser is hiding, and only while it is hiding it', () => {
+    const t = new Tape();
+    t.arrive(state(1, ['a']), SHUT);
+    t.view = { ...t.view, showIndex: false, showUnreachable: false };
+    const notes = t.notes();
+    assert.equal(notes.length, 2);
+    assert.match(notes[0], /index/i);
+    assert.match(notes[1], /[Uu]nreachable/);
+    t.view = { ...t.view, showIndex: true, showUnreachable: true };
+    assert.deepEqual(t.notes(), []);
+  });
+
   it('passes on the server’s reasons, and owns up to what the tape itself dropped', () => {
     const t = new Tape();
     for (let i = 1; i <= TAPE_CAP + 1; i++) {
