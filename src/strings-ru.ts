@@ -45,8 +45,6 @@ export const ru: Strings = {
     'step-back.title': 'Предыдущий шаг',
     'pause.title': 'Приостановить авто-переход на новый шаг',
     'step-forward.title': 'Следующий шаг',
-    clear: 'очистить',
-    'clear.title': 'Очистить шаги записи и начать заново',
 
     'help.title': 'что на экране',
     'help.lede': 'Живой граф объектов репозитория.',
@@ -86,12 +84,6 @@ export const ru: Strings = {
     'help.keys.forward.does': 'шаг вперёд по записи',
     'help.keys.space.does': 'пауза или к живой записи',
     close: 'закрыть',
-
-    'clear-confirm.title': 'Очистить запись?',
-    'clear-confirm.lede':
-      'Удаляет все записанные шаги этого репозитория, и запись начинается заново. В самом репозитории ничего не меняется: gitva в него не пишет. Запись сбросится для всех (на уровне сервера).',
-    'clear-confirm.yes': 'очистить запись',
-    'clear-confirm.no': 'оставить',
 
     'settings.title': 'настройки',
     'settings.lede':

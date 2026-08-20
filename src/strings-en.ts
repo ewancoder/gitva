@@ -57,8 +57,6 @@ export const en = {
     'step-back.title': 'Previous step',
     'pause.title': 'Pause following live steps',
     'step-forward.title': 'Next step',
-    clear: 'clear',
-    'clear.title': 'Clear the recording steps to start fresh',
 
     'help.title': 'what you are looking at',
     'help.lede': 'A live object graph of the repository.',
@@ -98,12 +96,6 @@ export const en = {
     'help.keys.forward.does': 'step forward through the recording',
     'help.keys.space.does': 'pause, or go live',
     close: 'close',
-
-    'clear-confirm.title': 'Clear the recording?',
-    'clear-confirm.lede':
-      'Deletes every step recorded of this repository and the recording starts again. Nothing in the repository itself changes: gitva does not write to it. This will reset the recording for everyone (server-level), not just this view.',
-    'clear-confirm.yes': 'clear the recording',
-    'clear-confirm.no': 'keep it',
 
     'settings.title': 'settings',
     'settings.lede':

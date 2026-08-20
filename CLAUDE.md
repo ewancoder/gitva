@@ -79,7 +79,7 @@ Everything horizontal across the top is a **toolbar**, each named for its job, n
 | region | holds |
 |---|---|
 | **view toolbar** | repo name (the path is its tooltip), the recording's identifier — a click copies it — load all commits (shown only while more remain), expand/collapse, index · unreachable · links from unreachable, then help, settings and the language buttons in the corner. Everything that changes what is drawn is a `View` field; the three in the corner are not — they open a dialog, or change the words. The question — branches and search — is built but hidden behind `QUESTIONS_ENABLED` in `src/types.ts`, because one shared view means one viewer's filter is everyone's. |
-| **recording toolbar** | `reset view` · step back · pause · step forward · scrub · live · tally · what changed · `clear`. `reset view` leads it, in its own group: it is the most-used control, and one button never earned a row of its own |
+| **recording toolbar** | `reset view` · step back · pause · step forward · scrub · live · tally · what changed. `reset view` leads it, in its own group: it is the most-used control, and one button never earned a row of its own |
 | **notes toolbar** | what the canvas isn't showing, what gitva won't do to your repo, and why |
 | **canvas** | the object graph |
 | **inspector** | what you selected: the full sha, the fields, the teaching text, the body |
@@ -158,7 +158,7 @@ dependency passes the one-sentence test in `INITIAL_DESIGN.md` §14.
 | `src/diff.ts` | `diffScenes` (what to flash), `describe` (the recording toolbar's change line). Pure. |
 | `src/explain.ts` | the inspector's facts, per shape kind (`NodeKind` in code); the wording is in `strings-en.ts`. Pure. |
 | `src/store.ts` | the recording on disk: where the system keeps it, `recordingKey` (the ten-character identifier, shown in the view toolbar), one file per key, load and save. Server-only. |
-| `src/server.ts` | `node:http`: static files, SSE `/events`, `POST /view`, `POST /clear`, `GET /object`. |
+| `src/server.ts` | `node:http`: static files, SSE `/events`, `POST /view`, `GET /object`. |
 | `src/cli.ts` | `parseArgs` (pure), `main`; opens the browser. Runs only when it *is* the command, so importing it for a test starts nothing. |
 | `web/` | `index.html` (all CSS), `tape.ts` (the recording: steps, cursor, view, pins, paging — no DOM), `camera.ts` (where the object graph sits under the canvas — arithmetic only), `panel.ts` (the inspector: `panelModel` pure, then the elements), `render.ts` (canvas), `theme.ts`, `app.ts` (DOM, events, painting — and nothing else). |
 | `test/` | `fixture.ts` builds real repos with real plumbing, and `fakeState` for what is said rather than what git did; the rest are `node:test`. |
@@ -221,12 +221,13 @@ before it listens, so `--learning` and the toolbar's toggles are this run's. Onl
 change signal still matches what was kept: if the repository has moved on, the poller is about to
 build a step of its own under this run's view, and replacing the newest kept step would throw
 away a step of something that has since changed. This was a bug: restarting with `--learning`
-opened nothing, and `clear` was the only way to change your mind, because clearing rebuilds.
+opened nothing, and restarting was the only way to change your mind, because a rebuild stamps
+this run's view on.
 
-**Clearing is a step, in reverse.** `POST /clear` empties the recording, saves it emptied, tells
-every client (`event: cleared`, which reloads them), and builds one step: the repository as it is
-now. The reload is deliberate — a viewer holding steps the server has forgotten would be
-scrubbing a session nobody else can see, and a browser's tape has no other way to forget.
+**Starting the recording over is the presenter's, not a viewer's.** `--fresh` skips the kept
+steps at startup and the first step of the run overwrites the file. There is no button and no
+`POST /clear`: the recording is shared, so one browser must not be able to end everyone's
+session — the same reason filtering is off (`QUESTIONS_ENABLED`).
 
 **Capabilities, not modes.** `measure()` runs once at startup and derives what is on offer.
 Above `LIMITS.fullLoad` (12,000 objects) unreachable detection is off; above `LIMITS.indexNodes`
@@ -359,12 +360,10 @@ git reset b.txt       → the index entry goes; the blob survives, now marked un
   design: today it is a list of pre-built snapshots made under whatever view was current, and
   per-viewer views mean it has to hold the repository's state and let each browser ask its own
   question of it.
-- **`clear` is a destructive shared action, and `--serve` has no authentication.** Any browser
-  that reaches the port can throw away everyone's recording, behind one confirmation. It is
-  deliberate — the alternative was a flag the presenter has to know before the session, and the
-  recording is the thing you can least afford to lose by default — but on a network it is a
-  loaded gun in the room's hands. If it ever needs locking down, the honest fix is the same one
-  the view needs: know which browser is the presenter's.
+- **`--serve` has no authentication.** Any browser that reaches the port reads the whole
+  repository. It can no longer throw the recording away — that moved to `--fresh`, in the
+  presenter's hands — but the honest fix for the rest is the same one the view needs: know which
+  browser is the presenter's.
 - **The visual pass has been looked at once**, on a small repository — `docs/small-demo.png`, now
   at the top of the README. It has not been seen on a repo with a couple of hundred commits,
   which is the bar `INITIAL_DESIGN.md` §12 sets, and the column labels (`pointers and tags`,

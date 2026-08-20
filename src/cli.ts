@@ -14,6 +14,8 @@ export interface Options {
   open: boolean;
   /** Commits arrive unfolded — for demonstrating to a room. */
   learning: boolean;
+  /** Throw the kept recording away and start it at the repository as it is now. */
+  fresh: boolean;
   /** What the kept recording is filed under. The folder's full path when this
    *  is undefined; name one to keep the same recording across a move or a
    *  second clone of the same repository. */
@@ -45,13 +47,14 @@ export function parseArgs(args: string[]): Options {
     host,
     open: !args.includes('--no-open'),
     learning: args.includes('--learning'),
+    fresh: args.includes('--fresh'),
     id,
   };
 }
 
 export async function main(args: string[]): Promise<Server> {
-  const { repo, port, host, open, learning, id } = parseArgs(args);
-  const server = await serve(repo, port, host, learning, id);
+  const { repo, port, host, open, learning, fresh, id } = parseArgs(args);
+  const server = await serve(repo, port, host, learning, id, fresh);
   const url = browseUrl(host, server.port);
   process.stdout.write(S.cli.watching(repo, url));
   // Reaching other machines has no authentication: whoever reaches the port

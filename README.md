@@ -28,7 +28,7 @@ cd some-repo
 gitva
 ```
 
-`gitva [repo] [--port N] [--no-open] [--serve [HOST:PORT]] [--learning] [--id NAME]` — repo defaults to `.`,
+`gitva [repo] [--port N] [--no-open] [--serve [HOST:PORT]] [--learning] [--id NAME] [--fresh]` — repo defaults to `.`,
 port to a free one, and the browser opens itself. Node ≥20, no runtime dependencies.
 
 The directory need not be a repository yet: start in an empty one and gitva waits, then draws
@@ -40,6 +40,9 @@ authentication — anyone who reaches the port reads the whole repository.
 
 `--id NAME` files the recording under a name of your own instead of the folder's full path, so a
 repository that moved, or a second clone of one, keeps its steps. Any string will do. See below.
+
+`--fresh` throws the kept recording away and starts it again at the repository as it is now.
+Nothing in the repository changes — gitva does not write to it.
 
 `--learning` starts with every commit in the window expanded, in every browser including one
 that joins late, and with links from unreachable showing, so a small repository being
@@ -93,7 +96,6 @@ line inside a ref.
 | click a sha in the inspector | copies it |
 | *reset view* | drops every pin and puts the columns back |
 | click the identifier | copies what the recording is filed under, for `--id` |
-| *clear* | throws the recording away, after asking; it starts again at the repository as it is now |
 | <kbd>f</kbd> <kbd>←</kbd>/<kbd>[</kbd> <kbd>→</kbd>/<kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |
 
 The view toolbar loads the whole history, expands or collapses every commit at once, hides the
@@ -138,9 +140,8 @@ The view is not part of the recording. `--learning`, the index and unreachable t
 history is loaded — those are whatever the run you are in says, so you can stop gitva and start it
 again in the other mode and the picture follows. What is kept is what git did.
 
-**clear**, at the right of the recording toolbar, throws the recording away and starts it again at
-the repository as it is now. It asks first, and it is everyone's recording: every viewer's browser
-comes back at step one. Nothing in the repository changes — gitva does not write to it.
+To start it over, restart gitva with `--fresh`. There is no button for it: the recording is
+everyone's, and no viewer's browser should be able to end the room's session.
 
 ## Two promises
 

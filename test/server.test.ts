@@ -574,38 +574,35 @@ describe('a recording that outlives the process', () => {
     }
   });
 
-  it('clears the recording when a browser asks, and tells every browser watching', async () => {
+  it('starts the recording over with --fresh, and lets no browser do it', async () => {
     const repo = plumbedRepo();
     const server = await serve(repo.dir, 0);
-    const base = `http://127.0.0.1:${server.port}/`;
     try {
       assert.equal((await watch(server.port)).length, 1, 'a step to throw away');
-      // A viewer left holding steps the server has forgotten would be scrubbing
-      // a session nobody else can see, so everyone is told, not just the asker.
-      const res = await fetch(base + 'events');
-      const reader = res.body!.getReader();
-      let buf = '';
-      assert.equal((await fetch(base + 'clear', { method: 'POST' })).status, 204);
-      while (!buf.includes('event: cleared')) {
-        const { value, done } = await reader.read();
-        if (done) assert.fail('the stream ended without saying it had been cleared');
-        buf += new TextDecoder().decode(value);
-      }
-      await reader.cancel();
-
-      // What a browser coming back finds: the repository as it is now, step one.
-      assert.deepEqual((await watch(server.port)).map((s) => s.seq), [1]);
-      await server.close();
-
-      // And the kept recording was cleared with it, not just the one in memory.
-      const again = await serve(repo.dir, 0);
-      try {
-        assert.deepEqual((await watch(again.port)).map((s) => s.seq), [1]);
-      } finally {
-        await again.close();
-      }
+      // No browser may end everyone's session: the recording is shared, and
+      // clearing it is the presenter's call at startup.
+      const res = await fetch(`http://127.0.0.1:${server.port}/clear`, { method: 'POST' });
+      assert.equal(res.status, 404);
+      await res.text();
+      assert.equal((await watch(server.port)).length, 1, 'and the step is still there');
     } finally {
       await server.close();
+    }
+
+    // What `--fresh` leaves: the repository as it is now, step one, with the
+    // kept steps gone from disk too.
+    const again = await serve(repo.dir, 0, '127.0.0.1', false, undefined, true);
+    try {
+      assert.deepEqual((await watch(again.port)).map((s) => s.seq), [1]);
+    } finally {
+      await again.close();
+    }
+
+    const back = await serve(repo.dir, 0);
+    try {
+      assert.deepEqual((await watch(back.port)).map((s) => s.seq), [1]);
+    } finally {
+      await back.close();
       repo.dispose();
     }
   });

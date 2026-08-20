@@ -23,6 +23,7 @@ describe('arguments', () => {
       host: '127.0.0.1',
       open: true,
       learning: false,
+      fresh: false,
       id: undefined,
     });
   });
@@ -36,6 +37,11 @@ describe('arguments', () => {
     assert.equal(parseArgs(['--learning']).learning, true);
     // A flag is not a repository.
     assert.equal(parseArgs(['--learning']).repo, '.');
+  });
+
+  it('takes --fresh, to start the recording over', () => {
+    assert.equal(parseArgs(['--fresh']).fresh, true);
+    assert.equal(parseArgs([]).fresh, false);
   });
 
   // The recording is filed under the folder's full path, which is not the same
@@ -59,6 +65,7 @@ describe('arguments', () => {
       host: '0.0.0.0',
       open: true,
       learning: false,
+      fresh: false,
       id: undefined,
     });
   });

@@ -339,11 +339,6 @@ source.addEventListener('recording', (e) => {
   el.onclick = () => copied(id, id);
 });
 
-// The server has thrown the recording away. Everything this browser is holding
-// is a session that no longer exists, and a reload is the shortest way back to
-// the one step it left behind.
-source.addEventListener('cleared', () => location.reload());
-
 source.addEventListener('trouble', (e) => {
   renderHeaderChange(JSON.parse((e as MessageEvent).data).message);
 });
@@ -476,11 +471,6 @@ $('unpin').addEventListener('click', () => {
   for (const k of Object.keys(bandWidths)) delete bandWidths[k];
   saveBands();
   relayout(true, false);
-});
-$('clear').addEventListener('click', () => $<HTMLDialogElement>('clear-confirm').showModal());
-$('clear-yes').addEventListener('click', () => {
-  $<HTMLDialogElement>('clear-confirm').close();
-  void fetch('/clear', { method: 'POST' });
 });
 $('legend-btn').addEventListener('click', () => $<HTMLDialogElement>('legend').showModal());
 $('settings-btn').addEventListener('click', () => $<HTMLDialogElement>('settings').showModal());

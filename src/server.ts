@@ -48,6 +48,7 @@ export async function serve(
   host = '127.0.0.1',
   learning = false,
   id?: string,
+  fresh = false,
 ): Promise<Server> {
   // The recording belongs to the repository, so it outlives the process: the
   // full path of the folder identifies it, unless `--id` named something that
@@ -55,7 +56,11 @@ export async function serve(
   // is shown the key and copies it on a click, so `--id` can be handed it back.
   const key = recordingKey(id ?? resolve(repoPath));
   const file = recordingFile(key);
-  const kept = await loadRecording(file);
+  // `--fresh`: start the recording over. Throwing the kept steps away is the
+  // presenter's call at startup, not a button any viewer can reach — the
+  // recording is shared, so one browser must not be able to end everyone's
+  // session. The file is overwritten by the first step of this run.
+  const kept = fresh ? { signal: '', steps: [] } : await loadRecording(file);
   // The repository need not exist yet: `gitva` in an empty directory waits for
   // `git init`, so the very first plumbing command the tutorial teaches can be
   // watched happening rather than assumed to have happened already.
@@ -157,7 +162,6 @@ export async function serve(
     try {
       if (url.pathname === '/events') return sse(req, res);
       if (url.pathname === '/view' && req.method === 'POST') return await setView(req, res);
-      if (url.pathname === '/clear' && req.method === 'POST') return await clear(res);
       if (url.pathname === '/object') return await object(url, res);
       return await statik(url.pathname, res);
     } catch (err) {
@@ -209,22 +213,6 @@ export async function serve(
     view = sanitise(JSON.parse(body));
     res.writeHead(204).end();
     await build(false);
-  }
-
-  /**
-   * Throw the recording away and start it at the repository as it is now.
-   * Everyone watching is told, because the recording is shared — a viewer left
-   * holding steps the server has forgotten would be scrubbing through a
-   * session nobody else can see. They reload, which is also how they come back
-   * with the one step this leaves behind.
-   */
-  async function clear(res: ServerResponse) {
-    history.length = 0;
-    seq = 0;
-    await saveRecording(file, { signal, steps: history });
-    res.writeHead(204).end();
-    for (const c of clients) c.write('event: cleared\ndata: {}\n\n');
-    await build(true);
   }
 
   async function object(url: URL, res: ServerResponse) {
