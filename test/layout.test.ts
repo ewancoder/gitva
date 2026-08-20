@@ -147,6 +147,18 @@ describe('a commit\'s objects', () => {
     assert.deepEqual(g.edges, []);
   });
 
+  it('writes both names on one arrow when two files in a tree are the same blob', () => {
+    // Two identical files are one blob, so the tree has two entries pointing at
+    // it: one arrow, both names, rather than two labels on the same pixels.
+    const g = objectGraph('r', {
+      r: [
+        { name: 'a.txt', oid: 'same', mode: '100644', type: 'blob' },
+        { name: 'b.txt', oid: 'same', mode: '100644', type: 'blob' },
+      ],
+    });
+    assert.deepEqual(g.edges.map((e) => e.label), ['a.txt, b.txt']);
+  });
+
   it('marks an executable and a symlink on the arrow', () => {
     const g = objectGraph('r', {
       r: [

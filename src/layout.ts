@@ -182,7 +182,9 @@ export function objectGraph(
 ): ObjectGraph {
   const depth = new Map<Oid, number>([[root, 0]]);
   const order: Oid[] = [root];
-  const edges = new Map<string, { from: Oid; to: Oid; label: string }>();
+  // One blob can sit in a tree under several names — same from, same to, one
+  // arrow, so the names go on it together rather than on top of each other.
+  const edges = new Map<string, { from: Oid; to: Oid; names: Set<string> }>();
   const queue: Oid[] = folded.has(root) ? [] : [root];
   let guard = 20_000;
 
@@ -190,7 +192,10 @@ export function objectGraph(
     const t = queue.shift()!;
     const d = depth.get(t)!;
     for (const e of trees[t] ?? []) {
-      edges.set(`${t}>${e.oid}:${e.name}`, { from: t, to: e.oid, label: entryLabel(e) });
+      const key = `${t}>${e.oid}`;
+      let edge = edges.get(key);
+      if (!edge) edges.set(key, (edge = { from: t, to: e.oid, names: new Set<string>() }));
+      edge.names.add(entryLabel(e));
       if (!depth.has(e.oid)) order.push(e.oid);
       if ((depth.get(e.oid) ?? -1) < d + 1) {
         depth.set(e.oid, d + 1);
@@ -207,7 +212,11 @@ export function objectGraph(
     (columns[d] ??= []).push(oid);
   }
   for (let i = 0; i < columns.length; i++) columns[i] ??= [];
-  return { depth, columns, edges: [...edges.values()] };
+  return {
+    depth,
+    columns,
+    edges: [...edges.values()].map(({ from, to, names }) => ({ from, to, label: [...names].join(', ') })),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -526,9 +535,13 @@ export function layout(
           if (!strayed.has(p)) edges.push({ id: `p:${oid}:${p}`, from: oid, to: p, kind: 'parent' });
         }
         if (folded.has(oid)) continue;
+        const names = new Map<Oid, string[]>();
         for (const e of snap.trees[oid] ?? []) {
           if (strayed.has(e.oid)) continue;
-          edges.push({ id: `x:${oid}:${e.oid}:${e.name}`, from: oid, to: e.oid, kind: 'entry', label: e.name });
+          names.set(e.oid, [...(names.get(e.oid) ?? []), e.name]);
+        }
+        for (const [to, ns] of names) {
+          edges.push({ id: `x:${oid}:${to}`, from: oid, to, kind: 'entry', label: ns.join(', ') });
         }
       }
     }
