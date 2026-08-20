@@ -27,8 +27,25 @@
         --blob: #5aa7ea;
         --staged: #8f86e6;
         --accent: #ff5ea8;
+        --hover: #2b3140;
+        --danger: #f2685e;
         --sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
         --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+      }
+      /* The light ground, the same palette web/theme.ts hands the canvas. The
+         three object hues do not move: they are fills with dark text on them,
+         and a kind you recognise by hue must not change with the ground. */
+      :root[data-theme='light'] {
+        --ground: #fbfbfd;
+        --panel: #f1f2f6;
+        --raised: #e5e7ee;
+        --line: #d2d6e0;
+        --ink: #1a1d24;
+        --muted: #5c6472;
+        --faint: #8b93a3;
+        --accent: #d81b7c;
+        --hover: #d5d9e4;
+        --danger: #c0392f;
       }
       * { box-sizing: border-box; }
       html, body { height: 100%; margin: 0; }
@@ -62,7 +79,7 @@
       .recording-id:hover { color: var(--muted); }
       /* Chrome, not canvas: red here is a warning about a button, and joins
          neither the three object hues nor the one accent. */
-      .danger { color: #f2685e; }
+      .danger { color: var(--danger); }
 
       button, select, input {
         font: inherit; color: var(--ink);
@@ -71,7 +88,7 @@
         padding: 3px var(--u);
       }
       button { cursor: pointer; }
-      button:not(:disabled):hover, button[aria-pressed='true'] { background: #2b3140; }
+      button:not(:disabled):hover, button[aria-pressed='true'] { background: var(--hover); }
       button[aria-pressed='true'] { border-color: var(--muted); }
       /* A control whose subject is off screen: still readable, still shows
          whether it is pressed, but there is nothing for it to act on. */
@@ -162,7 +179,7 @@
         border: 1px solid var(--line); border-radius: var(--r);
         padding: calc(var(--u) * 2);
       }
-      dialog::backdrop { background: rgba(0, 0, 0, .6); }
+      dialog::backdrop { background: rgba(0, 0, 0, .45); }
       dialog label { display: block; margin-bottom: var(--u); }
       dialog h2 { font-size: 13px; margin: calc(var(--u) * 2) 0 var(--u); }
       dialog h2:first-child { margin-top: 0; }
@@ -238,6 +255,9 @@
       </div>
 
       <div class="group right">
+        <!-- The glyph is the state: what you are in now, the way ◀ and ▶ are
+             glyphs rather than copy. Only its tooltip is a string. -->
+        <button id="theme-btn" data-t-title="theme.title"></button>
         <button id="legend-btn" data-t="help"></button>
         <button id="settings-btn" data-t="settings"></button>
       </div>

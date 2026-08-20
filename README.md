@@ -112,9 +112,11 @@ change in reverse, which is how you show a reset twice without doing it twice. E
 the exception to stepping: what you expanded stays expanded wherever you stand, and across a
 reload — and so does a tree you folded shut, which is the same answer about a different shape.
 
-The help dialog holds the legend and the keys. Beside it, settings, which survive a reload:
-whether clicking centres the view, whether a new commit arrives expanded, whether pins wear a
-pushpin, and whether the canvas refits the width when the repository changes. In the same
+☾ / ☀ turns the ground light or dark, and the glyph is the one you are in. The three object
+hues do not move with it — a commit is warm, a tree green, a blob blue on either ground, because
+that is what you recognise a kind by. Beside it, the help dialog holds the legend and the keys,
+then settings, which survive a reload: whether clicking centres the view, whether a new
+commit arrives expanded, whether pins wear a pushpin, and whether the canvas refits the width when the repository changes. In the same
 corner, **EN** and **RU** switch the language: the words are yours, like the view — nobody
 else's canvas changes, and a recorded step reads in whichever language you are set to.
 

@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import type { Scene, SceneEdge, SceneNode } from '../src/layout.js';
 import { EMPTY_CHANGE } from '../src/diff.js';
 import { bandEdgeAt, draw, hitTest, path, snapPositions, type Paint } from '../web/render.js';
-import { chipHue, hueFor, theme } from '../web/theme.js';
+import { chipHue, hueFor, setTheme, theme } from '../web/theme.js';
 
 /** c2 → c1 → c0, and c2 holds a tree holding a blob. */
 const edges: SceneEdge[] = [
@@ -127,6 +127,27 @@ describe('hues', () => {
     assert.equal(chipHue('ref', 'ref:refs/remotes/origin/main'), theme.refRemote);
     assert.equal(chipHue('ref', 'ref:refs/tags/v1'), theme.refTag);
     assert.equal(chipHue('index', 'index:0:a.txt'), theme.muted);
+  });
+
+  // Every module holds this one object, so the swap has to happen in place —
+  // and it has to go back, or a light session would leave the dark palette
+  // half-written for the next thing that reads it.
+  it('swaps the ground in place, and keeps the three object hues across it', () => {
+    const dark = { ...theme };
+    try {
+      setTheme('light');
+      assert.notEqual(theme.ground, dark.ground);
+      assert.equal(theme.ink, '#1a1d24');
+      assert.deepEqual(
+        [theme.commit, theme.tree, theme.blob],
+        [dark.commit, dark.tree, dark.blob],
+        'a kind is recognised by its hue, so the ground must not move it',
+      );
+      setTheme('dark');
+      assert.deepEqual({ ...theme }, dark);
+    } finally {
+      setTheme('dark');
+    }
   });
 });
 

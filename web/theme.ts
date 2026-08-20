@@ -11,8 +11,11 @@
  * because that is what it is. One accent means "this just changed" and is spent
  * on nothing else — not hover, not selection, not focus.
  *
- * The theme is data handed to the renderer. A light palette would be a new one
- * of these, never a rewrite.
+ * The theme is data handed to the renderer, so a light ground is a second
+ * palette and not a rewrite: `light` below lists only what has to move. The
+ * three object hues are not in it — they are chosen to read as fills with dark
+ * text on them, which is true on either ground, and a hue that changed with the
+ * ground would stop being the thing you recognise a kind by.
  */
 
 export const theme = {
@@ -52,6 +55,9 @@ export const theme = {
 
   ghost: '#6b7488',
 
+  /** The tint a band carries over the ground. Barely there on purpose. */
+  bandTint: 'rgba(255,255,255,0.014)',
+
   sans: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
   mono: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
 
@@ -61,6 +67,49 @@ export const theme = {
 };
 
 export type Theme = typeof theme;
+
+/**
+ * The light ground. Only what the ground forces: the surfaces invert, and the
+ * outline colours — chips, the mark, the accent — go darker to keep the same
+ * separation they had against black. Everything absent here is shared.
+ */
+const light: Partial<Theme> = {
+  ground: '#fbfbfd',
+  panel: '#f1f2f6',
+  raised: '#e5e7ee',
+  line: '#d2d6e0',
+
+  ink: '#1a1d24',
+  muted: '#5c6472',
+  faint: '#8b93a3',
+
+  accent: '#d81b7c',
+
+  head: '#7c3aed',
+  refLocal: '#0d9488',
+  refRemote: '#c2410c',
+  refTag: '#a16207',
+  tagObject: '#3b5bdb',
+
+  mark: '#c62a2f',
+
+  ghost: '#9aa2b1',
+
+  bandTint: 'rgba(0,0,0,0.022)',
+};
+
+const dark: Partial<Theme> = { ...theme };
+
+export type Mode = 'dark' | 'light';
+
+/**
+ * The palette is mutated in place, because every module holds this one object:
+ * swapping the reference would leave the renderer painting the old ground. The
+ * page's own colours are CSS variables, so switching those is app.ts's job.
+ */
+export const setTheme = (mode: Mode): void => {
+  Object.assign(theme, mode === 'light' ? light : dark);
+};
 
 export const hueFor = (kind: string): string =>
   kind === 'commit' ? theme.commit : kind === 'tree' ? theme.tree : kind === 'blob' ? theme.blob : theme.ink;

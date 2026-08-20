@@ -18,7 +18,7 @@ import { bounded, centre, fit, glideStep, refit, toWorld, zoom, zoomOut, type Ca
 import { renderPanel } from './panel.js';
 import { bandEdgeAt, draw, hitTest, snapPositions } from './render.js';
 import { canMark, isDouble, Pins, questionFor, Tape, type Click } from './tape.js';
-import { theme } from './theme.js';
+import { type Mode, setTheme, theme } from './theme.js';
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -54,6 +54,7 @@ interface Prefs {
   refitOnChange: boolean;
   showPins: boolean;
   showNames: boolean;
+  theme: Mode;
   panelWidth: number;
 }
 const prefs: Prefs = {
@@ -64,10 +65,28 @@ const prefs: Prefs = {
   refitOnChange: true,
   showPins: false,
   showNames: true,
+  theme: 'dark',
   panelWidth: 430,
   ...JSON.parse(localStorage.getItem('gitva.prefs') ?? '{}'),
 };
 const savePrefs = () => localStorage.setItem('gitva.prefs', JSON.stringify(prefs));
+
+// --- the ground. Yours, like the language: a preference in this browser,
+// never posted, so nobody else's canvas turns white when yours does. Chosen
+// before the first paint, because the canvas is painted from it.
+const themeBtn = $('theme-btn');
+function applyTheme() {
+  setTheme(prefs.theme);
+  document.documentElement.dataset.theme = prefs.theme;
+  themeBtn.textContent = prefs.theme === 'light' ? '☀' : '☾';
+}
+themeBtn.addEventListener('click', () => {
+  prefs.theme = prefs.theme === 'light' ? 'dark' : 'light';
+  savePrefs();
+  applyTheme();
+  schedule();
+});
+applyTheme();
 
 // --- the words. The language is this viewer's, like every other preference:
 // it is never posted, and nobody else's canvas changes when it does. Chosen

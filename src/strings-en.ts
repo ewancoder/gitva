@@ -50,6 +50,7 @@ export const en = {
     'cross-links.title': 'Show links from unreachable objects to reachable ones',
     names: 'names',
     'names.title': 'Show the names tree entries carry, on the links',
+    'theme.title': 'Switch between the light and the dark ground',
     help: 'help',
     settings: 'settings',
 

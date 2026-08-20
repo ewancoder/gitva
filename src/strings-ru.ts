@@ -39,6 +39,7 @@ export const ru: Strings = {
     names: 'имена',
     'names.title': 'Показывать имена из записей дерева, на связях',
     help: 'справка',
+    'theme.title': 'Переключить светлый и тёмный фон',
     settings: 'настройки',
 
     'reset-view': 'сбросить вид',

@@ -191,7 +191,7 @@ function drawBands(
     // The band fills the whole viewport, not just the content it holds, so a
     // short history still reads as a column running edge to edge — and so the
     // caption below has color under it everywhere it might be pinned.
-    ctx.fillStyle = band.key === 'index' ? theme.panel : 'rgba(255,255,255,0.014)';
+    ctx.fillStyle = band.key === 'index' ? theme.panel : theme.bandTint;
     ctx.fillRect(band.x - 10, v.y0, band.w + 20, v.y1 - v.y0);
     // Furniture, not content: the caption stays the same size on screen at any
     // zoom, so it is divided back out of the camera's scale.
