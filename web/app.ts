@@ -27,13 +27,15 @@ const ctx = canvas.getContext('2d')!;
 const panel = $('panel');
 const port = () => ({ width: canvas.clientWidth, height: canvas.clientHeight });
 
-/** Copy a sha and say so briefly; a clipboard the browser refuses is not worth a dialog. */
+/** Copy a sha and say so briefly; a clipboard the browser refuses is not worth
+ *  a dialog. `said` is what to show having copied it: a sha is shown short, and
+ *  anything already short enough to read is shown whole. */
 let copiedTimer = 0;
-function copied(oid: string) {
+function copied(oid: string, said = oid.slice(0, 7)) {
   void navigator.clipboard?.writeText(oid).then(
     () => {
       const el = $('copied');
-      el.textContent = `copied ${oid.slice(0, 7)}`;
+      el.textContent = `copied ${said}`;
       el.classList.add('show');
       clearTimeout(copiedTimer);
       copiedTimer = setTimeout(() => el.classList.remove('show'), 1200) as unknown as number;
@@ -251,6 +253,20 @@ source.addEventListener('snapshot', (e) => {
     redressed();
   } else updateHeader();
 });
+/** Which recording this is, once per connection. A click hands it over, so a
+ *  repository about to move can be picked up again with `gitva --id <it>`. */
+source.addEventListener('recording', (e) => {
+  const { id } = JSON.parse((e as MessageEvent).data) as { id: string };
+  const el = $('recording-id');
+  el.textContent = id;
+  el.onclick = () => copied(id, id);
+});
+
+// The server has thrown the recording away. Everything this browser is holding
+// is a session that no longer exists, and a reload is the shortest way back to
+// the one step it left behind.
+source.addEventListener('cleared', () => location.reload());
+
 source.addEventListener('trouble', (e) => {
   renderHeaderChange(JSON.parse((e as MessageEvent).data).message);
 });
@@ -271,7 +287,9 @@ function updateHeader() {
   const snap = tape.current;
   if (!snap) return;
   $('repo-name').textContent = snap.repo;
-  $('repo-dir').textContent = snap.gitDir;
+  // The path is a tooltip now: the header's machine text is the identifier the
+  // recording is filed under, which is the thing worth copying.
+  $('repo-name').title = snap.gitDir;
   $('tally').textContent = tape.tally(scene?.nodes.length ?? 0);
 
   const list = $('notes-list');
@@ -376,6 +394,11 @@ $('unpin').addEventListener('click', () => {
   for (const k of Object.keys(bandWidths)) delete bandWidths[k];
   saveBands();
   relayout(true, false);
+});
+$('clear').addEventListener('click', () => $<HTMLDialogElement>('clear-confirm').showModal());
+$('clear-yes').addEventListener('click', () => {
+  $<HTMLDialogElement>('clear-confirm').close();
+  void fetch('/clear', { method: 'POST' });
 });
 $('legend-btn').addEventListener('click', () => $<HTMLDialogElement>('legend').showModal());
 $('settings-btn').addEventListener('click', () => $<HTMLDialogElement>('settings').showModal());

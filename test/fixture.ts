@@ -1,6 +1,10 @@
 /**
  * Real fixture repositories, built with real plumbing commands.
  *
+ * Isolated from the recording gitva keeps in the user's own state directory as
+ * well: a test that started a server would otherwise write into it, and load
+ * back whatever an earlier run left there.
+ *
  * Isolated from the author's global config — which signs commits and tags — by
  * pointing GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM at nothing. Scoped to the
  * throwaway repo; global is never the answer.
@@ -11,6 +15,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_VIEW, type Snapshot } from '../src/types.js';
+
+// Every test process gets its own, and takes it away again.
+process.env.GITVA_STATE_DIR ??= mkdtempSync(join(tmpdir(), 'gitva-state-'));
+process.on('exit', () => rmSync(process.env.GITVA_STATE_DIR!, { recursive: true, force: true }));
 
 const ENV = {
   ...process.env,

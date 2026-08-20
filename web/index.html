@@ -56,7 +56,13 @@
       .group + .group { padding-left: calc(var(--u) * 2); border-left: 1px solid var(--line); }
       .group.right { margin-left: auto; }
       .repo-name { font-weight: 600; }
-      .repo-dir { color: var(--faint); font-family: var(--mono); font-size: 11px; }
+      /* The identifier the recording is filed under — machine text, so mono,
+         and a click copies it the way a click on a shape copies a sha. */
+      .recording-id { color: var(--faint); font-family: var(--mono); font-size: 11px; cursor: pointer; }
+      .recording-id:hover { color: var(--muted); }
+      /* Chrome, not canvas: red here is a warning about a button, and joins
+         neither the three object hues nor the one accent. */
+      .danger { color: #f2685e; }
 
       button, select, input {
         font: inherit; color: var(--ink);
@@ -176,7 +182,11 @@
     <header>
       <div class="group">
         <span class="repo-name" id="repo-name">…</span>
-        <span class="repo-dir" id="repo-dir"></span>
+        <span
+          class="recording-id"
+          id="recording-id"
+          title="What this recording is filed under. Click to copy: `gitva --id <it>` picks the same recording up from anywhere"
+        ></span>
       </div>
 
       <div class="group">
@@ -219,6 +229,7 @@
         <span class="live"><span class="dot" id="live-dot"></span><span id="live-text">connecting</span></span>
         <span class="tally" id="tally"></span>
         <span class="change" id="change"></span>
+        <button id="clear" class="danger" title="Throw away every recorded step and start again at the repository as it is now">clear</button>
       </div>
     </div>
 
@@ -265,6 +276,19 @@
       <footer>
         <button onclick="this.closest('dialog').close()">close</button>
         <a href="https://github.com/ewancoder/gitva" target="_blank" rel="noreferrer">github.com/ewancoder/gitva</a>
+      </footer>
+    </dialog>
+
+    <dialog id="clear-confirm">
+      <h2>Clear the recording?</h2>
+      <p class="lede">
+        Every step recorded of this repository goes — for every viewer, not just this browser — and the
+        recording starts again at the repository as it is now. Nothing in the repository itself changes:
+        gitva does not write to it.
+      </p>
+      <footer>
+        <button id="clear-yes" class="danger">clear the recording</button>
+        <button onclick="this.closest('dialog').close()">keep it</button>
       </footer>
     </dialog>
 

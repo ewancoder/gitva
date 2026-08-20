@@ -13,14 +13,20 @@ export interface Options {
   open: boolean;
   /** Commits arrive unfolded — for demonstrating to a room. */
   learning: boolean;
+  /** What the kept recording is filed under. The folder's full path when this
+   *  is undefined; name one to keep the same recording across a move or a
+   *  second clone of the same repository. */
+  id?: string;
 }
 
 export function parseArgs(args: string[]): Options {
   const positional: string[] = [];
   let port = 0;
   let host = '127.0.0.1';
+  let id: string | undefined;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--port') port = Number(args[++i]);
+    else if (args[i] === '--id') id = args[++i];
     else if (args[i] === '--serve') {
       // `--serve [HOST:PORT]`, bare meaning every interface on 4200. A shared
       // address is no use if the port moves every run, so this one is fixed.
@@ -38,12 +44,13 @@ export function parseArgs(args: string[]): Options {
     host,
     open: !args.includes('--no-open'),
     learning: args.includes('--learning'),
+    id,
   };
 }
 
 export async function main(args: string[]): Promise<Server> {
-  const { repo, port, host, open, learning } = parseArgs(args);
-  const server = await serve(repo, port, host, learning);
+  const { repo, port, host, open, learning, id } = parseArgs(args);
+  const server = await serve(repo, port, host, learning, id);
   const url = browseUrl(host, server.port);
   process.stdout.write(`gitva watching ${repo}\n${url}\n`);
   // Reaching other machines has no authentication: whoever reaches the port

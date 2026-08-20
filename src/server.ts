@@ -8,9 +8,10 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { extname } from 'node:path';
+import { extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GitError, changeSignal, measure, open, readBody, snapshot, type RepoHandle } from './git.js';
+import { lastSeq, loadRecording, recordingFile, recordingKey, saveRecording } from './store.js';
 import type { Capabilities, Question, View } from './types.js';
 import { DEFAULT_VIEW, QUESTIONS_ENABLED, TAPE_CAP } from './types.js';
 
@@ -45,7 +46,15 @@ export async function serve(
   port = 0,
   host = '127.0.0.1',
   learning = false,
+  id?: string,
 ): Promise<Server> {
+  // The recording belongs to the repository, so it outlives the process: the
+  // full path of the folder identifies it, unless `--id` named something that
+  // travels — the same repository cloned somewhere else, or moved. The browser
+  // is shown the key and copies it on a click, so `--id` can be handed it back.
+  const key = recordingKey(id ?? resolve(repoPath));
+  const file = recordingFile(key);
+  const kept = await loadRecording(file);
   // The repository need not exist yet: `gitva` in an empty directory waits for
   // `git init`, so the very first plumbing command the tutorial teaches can be
   // watched happening rather than assumed to have happened already.
@@ -63,14 +72,17 @@ export async function serve(
   // `--learning`: the demo repository is small and the orphans are the point,
   // so the arrows out of them are up before anyone asks.
   let view: View = { ...DEFAULT_VIEW, learning, showCrossLinks: learning };
-  let seq = 0;
+  let seq = lastSeq(kept.steps);
   /** Every state of the repository, oldest first, already serialised — not
    *  just the newest one. A browser opened halfway through a session gets the
    *  whole thing on connect, so everyone in the room can walk the same steps.
    *  Kept as text because that is what it is sent as, and what it is measured
-   *  by. Nothing here ever looks inside a state. */
-  const history: string[] = [];
-  let signal = '';
+   *  by, and it survives a restart: see `store.ts`. Nothing here looks inside a
+   *  state, bar the step number a restart carries on from. */
+  const history: string[] = kept.steps;
+  // Kept with the steps: an untouched repository is not a step, so a restart
+  // that changed nothing adds nothing.
+  let signal = kept.signal;
   const clients = new Set<ServerResponse>();
 
   /** Rebuilds run one at a time. Anything arriving mid-build asks for one more
@@ -112,6 +124,7 @@ export async function serve(
       record(history, s, repoMoved);
       const frame = `event: snapshot\ndata: ${s}\n\n`;
       for (const c of clients) c.write(frame);
+      await saveRecording(file, { signal, steps: history });
     } catch (err) {
       const frame = `event: trouble\ndata: ${JSON.stringify({ message: String(err) })}\n\n`;
       for (const c of clients) c.write(frame);
@@ -143,6 +156,7 @@ export async function serve(
     try {
       if (url.pathname === '/events') return sse(req, res);
       if (url.pathname === '/view' && req.method === 'POST') return await setView(req, res);
+      if (url.pathname === '/clear' && req.method === 'POST') return await clear(res);
       if (url.pathname === '/object') return await object(url, res);
       return await statik(url.pathname, res);
     } catch (err) {
@@ -157,6 +171,9 @@ export async function serve(
       connection: 'keep-alive',
     });
     res.write(': hello\n\n');
+    // Which recording this is. Not part of a step: it is a fact about the
+    // recording, the same for every step in it and for every viewer.
+    res.write(`event: recording\ndata: ${JSON.stringify({ id: key })}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
     // The whole tape in one frame; `snapshot` stays the live tail, so the
@@ -193,6 +210,22 @@ export async function serve(
     await build(false);
   }
 
+  /**
+   * Throw the recording away and start it at the repository as it is now.
+   * Everyone watching is told, because the recording is shared — a viewer left
+   * holding steps the server has forgotten would be scrubbing through a
+   * session nobody else can see. They reload, which is also how they come back
+   * with the one step this leaves behind.
+   */
+  async function clear(res: ServerResponse) {
+    history.length = 0;
+    seq = 0;
+    await saveRecording(file, { signal, steps: history });
+    res.writeHead(204).end();
+    for (const c of clients) c.write('event: cleared\ndata: {}\n\n');
+    await build(true);
+  }
+
   async function object(url: URL, res: ServerResponse) {
     const oid = url.searchParams.get('oid') ?? '';
     if (!/^[0-9a-f]{4,64}$/.test(oid)) return res.writeHead(400).end('bad oid');
@@ -224,6 +257,28 @@ export async function serve(
     } catch {
       res.writeHead(404).end('not found');
     }
+  }
+
+  // A step carries the view it was answered under, so a kept recording's newest
+  // step is still answering the *last* run's question — `--learning` and the
+  // toolbar's toggles among it. The view belongs to the run, not to the
+  // recording, so that step is answered again, which is exactly what `false`
+  // means here: a different answer to the same state of the repository replaces
+  // that step instead of becoming one. Before `listen`, because a browser handed
+  // the stale step would be told about the new answer too late to use it.
+  //
+  // Only while the repository is where the recording left it. If it has moved
+  // on, the poller is about to build a step of its own and that one carries
+  // this run's view already — replacing the newest kept step then would be
+  // throwing away a step of something that has since changed, which is the
+  // whole reason the recording is kept.
+  if (history.length) {
+    const now = await repository()
+      .then(({ handle }) => changeSignal(handle.repo, handle.gitDir))
+      // No repository to compare against: nothing is re-answered, and the
+      // kept steps stand until there is something to say about them.
+      .catch(() => '');
+    if (now === signal) await build(false);
   }
 
   await new Promise<void>((r) => server.listen(port, host, r));

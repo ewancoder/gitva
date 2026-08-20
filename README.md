@@ -28,7 +28,7 @@ cd some-repo
 gitva
 ```
 
-`gitva [repo] [--port N] [--no-open] [--serve [HOST:PORT]] [--learning]` — repo defaults to `.`,
+`gitva [repo] [--port N] [--no-open] [--serve [HOST:PORT]] [--learning] [--id NAME]` — repo defaults to `.`,
 port to a free one, and the browser opens itself. Node ≥20, no runtime dependencies.
 
 The directory need not be a repository yet: start in an empty one and gitva waits, then draws
@@ -37,6 +37,9 @@ the repository the moment you run `git init`.
 `--serve` binds every interface instead of loopback, so a room can watch one repository from
 their own browsers. Bare it takes `0.0.0.0:4200`; give it `HOST:PORT` to choose. There is no
 authentication — anyone who reaches the port reads the whole repository.
+
+`--id NAME` files the recording under a name of your own instead of the folder's full path, so a
+repository that moved, or a second clone of one, keeps its steps. Any string will do. See below.
 
 `--learning` starts with every commit in the window expanded, in every browser including one
 that joins late, and with links from unreachable showing, so a small repository being
@@ -87,6 +90,8 @@ line inside a ref.
 | drag anything | pin it where you put it; shift+click unpins |
 | drag a column seam | widen the left column, for room to arrange pins |
 | *reset view* | drops every pin and puts the columns back |
+| click the identifier | copies what the recording is filed under, for `--id` |
+| *clear* | throws the recording away, after asking; it starts again at the repository as it is now |
 | <kbd>f</kbd> <kbd>←</kbd>/<kbd>[</kbd> <kbd>→</kbd>/<kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |
 
 The view toolbar loads the whole history, expands or collapses every commit at once, hides the
@@ -106,6 +111,32 @@ reload.
 The help dialog holds the legend and the keys. Beside it, settings, which survive a reload:
 whether clicking centres the view, whether a new commit arrives expanded, whether pins wear a
 pushpin, and whether the canvas refits the width when the repository changes.
+
+## The recording survives a restart
+
+The recording is kept outside the repository, so stopping gitva and starting it again on the
+same folder walks back into the same steps instead of starting the tutorial over. A restart is
+not a step: if git did nothing while gitva was off, nothing is added.
+
+It is filed under the folder's full path, one file per repository, in the directory your system
+keeps a program's own state in — `~/.local/state/gitva` (or `$XDG_STATE_HOME`),
+`~/Library/Application Support/gitva` on macOS, `%LOCALAPPDATA%\gitva` on Windows. The identifier
+is hashed to ten characters, the way git names an object after its content, and that is the
+filename. `GITVA_STATE_DIR` moves the lot somewhere else.
+
+**The identifier is in the top-left corner, beside the repository name, and a click copies it.**
+Hand it back with `--id` and the same recording comes up from anywhere: copy it before you move
+the folder, or before you clone it onto another machine. `--id` takes any string, so
+`--id teaching` is a name you can choose and remember instead — it is hashed the same way, and a
+key you copied out of the header is taken as itself.
+
+The view is not part of the recording. `--learning`, the index and unreachable toggles, how much
+history is loaded — those are whatever the run you are in says, so you can stop gitva and start it
+again in the other mode and the picture follows. What is kept is what git did.
+
+**clear**, at the right of the recording toolbar, throws the recording away and starts it again at
+the repository as it is now. It asks first, and it is everyone's recording: every viewer's browser
+comes back at step one. Nothing in the repository changes — gitva does not write to it.
 
 ## Two promises
 

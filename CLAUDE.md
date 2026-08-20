@@ -78,8 +78,8 @@ Everything horizontal across the top is a **toolbar**, each named for its job, n
 
 | region | holds |
 |---|---|
-| **view toolbar** | repo name, load all commits (shown only while more remain), expand/collapse, index · unreachable · links from unreachable, help. Every control here is a `View` field. The question — branches and search — is built but hidden behind `QUESTIONS_ENABLED` in `src/types.ts`, because one shared view means one viewer's filter is everyone's. |
-| **recording toolbar** | `reset view` · step back · pause · step forward · scrub · live · tally · what changed. `reset view` leads it, in its own group: it is the most-used control, and one button never earned a row of its own |
+| **view toolbar** | repo name (the path is its tooltip), the recording's identifier — a click copies it — load all commits (shown only while more remain), expand/collapse, index · unreachable · links from unreachable, help. Every control here is a `View` field. The question — branches and search — is built but hidden behind `QUESTIONS_ENABLED` in `src/types.ts`, because one shared view means one viewer's filter is everyone's. |
+| **recording toolbar** | `reset view` · step back · pause · step forward · scrub · live · tally · what changed · `clear`. `reset view` leads it, in its own group: it is the most-used control, and one button never earned a row of its own |
 | **notes toolbar** | what the canvas isn't showing, what gitva won't do to your repo, and why |
 | **canvas** | the object graph |
 | **inspector** | what you selected: the full sha, the fields, the teaching text, the body |
@@ -155,14 +155,15 @@ dependency passes the one-sentence test in `INITIAL_DESIGN.md` §14.
 | `src/layout.ts` | `layout(snapshot, view, pins) → Scene`. Pure. Knows nothing about painting. |
 | `src/diff.ts` | `diffScenes` (what to flash), `describe` (the recording toolbar's change line). Pure. |
 | `src/explain.ts` | the teaching text, per shape kind (`NodeKind` in code). Pure. |
-| `src/server.ts` | `node:http`: static files, SSE `/events`, `POST /view`, `GET /object`. |
+| `src/store.ts` | the recording on disk: where the system keeps it, `recordingKey` (the ten-character identifier, shown in the view toolbar), one file per key, load and save. Server-only. |
+| `src/server.ts` | `node:http`: static files, SSE `/events`, `POST /view`, `POST /clear`, `GET /object`. |
 | `src/cli.ts` | `parseArgs` (pure), `main`; opens the browser. Runs only when it *is* the command, so importing it for a test starts nothing. |
 | `web/` | `index.html` (all CSS), `tape.ts` (the recording: steps, cursor, view, pins, paging — no DOM), `camera.ts` (where the object graph sits under the canvas — arithmetic only), `panel.ts` (the inspector: `panelModel` pure, then the elements), `render.ts` (canvas), `theme.ts`, `app.ts` (DOM, events, painting — and nothing else). |
 | `test/` | `fixture.ts` builds real repos with real plumbing, and `fakeState` for what is said rather than what git did; the rest are `node:test`. |
 
 `src/*` is compiled to `dist/src` and served to the browser too — `web/app.ts` imports
 `../src/{diff,layout,types,explain}.js`. **Nothing under `src/` that the browser imports may
-touch `node:` builtins.** `git.ts` and `server.ts` are server-only and never imported by `web/`.
+touch `node:` builtins.** `git.ts`, `store.ts` and `server.ts` are server-only and never imported by `web/`.
 
 `dist/` is build output and gitignored.
 
@@ -199,6 +200,31 @@ and replays it silently, so a second tab or a late joiner stands where every oth
 That is affordable *because* the view is bounded, and it is what keeps diffing, replay and
 change highlighting simple. If profiling ever argues for deltas, the burden of proof is on the
 delta.
+
+**The recording outlives the process.** It is written to the user's own state directory —
+never into the observed repository — keyed by the repository's full path unless `--id` named
+something else, along with the change signal it was built at, so a restart onto an untouched
+repository adds no step. `src/store.ts`.
+
+The key is the sha of the identifier, cut to ten characters, and it is **itself an identifier**:
+`recordingKey` hands a key straight back, which is what makes the one the view toolbar shows —
+and copies on a click — worth copying. A folder that moved is resumed with `--id <that key>`.
+It reaches the browser in its own `event: recording` frame, because it is a fact about the
+recording rather than about a step, and a step scrubbed back to must not change it.
+
+**The view belongs to the run, not to the recording.** A `Snapshot` carries the `View` it was
+answered under, so a kept recording's newest step is still answering the last run's question.
+`serve()` answers it again — a *view* rebuild, which replaces that step rather than adding one —
+before it listens, so `--learning` and the toolbar's toggles are this run's. Only while the
+change signal still matches what was kept: if the repository has moved on, the poller is about to
+build a step of its own under this run's view, and replacing the newest kept step would throw
+away a step of something that has since changed. This was a bug: restarting with `--learning`
+opened nothing, and `clear` was the only way to change your mind, because clearing rebuilds.
+
+**Clearing is a step, in reverse.** `POST /clear` empties the recording, saves it emptied, tells
+every client (`event: cleared`, which reloads them), and builds one step: the repository as it is
+now. The reload is deliberate — a viewer holding steps the server has forgotten would be
+scrubbing a session nobody else can see, and a browser's tape has no other way to forget.
 
 **Capabilities, not modes.** `measure()` runs once at startup and derives what is on offer.
 Above `LIMITS.fullLoad` (12,000 objects) unreachable detection is off; above `LIMITS.indexNodes`
@@ -288,6 +314,12 @@ git reset b.txt       → the index entry goes; the blob survives, now marked un
   design: today it is a list of pre-built snapshots made under whatever view was current, and
   per-viewer views mean it has to hold the repository's state and let each browser ask its own
   question of it.
+- **`clear` is a destructive shared action, and `--serve` has no authentication.** Any browser
+  that reaches the port can throw away everyone's recording, behind one confirmation. It is
+  deliberate — the alternative was a flag the presenter has to know before the session, and the
+  recording is the thing you can least afford to lose by default — but on a network it is a
+  loaded gun in the room's hands. If it ever needs locking down, the honest fix is the same one
+  the view needs: know which browser is the presenter's.
 - **The visual pass has been looked at once**, on a small repository — `docs/small-demo.png`, now
   at the top of the README. It has not been seen on a repo with a couple of hundred commits,
   which is the bar `INITIAL_DESIGN.md` §12 sets, and the column labels (`pointers and tags`,

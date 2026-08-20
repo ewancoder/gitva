@@ -23,6 +23,7 @@ describe('arguments', () => {
       host: '127.0.0.1',
       open: true,
       learning: false,
+      id: undefined,
     });
   });
 
@@ -37,6 +38,15 @@ describe('arguments', () => {
     assert.equal(parseArgs(['--learning']).repo, '.');
   });
 
+  // The recording is filed under the folder's full path, which is not the same
+  // repository after a move or a second clone.
+  it('takes --id, the name to keep the recording under instead of the path', () => {
+    assert.equal(parseArgs(['--id', 'teaching']).id, 'teaching');
+    // The name it ate is not the repository.
+    assert.equal(parseArgs(['--id', 'teaching']).repo, '.');
+    assert.equal(parseArgs([]).id, undefined);
+  });
+
   it('takes a port, and stays on the loopback address with it', () => {
     const o = parseArgs(['--port', '4321']);
     assert.deepEqual([o.port, o.host], [4321, '127.0.0.1']);
@@ -49,6 +59,7 @@ describe('arguments', () => {
       host: '0.0.0.0',
       open: true,
       learning: false,
+      id: undefined,
     });
   });
 
