@@ -323,6 +323,27 @@ export const en = {
   // The terminal, and the one trouble the browser is told about in words
   // -------------------------------------------------------------------------
   cli: {
+    help: (version: string) => `gitva ${version} — the visual anatomy of git
+
+usage: gitva [repo] [options]
+
+  repo                  the repository to watch (default: the directory you are in)
+
+options:
+  --port N              listen on port N (default: a free one the OS picks)
+  --serve [HOST:PORT]   bind every interface, not just loopback, so a room can
+                        watch (default 0.0.0.0:4200) — there is no authentication
+  --no-open             do not open a browser
+  --learning            start with every commit expanded, for showing to a room
+  --id NAME             file the recording under NAME instead of the folder's path
+  --fresh               throw the kept recording away and start it at the
+                        repository as it is now
+  -h, --help            print this
+  -v, --version         print the version
+
+gitva never writes to the repository it watches.
+https://github.com/ewancoder/gitva
+`,
     watching: (repo: string, url: string) => `gitva watching ${repo}\n${url}\n`,
     serving: (host: string, port: number) =>
       `serving ${host}:${port} to the network — no auth\n`,

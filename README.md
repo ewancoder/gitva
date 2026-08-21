@@ -43,7 +43,8 @@ staging, committing, branching, a conflict, a reset, tags, `pack-refs`, `gc` —
 end stops gitva.
 
 `gitva [repo] [--port N] [--no-open] [--serve [HOST:PORT]] [--learning] [--id NAME] [--fresh]` — repo defaults to `.`,
-port to a free one, and the browser opens itself. Node ≥20, no runtime dependencies.
+port to a free one, and the browser opens itself. `gitva --help` says the same in the terminal,
+and `gitva --version` says which one you have. Node ≥20, no runtime dependencies.
 
 The directory need not be a repository yet: start in an empty one and gitva waits, then draws
 the repository the moment you run `git init`.

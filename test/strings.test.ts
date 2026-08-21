@@ -42,6 +42,24 @@ describe('the strings behind the chrome', () => {
 });
 
 
+// The help is what someone reads before they know any of the flags, so a
+// translation that quietly drops one leaves that reader with no way to find it.
+describe('the command line help', () => {
+  it('names every flag the parser understands, in every language', async () => {
+    try {
+      for (const l of LANGUAGES) {
+        await setLanguage(l.code);
+        const help = S.cli.help('9.9.9');
+        assert.match(help, /gitva 9\.9\.9/, l.code);
+        for (const flag of ['--port', '--serve', '--no-open', '--learning', '--id', '--fresh', '--help', '--version'])
+          assert.ok(help.includes(flag), `${l.code}: ${flag}`);
+      }
+    } finally {
+      await setLanguage('en');
+    }
+  });
+});
+
 describe('the language in force', () => {
   it('has words for every language it offers', async () => {
     try {

@@ -3,6 +3,7 @@
 
 import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { serve, type Server } from './server.js';
 import { S } from './strings.js';
@@ -16,6 +17,9 @@ export interface Options {
   learning: boolean;
   /** Throw the kept recording away and start it at the repository as it is now. */
   fresh: boolean;
+  /** Say what the flags are and stop; `-h`/`--help`, and `-v`/`--version`. */
+  help: boolean;
+  version: boolean;
   /** What the kept recording is filed under. The folder's full path when this
    *  is undefined; name one to keep the same recording across a move or a
    *  second clone of the same repository. */
@@ -46,14 +50,27 @@ export function parseArgs(args: string[]): Options {
     port,
     host,
     open: !args.includes('--no-open'),
+    help: args.includes('--help') || args.includes('-h'),
+    version: args.includes('--version') || args.includes('-v'),
     learning: args.includes('--learning'),
     fresh: args.includes('--fresh'),
     id,
   };
 }
 
-export async function main(args: string[]): Promise<Server> {
-  const { repo, port, host, open, learning, fresh, id } = parseArgs(args);
+/** The published version, out of the package that carries this file. */
+export function version(): string {
+  return (createRequire(import.meta.url)('../../package.json') as { version: string }).version;
+}
+
+export async function main(args: string[]): Promise<Server | undefined> {
+  const { repo, port, host, open, learning, fresh, id, help, version: wantVersion } =
+    parseArgs(args);
+  // Asking what the flags are is not asking to watch anything: say it and stop.
+  if (help || wantVersion) {
+    process.stdout.write(help ? S.cli.help(version()) : `${version()}\n`);
+    return undefined;
+  }
   const server = await serve(repo, port, host, learning, id, fresh);
   const url = browseUrl(host, server.port);
   process.stdout.write(S.cli.watching(repo, url));
