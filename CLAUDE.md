@@ -1,5 +1,8 @@
 # gitva
 
+*the **v**isual **a**natomy of git* — what the name is short for, and the line the README leads
+with.
+
 A visual tutorial for git, taught from the internals upward. It shows a repository's `.git`
 as a live object graph in a browser, to make one sentence obvious on screen:
 

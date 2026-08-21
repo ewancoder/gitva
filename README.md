@@ -1,5 +1,7 @@
 # gitva
 
+*the **v**isual **a**natomy of git*
+
 ```
 git add a.txt b.txt   → two blobs appear, two index entries point at them,
                         and nothing else in the repository changes

@@ -1,7 +1,7 @@
 {
   "name": "gitva",
   "version": "1.3.1",
-  "description": "A visual tutorial for git, taught from the internals upward: a live picture of .git in your browser.",
+  "description": "The visual anatomy of git: a visual tutorial taught from the internals upward, drawing a repository's .git as a live object graph in your browser.",
   "license": "MIT",
   "author": "Ivan Zyranau",
   "keywords": [
