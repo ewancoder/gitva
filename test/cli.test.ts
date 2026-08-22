@@ -12,7 +12,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { browseUrl, entryPath, main, parseArgs, version } from '../src/cli.js';
+import {
+  browseUrl,
+  getEntryPath,
+  getOpenCommand,
+  getVersion,
+  main,
+  parseArgs,
+  stopServer,
+} from '../src/cli.js';
 import { plumbedRepo } from './fixture.js';
 
 describe('arguments', () => {
@@ -62,6 +70,18 @@ describe('arguments', () => {
     assert.equal(parseArgs(['-v']).version, true);
   });
 
+  // A misspelt flag used to be swallowed in silence and the current folder
+  // watched instead; node's parser is strict, so it stops the run.
+  it('refuses a flag it does not know instead of ignoring it', () => {
+    assert.throws(() => parseArgs(['--porrt', '4321']), /Unknown option/);
+  });
+
+  it('takes the --flag=value spelling of everything that carries one', () => {
+    assert.equal(parseArgs(['--port=4321']).port, 4321);
+    assert.equal(parseArgs(['--serve=10.0.0.2:9000']).host, '10.0.0.2');
+    assert.equal(parseArgs(['--id=teaching']).id, 'teaching');
+  });
+
   it('takes a port, and stays on the loopback address with it', () => {
     const o = parseArgs(['--port', '4321']);
     assert.deepEqual([o.port, o.host], [4321, '127.0.0.1']);
@@ -86,6 +106,32 @@ describe('arguments', () => {
     assert.equal(parseArgs(['--serve', '10.0.0.2:9000']).port, 9000);
     assert.deepEqual(parseArgs(['--serve', ':9000']).host, '0.0.0.0');
     assert.deepEqual(parseArgs(['--serve', '[::1]:9000']).host, '::1');
+  });
+
+  // Either half of the address on its own: the other half is the default, so
+  // --serve=HOST is a shared address rather than a silent fall back to loopback.
+  it('fills in the half of the --serve address you left out', () => {
+    assert.deepEqual(parseArgs(['--serve=0.0.0.0']), parseArgs(['--serve']));
+    assert.deepEqual(
+      [parseArgs(['--serve=10.0.0.2']).host, parseArgs(['--serve=10.0.0.2']).port],
+      ['10.0.0.2', 4200],
+    );
+    assert.deepEqual(
+      [parseArgs(['--serve', ':4200']).host, parseArgs(['--serve=:4200']).host],
+      ['0.0.0.0', '0.0.0.0'],
+    );
+    assert.equal(parseArgs(['--serve=[::1]']).host, '::1');
+  });
+
+  // A port you typed is the port: 4200 is what --serve falls back to, and a
+  // fall back must not overrule a flag — whichever side of it the flag is on.
+  it('lets --port override the port of a --serve address', () => {
+    assert.equal(parseArgs(['--port', '5000', '--serve']).port, 5000);
+    assert.equal(parseArgs(['--serve', '--port', '5000']).port, 5000);
+    assert.equal(parseArgs(['--serve', '10.0.0.2:9000', '--port', '5000']).port, 5000);
+    // The address it named is still the address it bound.
+    assert.equal(parseArgs(['--serve', '10.0.0.2:9000', '--port', '5000']).host, '10.0.0.2');
+    assert.equal(parseArgs(['--serve', '10.0.0.2:9000']).port, 9000);
   });
 
   it('does not mistake the address it consumed for the repository', () => {
@@ -151,7 +197,7 @@ describe('starting up', () => {
         child.stdout.once('data', (d: Buffer) => resolve(d.toString()));
         child.once('exit', (code) => reject(new Error(`said nothing, exited ${code}`)));
       });
-      assert.match(said, /gitva watching/);
+      assert.match(said, /gitva is watching/);
     } finally {
       child.kill();
       rmSync(bin, { recursive: true, force: true });
@@ -174,11 +220,40 @@ describe('starting up', () => {
     // Every flag the parser understands is a flag the help names.
     for (const flag of ['--port', '--serve', '--no-open', '--learning', '--id', '--fresh'])
       assert.ok(said[0].includes(flag), flag);
-    assert.equal(said[1], `${version()}\n`);
+    assert.equal(said[1], `${getVersion()}\n`);
+  });
+
+  // ctrl+c closes the server before the process goes, so the port is free for
+  // the next run — and a close that will not happen must not exit as a success.
+  it('closes the server on ctrl+c, and exits non-zero when it will not close', async () => {
+    const codes: number[] = [];
+    const said: string[] = [];
+    const exit = process.exit;
+    const write = process.stderr.write.bind(process.stderr);
+    process.exit = ((code?: number) => void codes.push(code ?? 0)) as typeof process.exit;
+    process.stderr.write = ((s: string) => (said.push(s), true)) as typeof process.stderr.write;
+    let closed = false;
+    try {
+      await stopServer({ port: 1, close: () => ((closed = true), Promise.resolve()) });
+      await stopServer({ port: 1, close: () => Promise.reject(new Error('port stuck')) });
+    } finally {
+      process.exit = exit;
+      process.stderr.write = write;
+    }
+    assert.deepEqual([closed, codes], [true, [0, 1]]);
+    assert.match(said[0], /port stuck/);
+  });
+
+  it('hands the url to the command the platform opens urls with', () => {
+    const platforms: NodeJS.Platform[] = ['darwin', 'win32', 'linux'];
+    assert.deepEqual(
+      platforms.map((p) => getOpenCommand(p)),
+      ['open', 'start', 'xdg-open'],
+    );
   });
 
   it('compares argv[1] as given when there is nothing on disk to resolve', () => {
-    assert.equal(entryPath('/no/such/gitva'), '/no/such/gitva');
+    assert.equal(getEntryPath('/no/such/gitva'), '/no/such/gitva');
   });
 });
 
@@ -209,6 +284,6 @@ describe('the line that makes it a command', () => {
       p.on('close', () => done(out));
       p.on('error', (e) => done(String(e)));
     });
-    assert.equal(said, `${version()}\n`);
+    assert.equal(said, `${getVersion()}\n`);
   });
 });

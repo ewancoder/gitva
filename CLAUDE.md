@@ -173,7 +173,7 @@ dependency passes the one-sentence test in `INITIAL_DESIGN.md` §14.
 | `src/git.ts` | the **only** place that spawns git. Parsers, `measure`, `changeSignal`, `readStep`, `findUnreachable`, `readBody`. |
 | `src/store.ts` | the recording on disk: where the system keeps it, `recordingKey` (the ten-character identifier, shown in the view toolbar), one file per key, load and save, and `FORMAT` — **bump it whenever a step stops meaning what it meant**, because a kept recording written under another number is dropped rather than half-drawn. |
 | `src/server.ts` | `node:http`: static files, SSE `/events`, `GET /object`. **Nothing that writes** — there is no route a browser can reach that changes what is recorded. |
-| `src/cli.ts` | `parseArgs` (pure), `main`, `HELP`; opens the browser. Runs only when it *is* the command, so importing it for a test starts nothing. |
+| `src/cli.ts` | `parseArgs` (pure), `main`, `FLAGS` — every flag, and what `--help` says about it; opens the browser. Runs only when it *is* the command, so importing it for a test starts nothing. |
 | `web/` | `index.html` (all CSS), `app.ts` (DOM, events, painting — and nothing else), `render.ts` (canvas), `layout.ts`, `diff.ts`, `explain.ts`, `recording.ts` (steps, cursor, view, pins — no DOM), `camera.ts` (arithmetic only), `inspector.ts`, `theme.ts`. |
 | `web/localization/` | `languages/en.ts` — **every string the browser shows**; `languages/ru.ts`; `strings.ts` (`Strings`, the shape a translation fills, read off `en`); `index.ts` (`LANGUAGES`, a loader per language, the live binding `S`, `setLanguage`). No language but English is loaded until it is chosen. |
 | `test/` | `fixture.ts` builds real repos with real plumbing, and `fakeStep` for what is said rather than what git did; the rest are `node:test`. `boundary.test.ts` is the split itself, enforced. |
@@ -403,10 +403,11 @@ git reset b.txt       → the index entry goes; the blob survives, now marked un
   refused. Anything that brings older history back has to do it without a browser asking: a bigger
   window on the command line, or steps that hold the repository richly enough for each browser to
   answer its own question. **Do not reintroduce a write route to solve it.**
-- **`--serve` has no authentication.** Any browser that reaches the port reads the whole
-  repository. It cannot change anything — there is no route that writes, and `--fresh` is the
-  presenter's at startup — but reading is not nothing, and the honest fix is knowing which browser
-  is the presenter's.
+- **`--serve` has no authentication, and never will.** Any browser that reaches the port reads
+  the whole repository. That is the whole exposure and it is accepted: there is no route that
+  writes, `--fresh` is the presenter's at startup, and a view never leaves the tab, so a viewer
+  can read and nothing else. Do not add auth, and do not add a route that would need it — put
+  `--serve` on a network you would show the repository to.
 - **The visual pass has been looked at once**, on a small repository — `docs/small-demo.png`, now
   at the top of the README. It has not been seen on a repo with a couple of hundred commits,
   which is the bar `INITIAL_DESIGN.md` §12 sets, and the column labels (`pointers and tags`,

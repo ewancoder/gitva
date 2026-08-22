@@ -50,14 +50,16 @@ The directory need not be a repository yet: start in an empty one and gitva wait
 the repository the moment you run `git init`.
 
 `--serve` binds every interface instead of loopback, so viewers can watch one repository from
-their own browsers. Bare it takes `0.0.0.0:4200`; give it `HOST:PORT` to choose. There is no
-authentication — anyone who reaches the port reads the whole repository.
+their own browsers. Bare it takes `0.0.0.0:4200`; give it `HOST:PORT` to choose, or either half on
+its own — `--serve=10.0.0.2` and `--serve :9000` fill the other in, and `--port` overrides whichever
+port it ended up with. There is no authentication — anyone who reaches the port reads the whole
+repository, and nothing more: no browser can change what gitva records.
 
 `--id NAME` files the recording under a name of your own instead of the folder's full path, so a
 repository that moved, or a second clone of one, keeps its steps. Any string will do. See below.
 
-`--fresh` throws the kept recording away and starts it again at the repository as it is now.
-Nothing in the repository changes — gitva does not write to it.
+`--fresh` starts the recording over, at the repository as it is now. Nothing in the repository
+changes — gitva does not write to it.
 
 `--learning` starts with every commit in the window expanded, in every browser including one
 that joins late, and with links from unreachable showing, so a small repository being
