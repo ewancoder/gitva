@@ -33,10 +33,10 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/src/cli.js",
     "start": "node dist/src/cli.js",
-    "test": "tsc && node --test --experimental-test-coverage dist/test/*.test.js",
-    "prepublishOnly": "tsc"
+    "test": "npm run build && node --test --experimental-test-coverage dist/test/*.test.js",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
