@@ -10,7 +10,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { isDouble, Pins, Recording, type Settings } from '../web/recording.js';
-import { layout } from '../src/layout.js';
+import { layout } from '../web/layout.js';
 import { RECORDING_CAP, type Step } from '../src/types.js';
 
 const oid = (n: string) => (n + '-').padEnd(40, '0');
@@ -329,13 +329,13 @@ describe('what the toolbars say', () => {
     const t = new Recording();
     for (let i = 1; i <= RECORDING_CAP + 1; i++) {
       const s = step(i, ['c' + i]);
-      s.notes = [{ id: 'noUnreachableDetection', args: [12_345] }];
+      s.notes = ['noUnreachableDetection'];
       t.arrive(s, SHUT);
     }
     const notes = t.notes();
-    // The step carries an id and a number; the sentence is put together here,
-    // in the language this browser is set to.
-    assert.match(notes[0], /Unreachable detection is off: repository is too big - 12,345 objects/);
+    // The step names the note; the sentence is this browser's, in the language
+    // it is set to.
+    assert.match(notes[0], /Unreachable detection is off/);
     assert.match(notes[1], /400 steps kept, 1 older ones dropped/);
   });
 });

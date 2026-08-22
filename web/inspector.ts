@@ -7,10 +7,10 @@
  * only turns that into elements and asks the server for the body.
  */
 
-import { explain, refName } from '../src/explain.js';
-import { S } from '../src/strings.js';
+import { explain, refName } from './explain.js';
+import { S } from './localization/index.js';
 import type { Oid, Step } from '../src/types.js';
-import type { Shape } from '../src/layout.js';
+import type { Shape } from './layout.js';
 
 /** Objects whose bytes are worth reading out — the rest have nothing stored. */
 const READABLE = ['blob', 'tree', 'index', 'commit', 'tag'];

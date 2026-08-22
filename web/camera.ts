@@ -4,7 +4,7 @@
  * pixel or by a whole page, and squinting at a browser is no way to find out.
  */
 
-import type { Scene } from '../src/layout.js';
+import type { Scene } from './layout.js';
 
 export interface Camera {
   x: number;

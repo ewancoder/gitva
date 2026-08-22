@@ -1,6 +1,7 @@
+/** AI-assisted. */
 /** Russian translation of Gitva. */
 
-import type { Strings } from './strings.js';
+import type { Strings } from '../strings.js';
 
 const plural = (n: number, one: string, few: string, many: string) =>
   n % 10 === 1 && n % 100 !== 11
@@ -152,21 +153,14 @@ export const ru: Strings = {
   },
 
   notes: {
-    noUnreachableDetection: (objs: number) =>
-      `Поиск недостижимых объектов отключён: репозиторий слишком большой — ${objs.toLocaleString()} ${objects(objs)}`,
-    indexElided: (shown: number, total: number) =>
-      `Индекс: показаны только записи, отличающиеся от HEAD — ${shown} из ${total} проиндексированных путей.`,
-    more: (shown: number) =>
-      `Показано ${shown} самых новых ${commits(shown)} — история постарше не рисуется.`,
-    refsOutside: (n: number) =>
-      `${n} ${plural(n, 'ссылка указывает', 'ссылки указывают', 'ссылок указывают')} за пределы этого окна и ${plural(n, 'не показана', 'не показаны', 'не показаны')}.`,
+    noUnreachableDetection:
+      'Поиск недостижимых объектов отключён — в этом репозитории слишком много объектов.',
+    indexElided: 'В индексе показаны только записи, отличающиеся от HEAD.',
+    more: 'Показаны самые новые коммиты — история постарше не рисуется.',
+    refsOutside: 'Некоторые ссылки указывают за пределы этого окна и не показаны.',
     indexHidden: 'Индекс скрыт.',
     unreachableHidden:
       'Недостижимые объекты скрыты — они по-прежнему в базе данных объектов.',
-    noCommitGraph:
-      'В этом репозитории нет commit-graph. `git commit-graph write --reachable` сильно ускорил бы обход истории — gitva не запишет его за вас.',
-    looseObjects: (loose: number) =>
-      `${loose.toLocaleString()} ${plural(loose, 'объект не упакован', 'объекта не упакованы', 'объектов не упаковано')}. \`git gc\` упаковал бы их — gitva не запустит его за вас.`,
     bodiesOnSelection:
       'Содержимое объектов загружается, когда вы что-нибудь выбираете.',
   },
@@ -276,35 +270,5 @@ export const ru: Strings = {
 
   language: {
     switchTo: (name: string) => `Язык интерфейса: ${name}`,
-  },
-
-  cli: {
-    help: (version: string) => `gitva ${version} — визуальная анатомия git
-
-использование: gitva [репозиторий] [опции]
-
-  репозиторий           за каким репозиторием следить (по умолчанию — текущий каталог)
-
-опции:
-  --port N              слушать порт N (по умолчанию — свободный, его выберет ОС)
-  --serve [HOST:PORT]   открыть все интерфейсы, а не только loopback, чтобы смотреть
-                        могла аудитория (по умолчанию 0.0.0.0:4200) — без аутентификации
-  --no-open             не открывать браузер
-  --learning            начать с раскрытыми коммитами, для показа аудитории
-  --id ИМЯ              хранить запись под именем ИМЯ, а не под полным путём папки
-  --fresh               выбросить сохранённую запись и начать её с текущего
-                        состояния репозитория
-  -h, --help            показать эту справку
-  -v, --version         показать версию
-
-gitva никогда не пишет в репозиторий, за которым следит.
-https://github.com/ewancoder/gitva
-`,
-    watching: (repo: string, url: string) => `gitva следит за ${repo}\n${url}\n`,
-    serving: (host: string, port: number) =>
-      `${host}:${port} открыт в сеть — без аутентификации\n`,
-  },
-  server: {
-    noRepo: (path: string) => `в ${path} пока нет репозитория — ждём \`git init\``,
   },
 };

@@ -4,7 +4,27 @@
  * "commit", "ref" and "view".
  */
 
-import type { Strings } from './strings.js';
+/**
+ * Which notes a step is showing. An id and nothing else: the server says *that*
+ * the index is elided, never *how many* entries it elided, so a note is a
+ * sentence the browser looks up like any other rather than a shape it has to
+ * assemble.
+ *
+ * The ids live here, not with the words, because the words are the browser's
+ * (`web/localization/`) and the server may not reach for them. `strings.test.ts`
+ * is what keeps the two lists agreeing.
+ */
+export const NOTE_IDS = [
+  'noUnreachableDetection',
+  'indexElided',
+  'more',
+  'refsOutside',
+  'indexHidden',
+  'unreachableHidden',
+  'bodiesOnSelection',
+] as const;
+
+export type NoteId = (typeof NOTE_IDS)[number];
 
 export type Oid = string;
 export type ObjectType = 'blob' | 'tree' | 'commit' | 'tag';
@@ -153,19 +173,5 @@ export interface Step {
     refsOutside: number;
   };
   /** What the canvas is not showing, and why. Always shown, out loud. */
-  notes: Note[];
-}
-
-/**
- * One note, as what to say plus what goes in the sentence — never the sentence
- * itself. A step is read by every viewer, each in their own language, and by a
- * viewer scrubbing back through steps recorded before that language existed:
- * prose in a step would be prose in whatever language the server happened to
- * be in when git moved.
- */
-export type NoteId = keyof Strings['notes'];
-
-export interface Note {
-  id: NoteId;
-  args?: (string | number)[];
+  notes: NoteId[];
 }

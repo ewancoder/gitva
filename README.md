@@ -183,8 +183,8 @@ everyone's, and no viewer's browser should be able to end everyone's session.
 
 **It never writes to the repository it watches.** Not the index, not a cache, not a config
 value. `src/git.ts` will only spawn git subcommands from a read-only allowlist, and sets
-`GIT_OPTIONAL_LOCKS=0` so git will not take a lock to be helpful either. Where `git gc` or a
-commit-graph would make things faster, gitva says so and leaves you to run it.
+`GIT_OPTIONAL_LOCKS=0` so git will not take a lock to be helpful either. It will not run `git
+gc` or write a commit-graph for you, and does not nag you to either.
 
 **Everything it knows, it learns from git's own plumbing.** No git library, no reimplemented
 format. It runs the commands it is teaching, so you can read what it does and then type it

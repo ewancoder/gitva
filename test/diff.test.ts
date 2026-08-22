@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { describe as describeChange, diffScenes, isVisible } from '../src/diff.js';
-import type { Scene } from '../src/layout.js';
+import { describe as describeChange, diffScenes, isVisible } from '../web/diff.js';
+import type { Scene } from '../web/layout.js';
 import type { Step } from '../src/types.js';
 
 const shape = (id: string, x = 0, y = 0, label = id) => ({

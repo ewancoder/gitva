@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { entryId, explain, explainKind, refName } from '../src/explain.js';
+import { entryId, explain, explainKind, refName } from '../web/explain.js';
 import { fakeStep } from './fixture.js';
 
 const fact = (facts: [string, string][], key: string) => facts.find(([k]) => k === key)?.[1];

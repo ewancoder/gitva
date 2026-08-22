@@ -154,7 +154,7 @@ describe('a repository read through its own plumbing', () => {
   it('carries the index and the unreachable set for every view there could be', () => {
     assert.ok(step.index.length > 0);
     assert.ok(step.unreachable!.length > 0);
-    assert.ok(!step.notes.some((n) => n.id === 'indexHidden'), 'what a viewer hides is not the step’s to say');
+    assert.ok(!step.notes.includes('indexHidden'), 'what a viewer hides is not the step’s to say');
   });
 
   it('holds every tree in the window, so expanding a commit asks nothing of it', () => {
@@ -284,14 +284,14 @@ describe('degrading the documented way above a limit', () => {
 
   it('turns unreachable detection off and says why', () => {
     assert.equal(step.unreachable, null);
-    assert.ok(step.notes.some((n) => n.id === 'noUnreachableDetection'));
+    assert.ok(step.notes.includes('noUnreachableDetection'));
   });
 
   it('draws the index as the delta from HEAD, and counts the rest', () => {
     assert.ok(step.indexElided);
     assert.equal(step.indexElided!.total, 4);
     assert.ok(step.indexElided!.shown < step.indexElided!.total);
-    assert.ok(step.notes.some((n) => n.id === 'indexElided'));
+    assert.ok(step.notes.includes('indexElided'));
   });
 
   it('still draws the commits it was asked for', () => {
@@ -321,12 +321,10 @@ describe('degrading the documented way above a limit', () => {
 
   // The notes toolbar is the interface's promise about what it is not showing,
   // so it is asserted whole. Nothing here says trees load on demand, because
-  // they do not any more: the window's trees are in every step.
+  // they do not any more: the window's trees are in every step — and nothing
+  // here advises on the repository, because a note is about the canvas.
   it('says exactly what it is not showing, and nothing that is no longer true', () => {
-    assert.deepEqual(
-      step.notes.map((n) => n.id),
-      ['noUnreachableDetection', 'indexElided', 'noCommitGraph', 'looseObjects', 'bodiesOnSelection'],
-    );
+    assert.deepEqual(step.notes, ['noUnreachableDetection', 'indexElided', 'bodiesOnSelection']);
   });
 });
 

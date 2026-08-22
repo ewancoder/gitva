@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { bounded, centre, fit, glideStep, refit, toCanvas, zoom, zoomOut } from '../web/camera.js';
-import type { Scene } from '../src/layout.js';
+import type { Scene } from '../web/layout.js';
 
 const viewport = { width: 500, height: 400 };
 const tall = { width: 1000, height: 3000 };

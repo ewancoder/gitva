@@ -10,8 +10,8 @@
  * Hidden means absent: culled shapes are not drawn *and* not walked.
  */
 
-import { M, type Scene, type Link, type Shape } from '../src/layout.js';
-import type { Change } from '../src/diff.js';
+import { M, type Scene, type Link, type Shape } from './layout.js';
+import type { Change } from './diff.js';
 import type { Camera } from './camera.js';
 import { chipHue, hueFor, theme } from './theme.js';
 

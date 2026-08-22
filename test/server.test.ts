@@ -72,6 +72,32 @@ describe('the server', () => {
   it('refuses anything outside the two static roots', async () => {
     assert.equal((await fetch(base + 'etc/passwd')).status, 404);
     assert.equal((await fetch(base + '../package.json')).status, 404);
+    assert.equal((await fetch(base + 'web/../../package.json')).status, 404);
+  });
+
+  /**
+   * The page is a module graph, and a module it cannot fetch is a blank screen
+   * — which no other test here would notice, because every one of them talks to
+   * the server rather than loading the page. The static route once matched a
+   * single path segment, so the day the words moved into `web/localization/`
+   * the browser stopped being able to load them and the suite stayed green.
+   */
+  it('serves every module the page imports, subfolders and all', async () => {
+    const seen = new Set<string>();
+    const queue = ['web/app.js'];
+    while (queue.length) {
+      const file = queue.pop()!;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      const res = await fetch(base + file);
+      assert.equal(res.status, 200, file);
+      const dir = file.slice(0, file.lastIndexOf('/'));
+      for (const [, spec] of (await res.text()).matchAll(/from\s*['"]([^'"]+)['"]|import\(['"]([^'"]+)['"]/g)) {
+        if (spec?.startsWith('.')) queue.push(new URL(spec, `http://x/${dir}/`).pathname.slice(1));
+      }
+    }
+    assert.ok(seen.has('web/localization/languages/en.js'), 'the words are part of the graph');
+    assert.ok(seen.has('src/types.js'), 'the seam is served too');
   });
 
   it('pushes a whole step down the stream', async () => {
@@ -293,7 +319,7 @@ describe('the steps everyone shares', () => {
   const seqs = (steps: string[]) => steps.map((s) => JSON.parse(s).seq);
   /** A step of a repository big enough for the byte ceiling to be the one that bites. */
   const heavy = (seq: number, mb: number) =>
-    step(seq, { notes: [{ id: 'more', args: ['x'.repeat(mb << 20)] }] });
+    step(seq, { repo: 'x'.repeat(mb << 20) });
 
   it('forgets the oldest steps at the same cap the browser’s recording uses', () => {
     const steps: string[] = [];

@@ -1,12 +1,12 @@
 /**
  * The teaching. Point at anything and learn what that file in .git actually
  * does, and which command creates it. Pure, so it can be tested without a
- * browser — and the wording itself lives in `strings-en.ts`, which is where a
- * you fix it.
+ * browser — and the wording itself lives in `src/localization/languages/en.ts`, which is
+ * where you fix it.
  */
 
-import { S } from './strings.js';
-import type { Step } from './types.js';
+import { S } from './localization/index.js';
+import type { Step } from '../src/types.js';
 
 export interface Explanation {
   title: string;

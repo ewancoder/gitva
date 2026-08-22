@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { bodyText, inspectorModel, renderInspector } from '../web/inspector.js';
-import type { Shape } from '../src/layout.js';
+import type { Shape } from '../web/layout.js';
 import { fakeStep } from './fixture.js';
 
 const shape = (over: Partial<Shape> & Pick<Shape, 'kind' | 'id'>): Shape => ({

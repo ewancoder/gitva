@@ -11,9 +11,9 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { measure, open, readStep, type Repository } from '../src/git.js';
-import { describe as describeChange } from '../src/diff.js';
-import { explain } from '../src/explain.js';
-import { layout } from '../src/layout.js';
+import { describe as describeChange } from '../web/diff.js';
+import { explain } from '../web/explain.js';
+import { layout } from '../web/layout.js';
 import { DEFAULT_VIEW, type Capabilities, type Step } from '../src/types.js';
 import { Repo } from './fixture.js';
 

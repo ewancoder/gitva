@@ -9,7 +9,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { language, LANGUAGES, renderNote, S, setLanguage } from '../src/strings.js';
+import { language, LANGUAGES, S, setLanguage } from '../web/localization/index.js';
+import { NOTE_IDS } from '../src/types.js';
 
 const html = readFileSync(fileURLToPath(new URL('../../web/index.html', import.meta.url)), 'utf8');
 const keys = [...html.matchAll(/data-t(?:-html|-title|-placeholder)?="([^"]+)"/g)].map((m) => m[1]);
@@ -41,24 +42,6 @@ describe('the strings behind the chrome', () => {
   });
 });
 
-
-// The help is what someone reads before they know any of the flags, so a
-// translation that quietly drops one leaves that viewer with no way to find it.
-describe('the command line help', () => {
-  it('names every flag the parser understands, in every language', async () => {
-    try {
-      for (const l of LANGUAGES) {
-        await setLanguage(l.code);
-        const help = S.cli.help('9.9.9');
-        assert.match(help, /gitva 9\.9\.9/, l.code);
-        for (const flag of ['--port', '--serve', '--no-open', '--learning', '--id', '--fresh', '--help', '--version'])
-          assert.ok(help.includes(flag), `${l.code}: ${flag}`);
-      }
-    } finally {
-      await setLanguage('en');
-    }
-  });
-});
 
 describe('the language in force', () => {
   it('has words for every language it offers', async () => {
@@ -103,17 +86,27 @@ describe('the Russian counted forms', () => {
   });
 });
 
-describe('a note out of a step', () => {
-  it('puts the numbers the step carried into the sentence', () => {
-    assert.match(renderNote({ id: 'refsOutside', args: [3] }), /^3 refs point outside/);
+/**
+ * The server picks a note id out of `NOTE_IDS`; the browser looks it up in the
+ * words. Nothing makes those two lists agree — the server may not reach into
+ * `web/localization/`, which is the whole point of writing the ids out — so
+ * this is what makes a note that renders blank fail here instead of on screen.
+ */
+describe('the notes and the ids the server can send', () => {
+  it('has words for every note, in every language', async () => {
+    try {
+      for (const l of LANGUAGES) {
+        await setLanguage(l.code);
+        const words = S.notes as Record<string, unknown>;
+        assert.deepEqual(NOTE_IDS.filter((id) => !(id in words)), [], l.code);
+      }
+    } finally {
+      await setLanguage('en');
+    }
   });
 
-  it('says a note that needs no numbers', () => {
-    assert.equal(renderNote({ id: 'indexHidden' }), S.notes.indexHidden);
-  });
-
-  // Recordings kept from before notes became ids hold the sentence itself.
-  it('shows prose from an older recording as it was written', () => {
-    assert.equal(renderNote('The index is hidden.'), 'The index is hidden.');
+  it('has no words for a note the server cannot send', () => {
+    const sendable = new Set<string>(NOTE_IDS);
+    assert.deepEqual(Object.keys(S.notes).filter((k) => !sendable.has(k)), []);
   });
 });

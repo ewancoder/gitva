@@ -17,7 +17,6 @@ import { extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GitError, changeSignal, measure, open, readBody, readStep, type Repository } from './git.js';
 import { lastSeq, loadRecording, recordingFile, recordingKey, saveRecording } from './store.js';
-import { S } from './strings.js';
 import type { Capabilities } from './types.js';
 import { RECORDING_CAP } from './types.js';
 
@@ -73,7 +72,7 @@ export async function serve(
   async function repository() {
     if (!opened) {
       const handle = await open(repoPath).catch(() => {
-        throw new GitError(S.server.noRepo(repoPath));
+        throw new GitError(`no repository at ${repoPath} yet — waiting for \`git init\``);
       });
       opened = { handle, capabilities: await measure(handle.repo, handle.gitDir) };
     }
@@ -220,9 +219,12 @@ export async function serve(
         : // Shipped beside index.html, not compiled, so it is served from source too.
           pathname === '/favicon.png'
           ? 'web/favicon.png'
-          : /^\/(web|src)\/[\w.-]+$/.test(pathname)
-          ? `dist${pathname}`
-          : null;
+          : // Subfolders count: `web/localization/languages/en.js` is loaded by
+            // the page exactly as `web/app.js` is. `..` is refused outright
+            // rather than resolved — the roots are the whole permission.
+            /^\/(web|src)\/(?:[\w.-]+\/)*[\w.-]+$/.test(pathname) && !pathname.split('/').includes('..')
+            ? `dist${pathname}`
+            : null;
     if (!file) return res.writeHead(404).end('not found');
     try {
       const data = await readFile(ROOT + file);

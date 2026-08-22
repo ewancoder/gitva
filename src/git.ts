@@ -22,7 +22,7 @@ import type {
   GitObject,
   Head,
   IndexEntry,
-  Note,
+  NoteId,
   ObjectType,
   Oid,
   Ref,
@@ -504,7 +504,7 @@ export async function readStep(h: Repository, capabilities: Capabilities, seq: n
       more,
       refsOutside,
     },
-    notes: notesFor(capabilities, { more, shown: windowCommits.length, refsOutside, indexElided }),
+    notes: notesFor(capabilities, { more, refsOutside, indexElided: !!indexElided }),
   };
 }
 
@@ -578,30 +578,20 @@ export function findUnreachable(
 
 function notesFor(
   capabilities: Capabilities,
-  ctx: {
-    more: boolean;
-    shown: number;
-    refsOutside: number;
-    indexElided?: { shown: number; total: number };
-  },
-): Note[] {
-  const notes: Note[] = [];
-  if (!capabilities.fullLoad) notes.push({ id: 'noUnreachableDetection', args: [capabilities.objectCount] });
-  if (ctx.indexElided) {
-    notes.push({ id: 'indexElided', args: [ctx.indexElided.shown, ctx.indexElided.total] });
-  }
-  if (ctx.more) notes.push({ id: 'more', args: [ctx.shown] });
-  if (ctx.refsOutside > 0) notes.push({ id: 'refsOutside', args: [ctx.refsOutside] });
-  // Nothing here about what the view toolbar's toggles hide: those are the
-  // viewer's, so the sentence is theirs to make too (`Recording.notes`), and a step
-  // must not still claim the index is hidden once they show it again.
-  // Teaching the user about a git internal they didn't know existed is gitva
-  // working as designed. Detect it, hint at it, never build it — that would be
-  // a write.
-  if (!capabilities.commitGraph && capabilities.objectCount > LIMITS.fullLoad) notes.push({ id: 'noCommitGraph' });
-  if (capabilities.looseCount > 0 && capabilities.objectCount > 5_000)
-    notes.push({ id: 'looseObjects', args: [capabilities.looseCount] });
-  notes.push({ id: 'bodiesOnSelection' });
+  ctx: { more: boolean; refsOutside: number; indexElided: boolean },
+): NoteId[] {
+  const notes: NoteId[] = [];
+  if (!capabilities.fullLoad) notes.push('noUnreachableDetection');
+  if (ctx.indexElided) notes.push('indexElided');
+  if (ctx.more) notes.push('more');
+  if (ctx.refsOutside > 0) notes.push('refsOutside');
+  // Two things a note is not. Not what the view toolbar's toggles hide: those
+  // are the viewer's, so the sentence is theirs to make too (`Recording.notes`),
+  // and a step must not still claim the index is hidden once they show it again.
+  // And not advice about the repository — `git gc` and `commit-graph write` say
+  // nothing about what the canvas is leaving out, and a toolbar that nags is one
+  // the viewer stops reading.
+  notes.push('bodiesOnSelection');
   return notes;
 }
 

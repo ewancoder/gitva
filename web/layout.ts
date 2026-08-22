@@ -11,8 +11,8 @@
  * here: generality bought nothing and cost slow, jumpy and generic-looking.
  */
 
-import { S } from './strings.js';
-import type { Oid, Step, TreeEntry, View } from './types.js';
+import { S } from './localization/index.js';
+import type { Oid, Step, TreeEntry, View } from '../src/types.js';
 
 export type ShapeKind =
   | 'commit'

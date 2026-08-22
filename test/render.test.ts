@@ -9,8 +9,8 @@
 
 import test, { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import type { Scene, Link, Shape } from '../src/layout.js';
-import { EMPTY_CHANGE } from '../src/diff.js';
+import type { Scene, Link, Shape } from '../web/layout.js';
+import { EMPTY_CHANGE } from '../web/diff.js';
 import { columnEdgeAt, draw, hitTest, path, snapPositions, type Paint } from '../web/render.js';
 import { chipHue, hueFor, setTheme, theme } from '../web/theme.js';
 

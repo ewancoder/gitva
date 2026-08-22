@@ -6,7 +6,33 @@ import { realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { serve, type Server } from './server.js';
-import { S } from './strings.js';
+
+/**
+ * What the command line says. English, and not translated: this goes to a
+ * terminal, in a process that has no viewer to ask and no way to be told. The
+ * browser's words are `web/localization/`, and are a different question.
+ */
+const HELP = (version: string) => `gitva ${version} — the visual anatomy of git
+
+usage: gitva [repo] [options]
+
+  repo                  the repository to watch (default: the directory you are in)
+
+options:
+  --port N              listen on port N (default: a free one the OS picks)
+  --serve [HOST:PORT]   bind every interface, not just loopback, so viewers can
+                        watch (default 0.0.0.0:4200) — there is no authentication
+  --no-open             do not open a browser
+  --learning            start with every commit expanded, for showing to viewers
+  --id NAME             file the recording under NAME instead of the folder's path
+  --fresh               throw the kept recording away and start it at the
+                        repository as it is now
+  -h, --help            print this
+  -v, --version         print the version
+
+gitva never writes to the repository it watches.
+https://github.com/ewancoder/gitva
+`;
 
 export interface Options {
   repo: string;
@@ -68,16 +94,16 @@ export async function main(args: string[]): Promise<Server | undefined> {
     parseArgs(args);
   // Asking what the flags are is not asking to watch anything: say it and stop.
   if (help || wantVersion) {
-    process.stdout.write(help ? S.cli.help(version()) : `${version()}\n`);
+    process.stdout.write(help ? HELP(version()) : `${version()}\n`);
     return undefined;
   }
   const server = await serve(repo, port, host, learning, id, fresh);
   const url = browseUrl(host, server.port);
-  process.stdout.write(S.cli.watching(repo, url));
+  process.stdout.write(`gitva watching ${repo}\n${url}\n`);
   // Reaching other machines has no authentication: whoever reaches the port
   // reads the whole repository.
   if (host !== '127.0.0.1')
-    process.stdout.write(S.cli.serving(host, server.port));
+    process.stdout.write(`serving ${host}:${server.port} to the network — no auth\n`);
   if (open) openBrowser(url);
   process.on('SIGINT', () => void server.close().then(() => process.exit(0)));
   return server;

@@ -12,7 +12,7 @@
  * only check by scrubbing and squinting.
  */
 
-import { renderNote, S } from '../src/strings.js';
+import { S } from './localization/index.js';
 import { DEFAULT_VIEW, RECORDING_CAP, type Oid, type Step, type TreeEntry, type View } from '../src/types.js';
 
 /** What the caller has to repaint after a step arrived. */
@@ -246,12 +246,12 @@ export class Recording {
 
   /** What this canvas is not showing — the server's reasons, plus our own. */
   notes(): string[] {
-    const notes = (this.current?.notes ?? []).map(renderNote);
+    const notes = (this.current?.notes ?? []).map((id) => S.notes[id]);
     // What this browser is hiding is this browser's to say — the step cannot,
     // because the same step is read by a viewer who has the index on.
-    if (!this.view.showIndex) notes.push(renderNote({ id: 'indexHidden' }));
+    if (!this.view.showIndex) notes.push(S.notes.indexHidden);
     if (this.view.showUnreachable === false && this.current?.capabilities.fullLoad) {
-      notes.push(renderNote({ id: 'unreachableHidden' }));
+      notes.push(S.notes.unreachableHidden);
     }
     if (this.dropped > 0) {
       notes.push(S.status.stepsDropped(this.steps.length, this.dropped));

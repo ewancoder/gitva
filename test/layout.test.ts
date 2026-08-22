@@ -6,8 +6,8 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { assignLanes, layout, objectGraph, M } from '../src/layout.js';
-import { explain } from '../src/explain.js';
+import { assignLanes, layout, objectGraph, M } from '../web/layout.js';
+import { explain } from '../web/explain.js';
 import { DEFAULT_VIEW, type Commit, type Step, type View } from '../src/types.js';
 
 // The separator matters: without it `c1`, `c10` and `c100` all pad to the same

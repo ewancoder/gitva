@@ -34,7 +34,7 @@ and we do not improve on them.
 | **object** | blob, tree, commit, annotated tag. Content, addressed by its own hash. The sha is the key, the content is the value — which is why clicking one copies the sha: *a click hands you the key*. |
 | **pointer** | a name holding a sha, living **outside** any object, and **mutable**. Refs, HEAD, index entries. Change one and no hash anywhere changes — that is why a branch can move. |
 | **object graph** | objects, the links between them, and the pointers that root it. Reachability is defined from the pointers. The **index sits beside the object graph, not in it** — which is why staging something does not make it reachable. |
-| **commit DAG** | the commits and their parent links specifically. **Never "commit graph"** — `git commit-graph` is a cache file git actually maintains, and gitva detects it. |
+| **commit DAG** | the commits and their parent links specifically. **Never "commit graph"** — `git commit-graph` is a cache file git actually maintains, and `measure()` detects it — though nothing reads that any more. |
 | **unreachable** | git's own word, from `git fsck --unreachable`. A **state**, not a kind. |
 
 A **tree entry** and an **index entry** are the same mechanism — mode + name + sha — which is
@@ -90,7 +90,7 @@ Everything horizontal across the top is a **toolbar**, each named for its job, n
 |---|---|
 | **view toolbar** | repo name (the path is its tooltip), the recording's identifier — a click copies it — expand/collapse, index · unreachable · links from unreachable · names, then the light/dark toggle, help, settings and the language buttons in the corner. Everything in it is yours alone: the first group are `View` fields, and the rest open a dialog, change the words, or turn the ground over. Nothing here is posted anywhere, because there is nowhere to post it. |
 | **recording toolbar** | `reset view` · step back · pause · step forward · scrub · live · tally · what changed. `reset view` leads it, in its own group: it is the most-used control, and one button never earned a row of its own |
-| **notes toolbar** | what the canvas isn't showing, what gitva won't do to your repo, and why |
+| **notes toolbar** | what the canvas isn't showing, and why. Only that: a note names something the canvas is leaving out, never advice about the repository — gitva does not tell you to run `git gc`. |
 | **canvas** | the object graph |
 | **inspector** | what you selected: the full sha, the fields, the teaching text, the body |
 | **help** | a dialog holding two sections: **legend** and the keys |
@@ -169,29 +169,32 @@ dependency passes the one-sentence test in `INITIAL_DESIGN.md` §14.
 
 | | |
 |---|---|
-| `src/strings-en.ts` | **every user-facing string**: the toolbars, tooltips, help, teaching text, notes, what the CLI prints. `ui` is one flat entry per `data-t*` key in `web/index.html`; the rest is what code asks for by name, a string or an arrow function where a number sits in the sentence. |
-| `src/strings.ts` | the localization framework: `LANGUAGES` (the registry the buttons are drawn from), a loader per language, the live binding `S`, `setLanguage`, and `renderNote`. No language but English is loaded until it is chosen. |
-| `src/types.ts` | shared vocabulary: `Step`, `View`, `Capabilities`. Imported by both sides. |
+| `src/types.ts` | the seam: `Step`, `View`, `Capabilities`, `NOTE_IDS`. **The only file both halves hold.** |
 | `src/git.ts` | the **only** place that spawns git. Parsers, `measure`, `changeSignal`, `readStep`, `findUnreachable`, `readBody`. |
-| `src/layout.ts` | `layout(step, view, pins) → Scene`. Pure. Knows nothing about painting. |
-| `src/diff.ts` | `diffScenes` (what to flash), `describe` (the recording toolbar's change line). Pure. |
-| `src/explain.ts` | the inspector's facts, per `ShapeKind`; the wording is in `strings-en.ts`. Pure. |
-| `src/store.ts` | the recording on disk: where the system keeps it, `recordingKey` (the ten-character identifier, shown in the view toolbar), one file per key, load and save, and `FORMAT` — **bump it whenever a step stops meaning what it meant**, because a kept recording written under another number is dropped rather than half-drawn. Server-only. |
+| `src/store.ts` | the recording on disk: where the system keeps it, `recordingKey` (the ten-character identifier, shown in the view toolbar), one file per key, load and save, and `FORMAT` — **bump it whenever a step stops meaning what it meant**, because a kept recording written under another number is dropped rather than half-drawn. |
 | `src/server.ts` | `node:http`: static files, SSE `/events`, `GET /object`. **Nothing that writes** — there is no route a browser can reach that changes what is recorded. |
-| `src/cli.ts` | `parseArgs` (pure), `main`; opens the browser. Runs only when it *is* the command, so importing it for a test starts nothing. |
-| `web/` | `index.html` (all CSS), `recording.ts` (the recording: steps, cursor, view, pins — no DOM), `camera.ts` (where the object graph sits under the canvas — arithmetic only), `inspector.ts` (`inspectorModel` pure, then the elements), `render.ts` (canvas), `theme.ts`, `app.ts` (DOM, events, painting — and nothing else). |
+| `src/cli.ts` | `parseArgs` (pure), `main`, `HELP`; opens the browser. Runs only when it *is* the command, so importing it for a test starts nothing. |
+| `web/` | `index.html` (all CSS), `app.ts` (DOM, events, painting — and nothing else), `render.ts` (canvas), `layout.ts`, `diff.ts`, `explain.ts`, `recording.ts` (steps, cursor, view, pins — no DOM), `camera.ts` (arithmetic only), `inspector.ts`, `theme.ts`. |
+| `web/localization/` | `languages/en.ts` — **every string the browser shows**; `languages/ru.ts`; `strings.ts` (`Strings`, the shape a translation fills, read off `en`); `index.ts` (`LANGUAGES`, a loader per language, the live binding `S`, `setLanguage`). No language but English is loaded until it is chosen. |
 | `test/` | `fixture.ts` builds real repos with real plumbing, and `fakeStep` for what is said rather than what git did; the rest are `node:test`. `boundary.test.ts` is the split itself, enforced. |
 
-`src/*` is compiled to `dist/src` and served to the browser too — `web/app.ts` imports
-`../src/{diff,layout,types,explain}.js`. **Nothing under `src/` that the browser imports may
-touch `node:` builtins.** `git.ts`, `store.ts`, `server.ts` and `cli.ts` are server-only and never
-imported by `web/`.
+**`src/` is the server, `web/` is the browser, and `src/types.ts` is the one file both hold.**
+Everything the browser draws with — the layout, the diffing, the teaching text, the words — is
+in `web/`, compiled to `dist/web` and served from there. `src/types.ts` is served too, and must
+never touch a `node:` builtin. Nothing else in `src/` is servable, and nothing in `src/` may
+import from `web/`: the server has no viewer to ask what language a terminal is in, so what it
+prints is plain English written where it is printed (`HELP` in `cli.ts`, the `noRepo` message in
+`server.ts`).
+
+The static route serves `/web/…` and `/src/…` out of `dist/`, **subfolders included** — a module
+the page cannot fetch is a blank screen, and `server.test.ts` walks the page's whole import graph
+because no other test loads it.
 
 **`test/boundary.test.ts` is what holds that line**, because the compiler will not: an import of
 `git.js` from `web/` type-checks perfectly and fails at the first `node:child_process`. It lists
-every file in `src/` as shared or server-only — a new one there is a decision, so the table has to
-be edited — walks the imports out of `web/*` and `src/*`-shared, and asserts the one call the
-browser makes: `GET /object`, and nothing else, ever.
+every file in `src/` as server-only or seam — a new one there is a decision, so the table has to be
+edited — walks the imports out of `web/**` and the seam, asserts the server never reaches into
+`web/`, and asserts the one call the browser makes: `GET /object`, and nothing else, ever.
 
 `dist/` is build output and gitignored.
 
@@ -280,9 +283,13 @@ by faking the `Capabilities` object, not by building a huge repo.
 It must keep noticing a bare new object nothing points at, and an index rewrite — those are the
 first two things the tutorial teaches.
 
-**The words are the viewer's.** A step carries note **ids** — `{ id, args }`, `Note` in
-`types.ts` — never sentences, so the same recorded step reads in whatever language the browser
-holding it is set to, including a language added long after the step was recorded. The choice is
+**The words are the viewer's.** A step names its notes by **id** — `NoteId` in `src/types.ts` —
+never in words, so the same recorded step reads in whatever language the browser holding it is set
+to, including a language added long after the step was recorded. **An id and nothing else**: a
+note says *that* the index is elided, never *how many* entries it elided, so the browser looks it
+up exactly like every other string and there is no shape for the server to assemble. That is why
+there is no note type — if a server-chosen sentence ever needs a number in it again, the thing to
+write then is a message descriptor, and this is not one. The choice is
 a setting in `localStorage`, never posted: switching it changes nobody else's canvas, and
 needs no round trip because `web/*` already imports the strings module. `S` is a live binding, so
 nothing may cache a sentence — `setLanguage` swaps the words and the caller says everything
@@ -309,14 +316,14 @@ in the language the process was built with.
 
 ## Conventions
 
-- **No user-facing string is written anywhere but `src/strings-en.ts`.** `web/index.html` holds
+- **No string the browser shows is written anywhere but `web/localization/languages/en.ts`.** What the *server* prints is not localized and lives where it is printed. `web/index.html` holds
   keys — `data-t` for text, `data-t-title`, `data-t-placeholder`, and `data-t-html` for the
   handful that carry a `<kbd>` — and `web/app.ts` fills them in on load. `test/strings.test.ts`
   fails if a key has no string, if a string is unused, or if a `data-t-html` value smuggles in
   a tag other than `<kbd>`. New copy goes there and is reached through `S`; the strings module
   is pure data, so `src/` files the browser imports may use it freely. **A sentence never
-  crosses the wire**: what the server has to say about a step is a `Note` id plus its numbers,
-  and the browser makes the sentence — which is also why a count is passed raw and
+  crosses the wire**: what the server has to say about a step is a note id, and the browser makes
+  the sentence — which is also why a count the browser works out for itself is passed raw and
   `toLocaleString()`d where it is read.
 - Small, obvious code — the codebase is part of the teaching material. If an optimisation stops
   reading as an explanation of how git works, it has to justify itself.

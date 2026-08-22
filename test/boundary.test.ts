@@ -11,28 +11,20 @@
 
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
 const ROOT = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 
 /**
- * Every file in `src/`, and which half it is in. Listed by hand on purpose: a
- * new file there is a decision about whether the browser may hold it, and the
- * decision belongs in a table someone has to edit rather than in whatever the
- * imports happen to allow.
+ * `src/` is the server and `web/` is the browser. One file is held by both, and
+ * it is named here rather than worked out from the imports: a second one is a
+ * decision about widening the seam, and a decision belongs in a table someone
+ * has to edit.
  */
 const SERVER_ONLY = ['src/git.ts', 'src/store.ts', 'src/server.ts', 'src/cli.ts'];
-const SHARED = [
-  'src/types.ts',
-  'src/layout.ts',
-  'src/diff.ts',
-  'src/explain.ts',
-  'src/strings.ts',
-  'src/strings-en.ts',
-  'src/strings-ru.ts',
-];
+const SEAM = ['src/types.ts'];
 
 const source = (file: string) => readFileSync(join(ROOT, file), 'utf8');
 
@@ -79,20 +71,35 @@ function reachable(entry: string): { files: Set<string>; builtins: Map<string, s
   return { files, builtins };
 }
 
-const webFiles = readdirSync(join(ROOT, 'web'))
-  .filter((f) => f.endsWith('.ts'))
-  .map((f) => `web/${f}`);
+/** Every `.ts` under a directory, subfolders included — `web/localization/` is
+ *  served to a browser exactly as `web/app.ts` is. */
+const treeOf = (dir: string) =>
+  (readdirSync(join(ROOT, dir), { recursive: true }) as string[])
+    .map((f) => f.split(sep).join('/'))
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => `${dir}/${f}`);
+
+const webFiles = treeOf('web');
 
 describe('the line between the server and the browser', () => {
   it('classifies every file in src/, so a new one is a decision', () => {
-    const on = readdirSync(join(ROOT, 'src'))
-      .filter((f) => f.endsWith('.ts'))
-      .map((f) => `src/${f}`);
     assert.deepEqual(
-      on.slice().sort(),
-      [...SERVER_ONLY, ...SHARED].sort(),
-      'a file in src/ is either the browser’s to hold or the server’s alone — say which',
+      treeOf('src').sort(),
+      [...SERVER_ONLY, ...SEAM].sort(),
+      'a file in src/ is either the server’s alone or the seam both halves hold — say which',
     );
+  });
+
+  /**
+   * The direction that used to be impossible to get wrong, now that the words
+   * live in `web/`: the server printing a translated sentence would mean asking
+   * a viewer's browser what language a terminal is in.
+   */
+  it('never lets the server reach into the browser’s half', () => {
+    for (const entry of SERVER_ONLY) {
+      const reached = [...reachable(entry).files].filter((f) => f.startsWith('web/'));
+      assert.deepEqual(reached, [], `${entry} reaches into web/`);
+    }
   });
 
   it('never lets the browser reach the half that spawns git or writes the recording', () => {
@@ -115,8 +122,8 @@ describe('the line between the server and the browser', () => {
     }
   });
 
-  it('keeps the shared half free of the server, so it stays servable', () => {
-    for (const shared of SHARED) {
+  it('keeps the seam free of the server, so it stays servable', () => {
+    for (const shared of SEAM) {
       const { files, builtins } = reachable(shared);
       assert.deepEqual([...builtins.keys()], [], `${shared} is shared and must hold no builtin`);
       for (const server of SERVER_ONLY) assert.ok(!files.has(server), `${shared} reaches ${server}`);

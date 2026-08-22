@@ -12,9 +12,9 @@
  * gestures make is in `recording.ts` and `camera.ts`, where it is tested.
  */
 
-import { diffScenes, isVisible, describe, EMPTY_CHANGE, type Change } from '../src/diff.js';
-import { layout, M, type Scene, type Shape } from '../src/layout.js';
-import { language, LANGUAGES, S, setLanguage } from '../src/strings.js';
+import { diffScenes, isVisible, describe, EMPTY_CHANGE, type Change } from './diff.js';
+import { layout, M, type Scene, type Shape } from './layout.js';
+import { language, LANGUAGES, S, setLanguage } from './localization/index.js';
 import type { Step } from '../src/types.js';
 import { bounded, centre, fit, glideStep, refit, toCanvas, zoom, zoomOut, type Camera } from './camera.js';
 import { renderInspector } from './inspector.js';

@@ -9,8 +9,8 @@
  */
 
 import type { Scene } from './layout.js';
-import { S } from './strings.js';
-import type { Step } from './types.js';
+import { S } from './localization/index.js';
+import type { Step } from '../src/types.js';
 
 export interface Change {
   added: Set<string>;

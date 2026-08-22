@@ -1,7 +1,13 @@
+/** AI-assisted. */
 /**
- * English. **Every user-facing string lives here** — the toolbars, the
- * tooltips, the help, the teaching text, the notes, what the CLI prints.
- * Nothing here is code you have to understand: it is text you can rewrite.
+ * English. **Every string the browser shows lives here** — the toolbars, the
+ * tooltips, the help, the teaching text, the notes. Nothing here is code you
+ * have to understand: it is text you can rewrite.
+ *
+ * What the *server* prints is not here and is not translated: it goes to a
+ * terminal the viewer never sees, in a process with no way to be told which
+ * language to use. Those sentences sit in `src/cli.ts` and `src/server.ts`,
+ * where they are printed.
  *
  * Two shapes, and only two:
  *
@@ -13,9 +19,9 @@
  *             between the backticks and leave the `${...}` holes where they
  *             are, though you may reorder them.
  *
- * To add a language: copy this file to `src/strings-<code>.ts`, translate the
- * right-hand sides, and register it in `src/strings.ts`. The type comes from
- * this file, so a translation that forgets an entry fails the build.
+ * To add a language: copy this file to `src/localization/languages/<code>.ts`, translate
+ * the right-hand sides, and register it in `src/localization/index.ts`. The
+ * type comes from this file, so a forgotten entry fails the build.
  *
  * Keep the vocabulary in CLAUDE.md: object, pointer, tree, blob, commit,
  * index, unreachable are git's own words, and gitva does not improve on them.
@@ -169,19 +175,14 @@ export const en = {
   // The notes toolbar: what the canvas is not showing, and why
   // -------------------------------------------------------------------------
   notes: {
-    noUnreachableDetection: (objects: number) =>
-      `Unreachable detection is off: repository is too big - ${objects.toLocaleString()} objects`,
-    indexElided: (shown: number, total: number) =>
-      `Index: showing the ${shown} entries that differ from HEAD, of ${total} staged paths.`,
-    more: (shown: number) => `Showing the newest ${shown} commits — older history is not drawn.`,
-    refsOutside: (n: number) => `${n} refs point outside this window and are left out.`,
+    noUnreachableDetection:
+      'Unreachable detection is off — this repository has too many objects for it.',
+    indexElided: 'The index is showing only the entries that differ from HEAD.',
+    more: 'Showing the newest commits — older history is not drawn.',
+    refsOutside: 'Some refs point outside this window and are left out.',
     indexHidden: 'The index is hidden.',
     unreachableHidden:
       'Unreachable objects are hidden — they are still in the object database.',
-    noCommitGraph:
-      'This repo has no commit-graph. `git commit-graph write --reachable` would make walking history much faster — gitva will not write it for you.',
-    looseObjects: (loose: number) =>
-      `${loose.toLocaleString()} loose objects. \`git gc\` would pack them — gitva will not run it for you.`,
     bodiesOnSelection:
       'Object contents are fetched when you select something.',
   },
@@ -295,38 +296,5 @@ export const en = {
   /** The buttons in the corner. A language names itself; this says what one does. */
   language: {
     switchTo: (name: string) => `Show gitva in ${name}`,
-  },
-
-  // -------------------------------------------------------------------------
-  // The terminal, and the one trouble the browser is told about in words
-  // -------------------------------------------------------------------------
-  cli: {
-    help: (version: string) => `gitva ${version} — the visual anatomy of git
-
-usage: gitva [repo] [options]
-
-  repo                  the repository to watch (default: the directory you are in)
-
-options:
-  --port N              listen on port N (default: a free one the OS picks)
-  --serve [HOST:PORT]   bind every interface, not just loopback, so viewers can
-                        watch (default 0.0.0.0:4200) — there is no authentication
-  --no-open             do not open a browser
-  --learning            start with every commit expanded, for showing to viewers
-  --id NAME             file the recording under NAME instead of the folder's path
-  --fresh               throw the kept recording away and start it at the
-                        repository as it is now
-  -h, --help            print this
-  -v, --version         print the version
-
-gitva never writes to the repository it watches.
-https://github.com/ewancoder/gitva
-`,
-    watching: (repo: string, url: string) => `gitva watching ${repo}\n${url}\n`,
-    serving: (host: string, port: number) =>
-      `serving ${host}:${port} to the network — no auth\n`,
-  },
-  server: {
-    noRepo: (path: string) => `no repository at ${path} yet — waiting for \`git init\``,
   },
 };
