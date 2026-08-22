@@ -238,6 +238,19 @@ describe('what is folded', () => {
     late.arrive(two, SHUT, true);
     assert.deepEqual(late.view.expanded, two.window.commits);
   });
+
+  // The stream reconnects on its own, so `--learning` is said again every time
+  // it does. A viewer who turned the links from unreachable off and reloaded
+  // must not have them put back up under them, over and over, all session.
+  it('leaves the links from unreachable as you last left them, demonstration or not', () => {
+    const t = new Tape();
+    t.presenting(true, false);
+    assert.equal(t.view.showCrossLinks, false, 'the flag overruled an answer already given');
+
+    const asked = new Tape();
+    asked.presenting(false, true);
+    assert.equal(asked.view.showCrossLinks, true, 'a kept answer was dropped');
+  });
 });
 
 describe('what the header says', () => {

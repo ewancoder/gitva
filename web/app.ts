@@ -51,6 +51,10 @@ function copied(oid: string, said = oid.slice(0, 7)) {
 interface Prefs {
   language: string;
   showIndex: boolean;
+  showUnreachable: boolean;
+  /** `null` until you have said: `--learning` puts the links from unreachable
+   *  up before anyone asks, and must not keep overruling an answer you gave. */
+  showCrossLinks: boolean | null;
   centreOnClick: boolean;
   openNewCommits: boolean;
   refitOnChange: boolean;
@@ -62,6 +66,8 @@ interface Prefs {
 const prefs: Prefs = {
   language: 'en',
   showIndex: true,
+  showUnreachable: true,
+  showCrossLinks: null,
   centreOnClick: false,
   openNewCommits: true,
   refitOnChange: true,
@@ -204,6 +210,8 @@ tape.answers = JSON.parse(localStorage.getItem('gitva.folds') ?? '{}');
 tape.view = {
   ...tape.view,
   showIndex: prefs.showIndex,
+  showUnreachable: prefs.showUnreachable,
+  showCrossLinks: prefs.showCrossLinks ?? tape.view.showCrossLinks,
   folded: JSON.parse(localStorage.getItem('gitva.trees') ?? '[]'),
 };
 const saveFolds = () => {
@@ -233,15 +241,17 @@ let enterAt = -1e9;
 let exitMs = theme.duration;
 let camera: Camera = { x: 24, y: 24, scale: 1 };
 let hover: string | null = null;
-let selected: string | null = null;
+let selected: string | null = localStorage.getItem('gitva.selected');
 /** The step the change line was worked out from, so it can be said again in
  *  another language without the recording moving. */
 let shownFrom: Snapshot | null = null;
 /** The last click, waiting to see whether a second one joins it. */
 let lastClick: Click | null = null;
 
-/** Objects marked by right-click, kept by sha until right-clicked again. */
-const marked = new Set<string>();
+/** Objects marked by right-click, kept by sha until right-clicked again — and
+ *  across a reload, because a mark is an answer you gave, like a pin. */
+const marked = new Set<string>(JSON.parse(localStorage.getItem('gitva.marks') ?? '[]'));
+const saveMarks = () => localStorage.setItem('gitva.marks', JSON.stringify([...marked]));
 
 // ---------------------------------------------------------------------------
 // Painting on demand — sitting still costs no CPU at all
@@ -353,6 +363,8 @@ function redressed() {
  *  everything the new view needs, which is what keeps the view yours. */
 function drawView() {
   prefs.showIndex = tape.view.showIndex;
+  prefs.showUnreachable = tape.view.showUnreachable !== false;
+  prefs.showCrossLinks = tape.view.showCrossLinks === true;
   savePrefs();
   saveFolds();
   relayout(true, false);
@@ -399,7 +411,7 @@ source.addEventListener('snapshot', (e) => {
  *  with `gitva --id <it>`. */
 source.addEventListener('recording', (e) => {
   const { id, learning } = JSON.parse((e as MessageEvent).data) as { id: string; learning: boolean };
-  tape.presenting(learning);
+  tape.presenting(learning, prefs.showCrossLinks);
   const el = $('recording-id');
   el.textContent = id;
   el.onclick = () => copied(id, id);
@@ -672,6 +684,8 @@ canvas.addEventListener('pointerup', (e) => {
     return;
   }
   selected = id;
+  if (id) localStorage.setItem('gitva.selected', id);
+  else localStorage.removeItem('gitva.selected');
   renderPanel(panel, tape.current, node);
   // Anything with a sha is a key in the key-value store, so a click hands you
   // the key: the whole point is that you can paste it into the next command.
@@ -693,6 +707,7 @@ canvas.addEventListener('contextmenu', (e) => {
   // eye on this", and that is the same wish whether the thing is a commit, a
   // blob, a branch or a staged path.
   if (!marked.delete(hit.id)) marked.add(hit.id);
+  saveMarks();
   schedule();
 });
 

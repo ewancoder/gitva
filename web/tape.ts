@@ -38,10 +38,16 @@ export class Tape {
 
   /** What the presenter said on the command line, heard once on connecting.
    *  `--learning` also puts the links out of the unreachable up before anyone
-   *  asks: in a demonstration the orphans are the point. */
-  presenting(learning: boolean) {
+   *  asks: in a demonstration the orphans are the point.
+   *
+   *  `yours` is what this browser kept, `null` if it has never been asked. It
+   *  wins, because *before anyone asks* is exactly what the flag says: an answer
+   *  you gave must not be overruled by every reconnection for the rest of the
+   *  session. */
+  presenting(learning: boolean, yours: boolean | null = null) {
     this.learning = learning;
-    if (learning) this.view = { ...this.view, showCrossLinks: true };
+    if (yours !== null) this.view = { ...this.view, showCrossLinks: yours };
+    else if (learning) this.view = { ...this.view, showCrossLinks: true };
   }
 
   /** Every tree ever read, across every state. An object *is* its contents, so
