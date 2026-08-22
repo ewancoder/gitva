@@ -60,6 +60,7 @@ are the only things that move. That is the difference between `git commit --amen
 | **state** | a condition a shape is in: **staged**, **unreachable**, **conflicted**, plus the two you create — **marked** and **pinned**. |
 | **step** | one entry in the recording. **Only git causes a step** — expanding, collapsing and the toggles redraw in place and add nothing. A step is what git did; a view is how you look at it, and a step carries everything any view could draw. |
 | **recording** | the server's list of steps. Written by the server, shared by every viewer, read-only to them. |
+| **view** | how one browser is looking at the recording: what is expanded, what is folded, the toggles, the marks, the pins, the camera. **Yours alone.** It is made in the browser, lives in the browser and is never sent anywhere — `View` in `types.ts` has no route to the server, so changing yours cannot change anyone else's, and cannot make the server ask git anything. That is why gitva stays read-only and you can still rearrange everything on screen. |
 
 **Never `node`.** It makes a false claim — a branch chip is not a node in the object graph, and
 that is the one thing about branches worth understanding. Never `arrow` or `edge` for a link
@@ -103,8 +104,7 @@ and a committer.
 
 **Shared or yours:** *the repository is shared, the view is yours.* Every viewer sees the same
 steps, because that is what git did. Nobody sees your filter, your expansions, your marks, your
-pins, or your camera. (Today the server holds one shared `view` and broadcasts it — see Known
-open work.)
+pins, or your camera.
 
 ### Old term → new term
 
