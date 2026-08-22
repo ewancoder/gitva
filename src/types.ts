@@ -86,27 +86,14 @@ export interface Capabilities {
 }
 
 /**
- * Filtering — chosen branches, or a search — is off. The server holds one
- * shared `view` and broadcasts every rebuild, so one viewer's question rewrites
- * every other viewer's canvas, and the rule is *the repository is shared, the
- * view is yours* (CLAUDE.md, Known open work). The code stays: flip this once
- * each browser can ask its own question, or behind a flag.
- */
-export const QUESTIONS_ENABLED = false;
-
-export type Question =
-  | { kind: 'all' }
-  | { kind: 'refs'; refs: string[] }
-  | { kind: 'search'; text: string; in: 'message' | 'author' | 'path' | 'content' };
-
-/**
- * The one architectural idea. The browser never holds the repository, it holds
- * a view: a question, how much of the answer, what's been opened, and whether
- * the index is part of the answer at all.
+ * The one architectural idea: **a step is what git did, a view is how you look
+ * at it.** A view is drawing decisions and nothing else — what is expanded,
+ * what is drawn at all — it lives in the browser holding it, and it is never
+ * sent anywhere. No viewer can change what any other viewer sees, and no view
+ * can make the server go and ask git something: everything a view needs is
+ * already in the step.
  */
 export interface View {
-  question: Question;
-  limit: number;
   expanded: Oid[];
   /** Trees the reader closed. Trees arrive open — a commit you opened is a
    *  promise to show what is in it — so this is the folded ones, not the open
@@ -115,10 +102,6 @@ export interface View {
   showIndex: boolean;
   /** Orphans are half the lesson, so they are drawn unless asked otherwise. */
   showUnreachable?: boolean;
-  /** `--learning`: commits arrive already open. A room watching a demo should
-   *  all see the same picture, including whoever opens the page late, without
-   *  anyone having to unfold anything. */
-  learning?: boolean;
   /** Arrows from an orphaned object to things that are still reachable — a
    *  tree's entries, and a discarded commit's parent. They cross the picture,
    *  so they are asked for rather than assumed. */
@@ -129,9 +112,11 @@ export interface View {
  *  browser holds the tape; sharing the number makes them forget together. */
 export const TAPE_CAP = 400;
 
+/** How many commits a step carries. Fixed for the run: a step holds everything
+ *  a view could want to draw, so there is nothing for a browser to page in. */
+export const COMMIT_WINDOW = 120;
+
 export const DEFAULT_VIEW: View = {
-  question: { kind: 'all' },
-  limit: 120,
   expanded: [],
   folded: [],
   showIndex: true,
@@ -140,8 +125,8 @@ export const DEFAULT_VIEW: View = {
 };
 
 export interface Snapshot {
-  /** Which state of the repository this is. Two answers to the same state — a
-   *  fold, a filter, a wider window — share a number, and are not a step. */
+  /** Which state of the repository this is. Only git makes one: nothing a
+   *  viewer does is a step, because nothing a viewer does reaches here. */
   seq: number;
   time: number;
   repo: string;
@@ -167,7 +152,6 @@ export interface Snapshot {
     more: boolean;
     refsOutside: number;
   };
-  view: View;
   /** What the canvas is not showing, and why. Always shown, out loud. */
   notes: Note[];
 }

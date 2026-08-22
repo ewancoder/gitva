@@ -1,54 +1,12 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { ensureFirstSnapshot, record, sanitise, sanitiseQuestion, serve, type Server } from '../src/server.js';
+import { ensureFirstSnapshot, record, serve, type Server } from '../src/server.js';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { plumbedRepo, fakeState, type Repo } from './fixture.js';
-import { DEFAULT_VIEW, TAPE_CAP, type Snapshot } from '../src/types.js';
-
-describe('the view arriving from the browser', () => {
-  it('falls back to everything when it makes no sense', () => {
-    assert.deepEqual(sanitise({ question: { kind: 'nonsense' } }).question, { kind: 'all' });
-    assert.equal(sanitise(null).limit, 120);
-  });
-  it('asks for everything however hard the browser asks for a filter', () => {
-    // One shared view: a question from one viewer would rewrite every canvas.
-    assert.deepEqual(sanitise({ question: { kind: 'search', text: 'a', in: 'content' } }).question, { kind: 'all' });
-    assert.deepEqual(sanitise({ question: { kind: 'refs', refs: ['refs/heads/main'] } }).question, { kind: 'all' });
-  });
-  it('refuses a ref name that is not one', () => {
-    // A name beginning with a dash would reach `rev-list` as an option.
-    assert.deepEqual(sanitiseQuestion({ kind: 'refs', refs: ['--objects', '-n1'] }), {
-      kind: 'refs',
-      refs: [],
-    });
-    assert.deepEqual(sanitiseQuestion({ kind: 'refs', refs: ['refs/heads/ok', '; rm -rf /'] }), {
-      kind: 'refs',
-      refs: ['refs/heads/ok'],
-    });
-  });
-  it('keeps a search inside what the plumbing will take', () => {
-    const q = sanitiseQuestion({ kind: 'search', text: 'x'.repeat(500), in: 'sausage' as 'message' });
-    assert.deepEqual(q, { kind: 'search', text: 'x'.repeat(200), in: 'message' });
-    assert.equal(sanitiseQuestion({ kind: 'search', text: 'a', in: 'content' }).kind, 'search');
-    assert.deepEqual(sanitiseQuestion(undefined), { kind: 'all' });
-  });
-
-  it('refuses an oid that is not one, and clamps the window', () => {
-    assert.deepEqual(sanitise({ expanded: ['abc123', 'not an oid'] }).expanded, ['abc123']);
-    assert.deepEqual(sanitise({ folded: ['abc123', 'rm -rf /'] }).folded, ['abc123']);
-    assert.equal(sanitise({ limit: 1e9 }).limit, 1_000_000);
-    assert.equal(sanitise({ limit: Number.MAX_SAFE_INTEGER }).limit, 1_000_000);
-    assert.equal(sanitise({ limit: -4 }).limit, 1);
-  });
-
-  it('carries --learning back and forth with the view the browser hands over', () => {
-    assert.equal(sanitise({ learning: true }).learning, true);
-    assert.equal(sanitise({}).learning, false);
-  });
-});
+import { TAPE_CAP, type Snapshot } from '../src/types.js';
 
 /** The snapshots off an event stream, one frame at a time. `quietMs` ends it
  *  when nothing more arrives, which is how a test asserts that nothing did. */
@@ -131,18 +89,20 @@ describe('the server', () => {
     assert.equal((await fetch(`${base}object?oid=../../etc/passwd`)).status, 400);
   });
 
-  it('numbers states of the repository, not answers to questions', async () => {
+  // A step is what git did, and only git makes one. There is no route a browser
+  // can reach that changes what is recorded — the view it draws with is its own,
+  // and every step already carries everything that view could ask about.
+  it('numbers steps of the repository, and takes nothing from a browser', async () => {
     const res = await fetch(base + 'events');
     const stream = snapshots(res);
     const a = (await stream.next()).value;
 
-    // A different question of the same repository is not a step.
-    await fetch(base + 'view', { method: 'POST', body: JSON.stringify({ limit: 3 }) });
-    const b = (await stream.next()).value;
-    assert.equal(b.seq, a.seq);
-    assert.equal(b.view.limit, 3);
+    for (const method of ['POST', 'GET']) {
+      const said = await fetch(base + 'view', { method, body: method === 'POST' ? '{}' : undefined });
+      assert.equal(said.status, 404, `no ${method} /view to change anyone's canvas with`);
+    }
 
-    // A new object is.
+    // A new object is a step, and the only kind of thing that is.
     repo.write('e.txt', 'epsilon\n');
     repo.git('hash-object', '-w', 'e.txt');
     const c = (await stream.next()).value;
@@ -150,43 +110,32 @@ describe('the server', () => {
     await stream.return(undefined);
   });
 
-  // Questions that pile up while one is being answered coalesce, so an
-  // intermediate one may never be drawn — but the newest one always is.
-  it('answers the newest question asked while it is busy answering one', async () => {
-    const res = await fetch(base + 'events');
-    const stream = snapshots(res);
-    await stream.next();
-
-    await Promise.all(
-      [7, 9].map((limit) =>
-        fetch(base + 'view', { method: 'POST', body: JSON.stringify({ limit }) }),
-      ),
-    );
-    let frame = (await stream.next()).value;
-    while (frame.view.limit !== 9) frame = (await stream.next()).value;
-    assert.equal(frame.view.limit, 9);
-    await stream.return(undefined);
-  });
-
-  it('takes a new view', async () => {
-    const res = await fetch(base + 'view', {
-      method: 'POST',
-      body: JSON.stringify({ question: { kind: 'all' }, limit: 2, expanded: [], showIndex: false }),
-    });
-    assert.equal(res.status, 204);
+  it('says what went wrong rather than dying, when the object asked for is not there', async () => {
+    const missing = await fetch(base + 'object?oid=' + 'd'.repeat(40));
+    assert.equal(missing.status, 500);
+    // And it is still serving afterwards.
+    assert.equal((await fetch(base)).status, 200);
   });
 
   it('404s a file that is inside a served root but is not there', async () => {
     assert.equal((await fetch(base + 'web/nothing-like-this.js')).status, 404);
   });
-
-  it('says so rather than dying when the browser posts nonsense', async () => {
-    const res = await fetch(base + 'view', { method: 'POST', body: 'not json' });
-    assert.equal(res.status, 500);
-    // And it is still serving afterwards.
-    assert.equal((await fetch(base)).status, 200);
-  });
 });
+
+/** What the stream says about the run itself, before any step. */
+async function recordingFrame(port: number): Promise<{ id: string; learning: boolean }> {
+  const res = await fetch(`http://127.0.0.1:${port}/events`);
+  const reader = res.body!.getReader();
+  let buf = '';
+  let found: RegExpExecArray | null = null;
+  while (!(found = /event: recording\ndata: (.*)\n/.exec(buf))) {
+    const { value, done } = await reader.read();
+    if (done) assert.fail('the stream said nothing about the recording');
+    buf += new TextDecoder().decode(value);
+  }
+  await reader.cancel();
+  return JSON.parse(found[1]);
+}
 
 describe('a repository that moves under the server', () => {
   it('does not count the first state twice when the poller answers first', async () => {
@@ -228,15 +177,22 @@ describe('a repository that moves under the server', () => {
     }
   });
 
-  it('has the cross links up already under --learning', async () => {
+  // `--learning` is a fact about the run, not about a step: the presenter said
+  // it, every viewer hears it once on connecting, and a step scrubbed back to
+  // does not un-say it.
+  it('tells a browser that this run is a demonstration', async () => {
     const repo = plumbedRepo();
+    const plain = await serve(repo.dir, 0);
+    try {
+      assert.equal((await recordingFrame(plain.port)).learning, false);
+    } finally {
+      await plain.close();
+    }
     const server = await serve(repo.dir, 0, '127.0.0.1', true);
     try {
-      const res = await fetch(`http://127.0.0.1:${server.port}/events`);
-      const stream = snapshots(res);
-      const first = (await stream.next()).value;
-      assert.equal(first.view.showCrossLinks, true);
-      await stream.return(undefined);
+      const frame = await recordingFrame(server.port);
+      assert.equal(frame.learning, true);
+      assert.ok(frame.id.length > 0, 'and which recording it is');
     } finally {
       await server.close();
       repo.dispose();
@@ -339,19 +295,9 @@ describe('the history everyone shares', () => {
   const heavy = (seq: number, mb: number) =>
     state(seq, { notes: [{ id: 'more', args: ['x'.repeat(mb << 20)] }] });
 
-  it('replaces the top rather than stepping when the same state is asked a different question', () => {
-    const history: string[] = [];
-    record(history, state(1), true);
-    record(history, state(1, { view: { ...DEFAULT_VIEW, limit: 3 } }), false);
-    assert.equal(history.length, 1);
-    assert.equal(JSON.parse(history[0]).view.limit, 3);
-    record(history, state(2), true);
-    assert.deepEqual(seqs(history), [1, 2]);
-  });
-
   it('forgets the oldest states at the same cap the browser’s tape uses', () => {
     const history: string[] = [];
-    for (let seq = 1; seq <= TAPE_CAP + 5; seq++) record(history, state(seq), true);
+    for (let seq = 1; seq <= TAPE_CAP + 5; seq++) record(history, state(seq));
     assert.equal(history.length, TAPE_CAP);
     assert.equal(seqs(history)[0], 6);
   });
@@ -362,10 +308,10 @@ describe('the history everyone shares', () => {
   // that has just opened.
   it('forgets sooner than that when the states are heavy enough to be unpleasant', () => {
     const history: string[] = [];
-    for (const seq of [1, 2, 3]) record(history, heavy(seq, 6), true);
+    for (const seq of [1, 2, 3]) record(history, heavy(seq, 6));
     assert.deepEqual(seqs(history), [2, 3], 'the tail was not trimmed to what fits');
 
-    record(history, heavy(4, 20), true);
+    record(history, heavy(4, 20));
     assert.deepEqual(seqs(history), [4], 'a state too big to fit on its own still has to be sent');
   });
 
@@ -622,45 +568,27 @@ describe('a recording that outlives the process', () => {
     return JSON.parse(found[1]) as Snapshot[];
   }
 
-  // The bug this exists for: a step carries the view it was answered under, so
-  // a resumed recording used to answer with the *last* run's view. Restarting
-  // with `--learning` opened nothing, restarting without it left everything
-  // open, and clicking `clear` was the only way to change your mind — because
-  // clearing rebuilds and rebuilding stamps the current view on.
-  it('answers a kept recording with this run\'s view, not the one it was recorded under', async () => {
+  // The bug this exists for: a step used to carry the view it was answered
+  // under, so a resumed recording answered with the *last* run's view, and
+  // restarting was the only way to change your mind. A step carries no view at
+  // all now — it is what git did — so a kept recording is handed over exactly
+  // as it was kept, whatever this run's flags say.
+  it('hands a kept recording over untouched, and says separately what this run is', async () => {
     const repo = plumbedRepo();
     try {
       const plain = await serve(repo.dir, 0);
       const before = await watch(plain.port);
-      assert.equal(before.at(-1)!.view.learning, false);
       await plain.close();
 
       const learning = await serve(repo.dir, 0, '127.0.0.1', true);
-      const kept = await historyOf(learning.port);
-      // Answered again, not recorded again: restarting is still not a step.
-      assert.equal(kept.length, before.length);
-      assert.equal(kept.at(-1)!.seq, before.at(-1)!.seq);
-      assert.equal(kept.at(-1)!.view.learning, true);
-      assert.equal(kept.at(-1)!.view.showCrossLinks, true, 'links from unreachable, the same way');
-      await learning.close();
-
-      // And back the other way: without the flag, nothing arrives expanded
-      // because the last run said it should.
-      const again = await serve(repo.dir, 0);
-      const back = await historyOf(again.port);
-      assert.equal(back.at(-1)!.view.learning, false);
-      assert.equal(back.at(-1)!.view.showCrossLinks, false);
-
-      // It is not only the flags: every part of the view is this run's. A
-      // window a browser widened last time is not one this run has asked for.
-      await fetch(`http://127.0.0.1:${again.port}/view`, { method: 'POST', body: JSON.stringify({ limit: 3 }) });
-      await again.close();
-
-      const fresh = await serve(repo.dir, 0);
       try {
-        assert.equal((await historyOf(fresh.port)).at(-1)!.view.limit, DEFAULT_VIEW.limit);
+        const kept = await historyOf(learning.port);
+        // Not re-answered and not re-recorded: restarting is not a step.
+        assert.deepEqual(kept.map((s) => s.seq), before.map((s) => s.seq));
+        assert.deepEqual(kept.at(-1), before.at(-1));
+        assert.equal((await recordingFrame(learning.port)).learning, true);
       } finally {
-        await fresh.close();
+        await learning.close();
       }
     } finally {
       repo.dispose();

@@ -56,7 +56,6 @@ function fakeSnapshot(commits: Record<string, string[]>, extra: Partial<Snapshot
       limits: { fullLoad: 60_000, indexNodes: 400 },
     },
     window: { commits: order.map(oid), totalCommits: order.length, more: false, refsOutside: 0 },
-    view: DEFAULT_VIEW,
     notes: [],
     ...extra,
   };
@@ -298,20 +297,14 @@ describe('the scene', () => {
     assert.ok(facts.some(([k, v]) => k === 'contains' && v === oid('c')));
   });
 
-  it('draws a parent outside the window as an arrow into "history continues"', () => {
+  // There is nothing to draw a parent outside the window *to*, and no button to
+  // load it with: the window is the run's, fixed when the step was made, and
+  // the notes toolbar is where the rest of the history is admitted to.
+  it('draws no link to a parent outside the window', () => {
     const s = fakeSnapshot({ c: ['b'], b: ['gone'] });
     const scene = layout(s, DEFAULT_VIEW);
-    assert.ok(scene.nodes.some((n) => n.kind === 'more'));
-    assert.ok(scene.edges.some((e) => e.from === oid('b') && e.to === 'more'));
     assert.ok(!scene.edges.some((e) => e.to === oid('gone')), 'never an edge to a node that is not there');
-  });
-
-  it('offers no "history continues" under a search — those parents did not match', () => {
-    const view = { ...DEFAULT_VIEW, question: { kind: 'search', text: 'x', in: 'content' } as const };
-    const s = fakeSnapshot({ c: ['b'], b: ['gone'] }, { view });
-    const scene = layout(s, view);
-    assert.ok(!scene.nodes.some((n) => n.kind === 'more'));
-    assert.ok(!scene.edges.some((e) => e.to === 'more'));
+    assert.equal(scene.edges.filter((e) => e.kind === 'parent').length, 1);
   });
 
   it('puts HEAD outside the ref it names, pointing at it', () => {

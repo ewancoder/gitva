@@ -14,7 +14,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_VIEW, type Snapshot } from '../src/types.js';
+import type { Snapshot } from '../src/types.js';
 
 // Every test process gets its own, and takes it away again.
 process.env.GITVA_STATE_DIR ??= mkdtempSync(join(tmpdir(), 'gitva-state-'));
@@ -128,7 +128,6 @@ export function fakeState(extra: Partial<Snapshot> = {}): Snapshot {
       limits: { fullLoad: 60_000, indexNodes: 400 },
     },
     window: { commits: [], totalCommits: 0, more: false, refsOutside: 0 },
-    view: DEFAULT_VIEW,
     notes: [],
     ...extra,
   };

@@ -27,17 +27,6 @@ export const en = {
   // -------------------------------------------------------------------------
   ui: {
     'recording-id.title': 'Unique ID of a repository recording. Click to copy: `gitva --id ID` picks the same recording up from anywhere',
-    'question.title': 'filter objects',
-    'question.all': 'everything',
-    'question.branches': 'branches…',
-    'question.message': 'search: message',
-    'question.author': 'search: author',
-    'question.path': 'search: path',
-    'question.content': 'search: content',
-    'search.placeholder': 'search',
-
-    'load-all': 'load all commits',
-    'load-all.title': 'Load the whole history of commits',
     'expand-all': 'expand all',
     'expand-all.title': 'Expand every commit and tree (double-click a commit/tree to expand/collapse)',
     'collapse-all': 'collapse all',
@@ -110,7 +99,7 @@ export const en = {
   },
 
   // -------------------------------------------------------------------------
-  // The canvas: column labels, and the block that loads the rest of history
+  // The canvas: the column labels, and what a shape says about itself
   // -------------------------------------------------------------------------
   canvas: {
     bands: {
@@ -123,11 +112,6 @@ export const en = {
     tagPrefix: 'tag: ',
     /** A collapsed tree looks like an empty one, so it says how much it holds. */
     heldBack: (entries: number) => `tree +${entries}`,
-    more: {
-      label: 'load more history',
-      of: (shown: number, total: number) => `${shown} of ${total} commits`,
-      shown: (shown: number) => `${shown} commits shown`,
-    },
   },
 
   // -------------------------------------------------------------------------
@@ -187,10 +171,9 @@ export const en = {
   notes: {
     noUnreachableDetection: (objects: number) =>
       `Unreachable detection is off: repository is too big - ${objects.toLocaleString()} objects`,
-    treesOnDemand: 'Trees load only for the commits you expand',
     indexElided: (shown: number, total: number) =>
       `Index: showing the ${shown} entries that differ from HEAD, of ${total} staged paths.`,
-    more: (shown: number) => `Showing ${shown} commits — click "load more history" for the rest.`,
+    more: (shown: number) => `Showing the newest ${shown} commits — older history is not drawn.`,
     refsOutside: (n: number) => `${n} refs point outside this window and are left out.`,
     indexHidden: 'The index is hidden.',
     unreachableHidden:
@@ -305,11 +288,6 @@ export const en = {
         title: 'Index entry',
         what: 'The index is a single binary file listing the paths that will go into the next commit, each with a blob sha and a mode. It is the only place a half-staged change exists: not in the working tree, not in any object. Staging writes here; committing turns it into a tree.',
         made: 'git update-index --add <path>',
-      },
-      more: {
-        title: 'Load more history',
-        what: 'These commits have parents that are real, but outside the window gitva asked for. The link is drawn honestly into here rather than pointing at an object that is not on screen. Click this block to load the rest of the history.',
-        made: 'git rev-list -n <more>',
       },
     },
   },

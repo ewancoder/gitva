@@ -10,7 +10,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { after, describe, it } from 'node:test';
-import { lastSeq, loadRecording, recordingFile, recordingKey, saveRecording, stateDir } from '../src/store.js';
+import { FORMAT, lastSeq, loadRecording, recordingFile, recordingKey, saveRecording, stateDir } from '../src/store.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'gitva-store-'));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -77,15 +77,34 @@ describe('keeping the recording', () => {
     writeFileSync(bad, '{"signal":"a","steps":[{"seq":1}');
     assert.deepEqual(await loadRecording(bad), { signal: '', steps: [] });
     // Written by something that meant something else by the same filename.
-    writeFileSync(bad, '{"signal":"a"}');
+    writeFileSync(bad, `{"format":${FORMAT},"signal":"a"}`);
     assert.deepEqual(await loadRecording(bad), { signal: '', steps: [] });
     // Steps and no signal is not nonsense: it means every step is still there
     // and the repository has to be looked at again to know where it stands.
-    writeFileSync(bad, '{"steps":[{"seq":4}]}');
+    writeFileSync(bad, `{"format":${FORMAT},"steps":[{"seq":4}]}`);
     assert.deepEqual(await loadRecording(bad), { signal: '', steps: ['{"seq":4}'] });
     // A recording that never began is step zero, not step NaN.
     assert.equal(lastSeq([]), 0);
     assert.equal(lastSeq(['{}']), 0);
+  });
+
+  // The steps are the same JSON either way, so nothing here can tell an old
+  // step from a new one by looking at it. Under format 1 a step on a repository
+  // too big to hold whole carried only the trees the one shared view had
+  // expanded, and expanding a commit in one of those steps would now draw
+  // nothing at all: there is no route left for the browser to ask for the rest.
+  // Starting the recording over is the honest answer.
+  it('does not resume a recording that means something else by a step', async () => {
+    const file = join(dir, 'older-format.json');
+    writeFileSync(file, '{"signal":"a","steps":[{"seq":1},{"seq":2}]}'); // format 1: no field
+    assert.deepEqual(await loadRecording(file), { signal: '', steps: [] });
+    writeFileSync(file, '{"format":99,"signal":"a","steps":[{"seq":1}]}');
+    assert.deepEqual(await loadRecording(file), { signal: '', steps: [] });
+
+    // And what this version writes is what this version reads back.
+    await saveRecording(file, { signal: 'a', steps: ['{"seq":1}'] });
+    assert.equal(JSON.parse(readFileSync(file, 'utf8')).format, FORMAT);
+    assert.deepEqual(await loadRecording(file), { signal: 'a', steps: ['{"seq":1}'] });
   });
 
   it('writes the newest state in one move, so a kill costs one step at most', async () => {

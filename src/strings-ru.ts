@@ -15,17 +15,7 @@ const objects = (n: number) => plural(n, 'объект', 'объекта', 'об
 export const ru: Strings = {
   ui: {
     'recording-id.title': 'Уникальный ID записи репозитория. Нажмите, чтобы скопировать: `gitva --id ID` подхватит ту же запись откуда угодно',
-    'question.title': 'фильтр объектов',
-    'question.all': 'всё',
-    'question.branches': 'ветки…',
-    'question.message': 'поиск: сообщение',
-    'question.author': 'поиск: автор',
-    'question.path': 'поиск: путь',
-    'question.content': 'поиск: содержимое',
-    'search.placeholder': 'поиск',
 
-    'load-all': 'загрузить все коммиты',
-    'load-all.title': 'Загрузить всю историю коммитов',
     'expand-all': 'развернуть всё',
     'expand-all.title': 'Развернуть каждый коммит и дерево (двойной щелчок по коммиту или дереву разворачивает и сворачивает его)',
     'collapse-all': 'свернуть всё',
@@ -106,11 +96,6 @@ export const ru: Strings = {
     },
     tagPrefix: 'тег: ',
     heldBack: (entries: number) => `дерево +${entries}`,
-    more: {
-      label: 'загрузить ещё историю',
-      of: (shown: number, total: number) => `${shown} из ${total} ${commits(total)}`,
-      shown: (shown: number) => `показано: ${shown} ${commits(shown)}`,
-    },
   },
 
   status: {
@@ -169,11 +154,10 @@ export const ru: Strings = {
   notes: {
     noUnreachableDetection: (objs: number) =>
       `Поиск недостижимых объектов отключён: репозиторий слишком большой — ${objs.toLocaleString()} ${objects(objs)}`,
-    treesOnDemand: 'Деревья загружаются только для тех коммитов, которые вы развернули',
     indexElided: (shown: number, total: number) =>
       `Индекс: показаны только записи, отличающиеся от HEAD — ${shown} из ${total} проиндексированных путей.`,
     more: (shown: number) =>
-      `Показано ${shown} ${commits(shown)} — нажмите «загрузить ещё историю», чтобы увидеть остальные.`,
+      `Показано ${shown} самых новых ${commits(shown)} — история постарше не рисуется.`,
     refsOutside: (n: number) =>
       `${n} ${plural(n, 'ссылка указывает', 'ссылки указывают', 'ссылок указывают')} за пределы этого окна и ${plural(n, 'не показана', 'не показаны', 'не показаны')}.`,
     indexHidden: 'Индекс скрыт.',
@@ -286,11 +270,6 @@ export const ru: Strings = {
         title: 'Запись индекса',
         what: 'Индекс — это один двоичный файл со списком путей, которые войдут в следующий коммит, у каждого sha блоба и режим доступа. Это единственное место, где существует наполовину проиндексированное изменение: ни в рабочем каталоге, ни в каком объекте. Индексация пишет сюда; коммит превращает это в дерево.',
         made: 'git update-index --add <path>',
-      },
-      more: {
-        title: 'Загрузить ещё историю',
-        what: 'У этих коммитов есть настоящие родители, но они за пределами окна, которое запросила gitva. Связь честно нарисована сюда, а не в объект, которого нет на экране. Нажмите этот блок, чтобы загрузить остальную историю.',
-        made: 'git rev-list -n <more>',
       },
     },
   },

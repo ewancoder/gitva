@@ -519,10 +519,10 @@ function label(ctx: CanvasRenderingContext2D, n: SceneNode, p: Paint, dim: numbe
   ctx.save();
   ctx.globalAlpha *= 1 - dim * 0.8;
 
-  if (n.kind === 'ref' || n.kind === 'head' || n.kind === 'more' || n.kind === 'index' || n.kind === 'tag') {
+  if (n.kind === 'ref' || n.kind === 'head' || n.kind === 'index' || n.kind === 'tag') {
     // A tag chip's label is a sha now, and shas are machine text.
     ctx.font = n.kind === 'tag' ? `11px ${theme.mono}` : `${n.kind === 'head' ? '600 ' : ''}11px ${theme.sans}`;
-    ctx.fillStyle = ghost ? theme.ghost : n.kind === 'more' || n.kind === 'index' ? theme.ink : chipHue(n.kind, n.id);
+    ctx.fillStyle = ghost ? theme.ghost : n.kind === 'index' ? theme.ink : chipHue(n.kind, n.id);
     ctx.fillText(clip(ctx, n.label, n.w - 12), n.x + 6, n.y + (n.sub && s >= TIER.kind ? 12 : n.h / 2 + 4));
     if (n.sub && s >= TIER.kind) {
       ctx.font = `10px ${theme.mono}`;

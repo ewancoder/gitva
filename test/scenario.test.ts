@@ -34,17 +34,17 @@ before(async () => {
 
   handle = await open(repo.dir);
   caps = await measure(handle.repo);
-  empty = await snapshot(handle, DEFAULT_VIEW, caps, 1);
+  empty = await snapshot(handle, caps, 1);
 
   repo.write('a.txt', 'alpha\n');
   repo.write('b.txt', 'beta\n');
   repo.git('add', 'a.txt', 'b.txt');
   aBlob = repo.git('hash-object', 'a.txt');
   bBlob = repo.git('hash-object', 'b.txt');
-  staged = await snapshot(handle, DEFAULT_VIEW, await measure(handle.repo), 2);
+  staged = await snapshot(handle, await measure(handle.repo), 2);
 
   repo.git('reset', '-q', 'b.txt');
-  reset = await snapshot(handle, DEFAULT_VIEW, await measure(handle.repo), 3);
+  reset = await snapshot(handle, await measure(handle.repo), 3);
 });
 after(() => repo.dispose());
 

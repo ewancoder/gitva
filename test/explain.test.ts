@@ -14,7 +14,7 @@ const fact = (facts: [string, string][], key: string) => facts.find(([k]) => k =
 
 describe('what each kind is', () => {
   it('has plain language and a command for every kind it draws', () => {
-    for (const kind of ['blob', 'tree', 'commit', 'tag', 'ref', 'head', 'index', 'more']) {
+    for (const kind of ['blob', 'tree', 'commit', 'tag', 'ref', 'head', 'index']) {
       const e = explainKind(kind);
       assert.ok(e.what.length > 40, `${kind} is explained`);
       assert.ok(e.made.length > 0, `${kind} names the command that makes it`);

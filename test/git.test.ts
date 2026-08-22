@@ -14,7 +14,7 @@ import {
   snapshot,
   type RepoHandle,
 } from '../src/git.js';
-import { DEFAULT_VIEW, type Capabilities, type Snapshot } from '../src/types.js';
+import type { Capabilities, Snapshot } from '../src/types.js';
 import { plumbedRepo, type Repo } from './fixture.js';
 
 describe('parsing what git hands back', () => {
@@ -87,25 +87,11 @@ describe('parsing what git hands back', () => {
   });
 });
 
-describe('the question a view asks', () => {
+describe('the one question the server asks for the window', () => {
   it('names HEAD only when HEAD resolves', () => {
-    assert.deepEqual(revListArgs(DEFAULT_VIEW, 5, true)?.slice(-2), ['--all', 'HEAD']);
-    assert.deepEqual(revListArgs(DEFAULT_VIEW, 5, false)?.slice(-1), ['--all']);
-  });
-  it('turns each kind of search into the plumbing that answers it', () => {
-    const v = (q: object) => ({ ...DEFAULT_VIEW, question: q as never });
-    assert.ok(revListArgs(v({ kind: 'search', text: 'x', in: 'message' }), 5, true)!.includes('--grep=x'));
-    assert.ok(revListArgs(v({ kind: 'search', text: 'x', in: 'author' }), 5, true)!.includes('--author=x'));
-    assert.deepEqual(revListArgs(v({ kind: 'search', text: 'x', in: 'content' }), 5, true)!.slice(0, 5), [
-      'log',
-      '--topo-order',
-      '-n5',
-      '--format=%H',
-      '-Sx',
-    ]);
-    assert.ok(revListArgs(v({ kind: 'search', text: 'p', in: 'path' }), 5, true)!.includes('--'));
-    assert.deepEqual(revListArgs(v({ kind: 'refs', refs: [] }), 5, true), null);
-    assert.ok(revListArgs(v({ kind: 'refs', refs: ['refs/heads/main'] }), 5, true)!.includes('refs/heads/main'));
+    assert.deepEqual(revListArgs(5, true).slice(-2), ['--all', 'HEAD']);
+    assert.deepEqual(revListArgs(5, false).slice(-1), ['--all']);
+    assert.ok(revListArgs(5, true).includes('-n5'));
   });
 });
 
@@ -119,20 +105,9 @@ describe('a repository read through its own plumbing', () => {
     repo = plumbedRepo();
     handle = await open(repo.dir);
     caps = await measure(handle.repo);
-    snap = await snapshot(handle, { ...DEFAULT_VIEW, expanded: [] }, caps, 1);
+    snap = await snapshot(handle, caps, 1);
   });
   after(() => repo.dispose());
-
-  it('answers a content search with the commits that touched that text', async () => {
-    const found = await snapshot(
-      handle,
-      { ...DEFAULT_VIEW, question: { kind: 'search', text: 'delta', in: 'content' } },
-      caps,
-      1,
-    );
-    const messages = found.window.commits.map((oid) => found.commits[oid].message.trim());
-    assert.deepEqual(messages, ['a side branch']);
-  });
 
   it('measures the repository and finds it small enough to hold whole', () => {
     assert.equal(caps.fullLoad, true);
@@ -173,19 +148,19 @@ describe('a repository read through its own plumbing', () => {
     assert.ok(!snap.unreachable.includes(snap.head.oid!), 'HEAD is not');
   });
 
-  it('counts the orphans whether or not the view draws them', async () => {
-    const s = await snapshot(handle, { ...DEFAULT_VIEW, showUnreachable: false }, caps, 4);
-    assert.ok(s.unreachable!.length > 0, 'hiding is a drawing decision, not a lie about the repo');
+  // A step is what git did, so it carries everything about the repository
+  // whatever any browser happens to be drawing: the toggles are the viewer's,
+  // and a step scrubbed back to must answer them all.
+  it('carries the index and the unreachable set for every view there could be', () => {
+    assert.ok(snap.index.length > 0);
+    assert.ok(snap.unreachable!.length > 0);
+    assert.ok(!snap.notes.some((n) => n.id === 'indexHidden'), 'what a viewer hides is not the step’s to say');
   });
 
-  // The bug: a step recorded with the index switched off held no index at all,
-  // so scrubbing back to it with the index switched on drew an empty column —
-  // and the toggle is the viewer's, made long after the step was recorded.
-  it('carries the index whether or not the view draws it', async () => {
-    const s = await snapshot(handle, { ...DEFAULT_VIEW, showIndex: false }, caps, 4);
-    assert.ok(s.index.length > 0);
-    assert.deepEqual(s.index, snap.index);
-    assert.ok(!s.notes.some((n) => n.id === 'indexHidden'), 'what a viewer hides is not the step’s to say');
+  it('holds every tree in the window, so expanding a commit asks nothing of it', () => {
+    for (const oid of snap.window.commits) {
+      assert.ok(snap.trees[snap.commits[oid].tree], 'the tree of a drawn commit is in the step');
+    }
   });
 
   it('stores one blob for two names, because names live in trees', () => {
@@ -226,10 +201,22 @@ describe('a repository read through its own plumbing', () => {
     repo.git('tag', '-a', 'v2', '-m', 'a tag that lost its ref', 'HEAD');
     const oid = repo.git('rev-parse', 'refs/tags/v2');
     repo.git('update-ref', '-d', 'refs/tags/v2');
-    const s = await snapshot(handle, { ...DEFAULT_VIEW, expanded: [] }, caps, 2);
+    const s = await snapshot(handle, caps, 2);
     assert.equal(s.tags[oid].name, 'v2');
     assert.equal(s.tags[oid].target, s.head.oid);
     assert.ok(s.unreachable!.includes(oid), 'nothing points at it any more');
+  });
+
+  it('reads a commit no ref names, the way `git reset` leaves one behind', async () => {
+    const tree = repo.git('write-tree');
+    const dropped = repo.git('commit-tree', tree, '-p', snap.head.oid!, '-m', 'a commit thrown away');
+    // Never pointed at, so `rev-list --all` will not name it: the walk over
+    // every object in the database is the only thing that meets it.
+    const s = await snapshot(handle, caps, 5);
+    assert.ok(!s.window.commits.includes(dropped));
+    assert.equal(s.commits[dropped].message.trim(), 'a commit thrown away');
+    assert.deepEqual(s.commits[dropped].parents, [snap.head.oid]);
+    assert.ok(s.unreachable!.includes(dropped));
   });
 
   it('the cheap question moves only when something happened', async () => {
@@ -260,7 +247,7 @@ describe('what git has already built for itself', () => {
       const handle = await open(repo.dir);
       repo.git('pack-refs', '--all');
       const caps = await measure(handle.repo);
-      const snap = await snapshot(handle, { ...DEFAULT_VIEW, expanded: [] }, caps, 1);
+      const snap = await snapshot(handle, caps, 1);
       assert.ok(snap.refs.length > 0);
       assert.ok(
         snap.refs.every((r) => r.packed),
@@ -291,7 +278,7 @@ describe('degrading the documented way above a limit', () => {
       commitGraph: false,
       limits: { fullLoad: 60_000, indexNodes: 400 },
     };
-    snap = await snapshot(handle, DEFAULT_VIEW, caps, 1);
+    snap = await snapshot(handle, caps, 1);
   });
   after(() => repo.dispose());
 
@@ -315,7 +302,7 @@ describe('degrading the documented way above a limit', () => {
   it('draws the paths that differ from HEAD, and leaves the rest to the count', async () => {
     repo.write('new.txt', 'new\n');
     repo.git('add', 'new.txt');
-    const s = await snapshot(handle, DEFAULT_VIEW, snap.caps, 3);
+    const s = await snapshot(handle, snap.caps, 3);
     assert.deepEqual(
       s.index.map((e) => e.path),
       ['new.txt'],
@@ -324,15 +311,22 @@ describe('degrading the documented way above a limit', () => {
     assert.equal(s.indexElided!.total, 5);
   });
 
-  it('loads no trees until a commit is opened', async () => {
-    assert.equal(Object.keys(snap.trees).length, 0);
-    const opened = await snapshot(
-      handle,
-      { ...DEFAULT_VIEW, expanded: [snap.window.commits[0]] },
-      { ...snap.caps },
-      2,
+  // Even here the step holds the window's trees: there is no route back to the
+  // server for a browser that expands a commit, so a step that left them out
+  // would leave an expanded commit pointing at nothing.
+  it('still reads the trees of the commits in the window', () => {
+    assert.ok(Object.keys(snap.trees).length > 0);
+    for (const oid of snap.window.commits) assert.ok(snap.trees[snap.commits[oid].tree]);
+  });
+
+  // The notes toolbar is the interface's promise about what it is not showing,
+  // so it is asserted whole. Nothing here says trees load on demand, because
+  // they do not any more: the window's trees are in every step.
+  it('says exactly what it is not showing, and nothing that is no longer true', () => {
+    assert.deepEqual(
+      snap.notes.map((n) => n.id),
+      ['noUnreachableDetection', 'indexElided', 'noCommitGraph', 'looseObjects', 'bodiesOnSelection'],
     );
-    assert.ok(Object.keys(opened.trees).length > 0);
   });
 });
 

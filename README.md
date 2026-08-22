@@ -63,11 +63,14 @@ Nothing in the repository changes — gitva does not write to it.
 that joins late, and with links from unreachable showing, so a small repository being
 demonstrated needs nobody to expand anything first.
 
-The recording is shared, and so is the view — for now. Your expansions, pins, marks, camera and
-settings stay in your own browser, but the limit and the index, unreachable and
-links-from-unreachable toggles are the server's single view: whoever changes one changes what
-every viewer sees. The presenter drives, the room watches. *The repository is shared, the view
-is yours* is the intent; today only the first half is true.
+**A step is what git did. A view is how you look at it.** The server records the steps and is
+the only thing that writes one; a browser only ever reads them. Everything you do to what is on
+screen — expanding, collapsing, the toggles, pins, marks, the camera, the language, the ground —
+happens in your browser and reaches nobody else, and there is nothing a browser can ask the
+server to do. *The repository is shared, the view is yours.*
+
+Because a step carries everything any view could draw, the recording is also all a browser needs:
+once it has arrived, losing the connection costs you nothing but the next step.
 
 ## What you see
 
@@ -114,15 +117,20 @@ line inside a ref.
 | click the identifier | copies what the recording is filed under, for `--id` |
 | <kbd>f</kbd> <kbd>←</kbd>/<kbd>[</kbd> <kbd>→</kbd>/<kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |
 
-The view toolbar loads the whole history, expands or collapses every commit at once, hides the
-index, hides the unreachable, and shows **links from unreachable** — what a discarded object
-still points at, off by default because those links cross the canvas. Nothing points at an
-unreachable object; it still points at plenty. Every one of those is the same mechanism, a
-change to the *view* the browser holds, which is why none of them care how big the repository is.
+The view toolbar expands or collapses every commit at once, hides the index, hides the
+unreachable, and shows **links from unreachable** — what a discarded object still points at, off
+by default because those links cross the canvas. Nothing points at an unreachable object; it
+still points at plenty. Every one of those is the same mechanism, a change to the *view* your
+browser holds, which is why none of them care how big the repository is, and why none of them
+change anyone else's screen.
+
+A step holds the newest 120 commits, and there is no button to load more: the window is the
+run's, so the same steps say the same thing to every viewer. Older history is not drawn, and the
+notes toolbar says so.
 
 The recording is the server's, and it runs whether anyone is watching or not, so a browser
 opening ten commands in is handed everything that happened before it arrived. Only git causes a
-step — expanding and paging redraw in place and add nothing. Pause and the recording keeps going
+step — expanding, collapsing and the toggles redraw in place and add nothing. Pause and the recording keeps going
 behind you, so a demo can be **replayed instead of redone**; stepping backwards highlights the
 change in reverse, which is how you show a reset twice without doing it twice. Expansions are
 the exception to stepping: what you expanded stays expanded wherever you stand, and across a
@@ -154,9 +162,14 @@ the folder, or before you clone it onto another machine. `--id` takes any string
 `--id teaching` is a name you can choose and remember instead — it is hashed the same way, and a
 key you copied out of the header is taken as itself.
 
-The view is not part of the recording. `--learning`, the index and unreachable toggles, how much
-history is loaded — those are whatever the run you are in says, so you can stop gitva and start it
-again in the other mode and the picture follows. What is kept is what git did.
+A step no longer carries a view at all. `--learning` is a fact about the run, and the toggles are
+facts about your browser, so stopping gitva and starting it again the other way changes the
+picture and not one recorded step. What is kept is what git did.
+
+**Recordings made before this change are not resumed.** A step used to hold only the trees that
+whoever was driving had expanded, and there is no longer any way for a browser to ask for the
+rest — so rather than draw a commit that expands into nothing, gitva starts the recording over
+once. Nothing in the repository is affected either way.
 
 To start it over, restart gitva with `--fresh`. There is no button for it: the recording is
 everyone's, and no viewer's browser should be able to end the room's session.
@@ -179,7 +192,7 @@ follows from that — and says so, in the notes toolbar, when something is off:
 
 | Above the limit | What you get instead |
 |---|---|
-| 12,000 objects | No unreachable detection — finding one means reading every object. Everything drawn is reachable by construction, and trees load only for the commits you expand. |
+| 12,000 objects | No unreachable detection — finding one means reading every object. Everything drawn is reachable by construction. The trees of the commits in the window still come with every step, so expanding one asks nothing of the server. |
 | 400 staged paths | The index entries that **differ from HEAD**, plus a count for the rest. |
 
 Listing every object is nearly free; reading every tree, which is what unreachable detection

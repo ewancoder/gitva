@@ -58,7 +58,7 @@ are the only things that move. That is the difference between `git commit --amen
 | **canvas** | the region the object graph is painted on. Pans, zooms, holds pins. The `<canvas>` element and the term name exactly the same thing; the toolbars and inspector are the page around it. |
 | **flash** | what a shape does when it changes: the one reserved accent, decaying to zero. |
 | **state** | a condition a shape is in: **staged**, **unreachable**, **conflicted**, plus the two you create — **marked** and **pinned**. |
-| **step** | one entry in the recording. **Only git causes a step** — expanding, filtering and paging redraw in place and add nothing. |
+| **step** | one entry in the recording. **Only git causes a step** — expanding, collapsing and the toggles redraw in place and add nothing. A step is what git did; a view is how you look at it, and a step carries everything any view could draw. |
 | **recording** | the server's list of steps. Written by the server, shared by every viewer, read-only to them. |
 
 **Never `node`.** It makes a false claim — a branch chip is not a node in the object graph, and
@@ -81,7 +81,7 @@ Everything horizontal across the top is a **toolbar**, each named for its job, n
 
 | region | holds |
 |---|---|
-| **view toolbar** | repo name (the path is its tooltip), the recording's identifier — a click copies it — load all commits (shown only while more remain), expand/collapse, index · unreachable · links from unreachable, then the light/dark toggle, help, settings and the language buttons in the corner. Everything that changes what is drawn is a `View` field; the four in the corner are not — they open a dialog, change the words, or turn the ground over, and all three of those are yours alone. The question — branches and search — is built but hidden behind `QUESTIONS_ENABLED` in `src/types.ts`, because one shared view means one viewer's filter is everyone's. |
+| **view toolbar** | repo name (the path is its tooltip), the recording's identifier — a click copies it — expand/collapse, index · unreachable · links from unreachable · names, then the light/dark toggle, help, settings and the language buttons in the corner. Everything in it is yours alone: the first group are `View` fields, and the rest open a dialog, change the words, or turn the ground over. Nothing here is posted anywhere, because there is nowhere to post it. |
 | **recording toolbar** | `reset view` · step back · pause · step forward · scrub · live · tally · what changed. `reset view` leads it, in its own group: it is the most-used control, and one button never earned a row of its own |
 | **notes toolbar** | what the canvas isn't showing, what gitva won't do to your repo, and why |
 | **canvas** | the object graph |
@@ -160,15 +160,22 @@ dependency passes the one-sentence test in `INITIAL_DESIGN.md` §14.
 | `src/layout.ts` | `layout(snapshot, view, pins) → Scene`. Pure. Knows nothing about painting. |
 | `src/diff.ts` | `diffScenes` (what to flash), `describe` (the recording toolbar's change line). Pure. |
 | `src/explain.ts` | the inspector's facts, per shape kind (`NodeKind` in code); the wording is in `strings-en.ts`. Pure. |
-| `src/store.ts` | the recording on disk: where the system keeps it, `recordingKey` (the ten-character identifier, shown in the view toolbar), one file per key, load and save. Server-only. |
-| `src/server.ts` | `node:http`: static files, SSE `/events`, `POST /view`, `GET /object`. |
+| `src/store.ts` | the recording on disk: where the system keeps it, `recordingKey` (the ten-character identifier, shown in the view toolbar), one file per key, load and save, and `FORMAT` — **bump it whenever a step stops meaning what it meant**, because a kept recording written under another number is dropped rather than half-drawn. Server-only. |
+| `src/server.ts` | `node:http`: static files, SSE `/events`, `GET /object`. **Nothing that writes** — there is no route a browser can reach that changes what is recorded. |
 | `src/cli.ts` | `parseArgs` (pure), `main`; opens the browser. Runs only when it *is* the command, so importing it for a test starts nothing. |
-| `web/` | `index.html` (all CSS), `tape.ts` (the recording: steps, cursor, view, pins, paging — no DOM), `camera.ts` (where the object graph sits under the canvas — arithmetic only), `panel.ts` (the inspector: `panelModel` pure, then the elements), `render.ts` (canvas), `theme.ts`, `app.ts` (DOM, events, painting — and nothing else). |
-| `test/` | `fixture.ts` builds real repos with real plumbing, and `fakeState` for what is said rather than what git did; the rest are `node:test`. |
+| `web/` | `index.html` (all CSS), `tape.ts` (the recording: steps, cursor, view, pins — no DOM), `camera.ts` (where the object graph sits under the canvas — arithmetic only), `panel.ts` (the inspector: `panelModel` pure, then the elements), `render.ts` (canvas), `theme.ts`, `app.ts` (DOM, events, painting — and nothing else). |
+| `test/` | `fixture.ts` builds real repos with real plumbing, and `fakeState` for what is said rather than what git did; the rest are `node:test`. `boundary.test.ts` is the split itself, enforced. |
 
 `src/*` is compiled to `dist/src` and served to the browser too — `web/app.ts` imports
 `../src/{diff,layout,types,explain}.js`. **Nothing under `src/` that the browser imports may
-touch `node:` builtins.** `git.ts`, `store.ts` and `server.ts` are server-only and never imported by `web/`.
+touch `node:` builtins.** `git.ts`, `store.ts`, `server.ts` and `cli.ts` are server-only and never
+imported by `web/`.
+
+**`test/boundary.test.ts` is what holds that line**, because the compiler will not: an import of
+`git.js` from `web/` type-checks perfectly and fails at the first `node:child_process`. It lists
+every file in `src/` as shared or server-only — a new one there is a decision, so the table has to
+be edited — walks the imports out of `web/*` and `src/*`-shared, and asserts the one call the
+browser makes: `GET /object`, and nothing else, ever.
 
 `dist/` is build output and gitignored.
 
@@ -193,18 +200,33 @@ touch `node:` builtins.** `git.ts`, `store.ts` and `server.ts` are server-only a
 
 ## How it works, briefly
 
-**The view is the one architectural idea.** The browser never holds the repository, it holds a
-`View`: a question (all / refs / search), a `limit`, which commits are `expanded`, and whether
-the index is included. Every user action — filtering, search, paging, drill-down — is a mutation
-of that object, posted to `/view`. Everything downstream is bounded by construction, so nothing
-has to care how big the repo is.
+**A step is what git did. A view is how you look at it.** That is the one architectural idea, and
+it decides everything else.
+
+The **server is the source of truth and the only writer.** It polls the change signal, and when
+the repository moves it records a step: a whole `Snapshot`, carrying *everything any view could
+want to draw* — the window's commits, every tree in it, the index whether or not anyone is
+drawing it, the unreachable set whether or not anyone is showing it. `seq` counts steps, and only
+git moves it.
+
+The **browser only reads.** It holds a `View` — what is `expanded`, what is `folded`, and the
+three toggles — and that object never leaves the tab: there is no `POST`, no way to ask the server
+for more, and therefore no way for one viewer to change another's canvas. Every gesture is a
+redraw of a step already in hand, so a browser that loses its connection keeps working with
+everything it has.
+
+The window is fixed for the run (`COMMIT_WINDOW`, 120 commits): paging would mean a browser asking
+the server a question, so there is no paging, and the notes toolbar admits what is not drawn.
+Filtering and search were removed for the same reason. If per-viewer windows are ever wanted, the
+answer is *not* a route — it is the browser holding enough to answer them itself.
 
 **Whole steps, never deltas.** The server sends the entire `Snapshot` on every change, and
 keeps them: a browser connecting gets the whole shared recording in one `event: history` frame
 and replays it silently, so a second tab or a late joiner stands where every other viewer does.
-That is affordable *because* the view is bounded, and it is what keeps diffing, replay and
+That is affordable *because* the window is bounded, and it is what keeps diffing, replay and
 change highlighting simple. If profiling ever argues for deltas, the burden of proof is on the
-delta.
+delta. A reconnecting stream is handed the recording again, and `Tape.arrive` drops every step it
+already holds — steps arrive in order, so anything not newer is a re-send.
 
 **The recording outlives the process.** It is written to the user's own state directory —
 never into the observed repository — keyed by the repository's full path unless `--id` named
@@ -217,20 +239,18 @@ and copies on a click — worth copying. A folder that moved is resumed with `--
 It reaches the browser in its own `event: recording` frame, because it is a fact about the
 recording rather than about a step, and a step scrubbed back to must not change it.
 
-**The view belongs to the run, not to the recording.** A `Snapshot` carries the `View` it was
-answered under, so a kept recording's newest step is still answering the last run's question.
-`serve()` answers it again — a *view* rebuild, which replaces that step rather than adding one —
-before it listens, so `--learning` and the toolbar's toggles are this run's. Only while the
-change signal still matches what was kept: if the repository has moved on, the poller is about to
-build a step of its own under this run's view, and replacing the newest kept step would throw
-away a step of something that has since changed. This was a bug: restarting with `--learning`
-opened nothing, and restarting was the only way to change your mind, because a rebuild stamps
-this run's view on.
+**A step carries no view at all**, which is what makes a kept recording safe to hand over
+untouched. A `Snapshot` used to carry the `View` it was answered under, so a resumed recording was
+still answering the *last* run's question, and `serve()` had to re-answer its newest step before
+listening — restarting with `--learning` opened nothing, and restarting was the only way to change
+your mind. All of that is gone with the field. What is a fact about the *run* rather than about a
+step — the recording's identifier, and `--learning` — goes down the `event: recording` frame once
+per connection, so a step scrubbed back to cannot contradict it.
 
 **Starting the recording over is the presenter's, not a viewer's.** `--fresh` skips the kept
 steps at startup and the first step of the run overwrites the file. There is no button and no
 `POST /clear`: the recording is shared, so one browser must not be able to end everyone's
-session — the same reason filtering is off (`QUESTIONS_ENABLED`).
+session — the same reason there is no route of any kind that writes.
 
 **Capabilities, not modes.** `measure()` runs once at startup and derives what is on offer.
 Above `LIMITS.fullLoad` (12,000 objects) unreachable detection is off; above `LIMITS.indexNodes`
@@ -353,20 +373,16 @@ git reset b.txt       → the index entry goes; the blob survives, now marked un
 
 ## Known open work
 
-- **One viewer can change what every other viewer sees.** The server holds a single `view` and
-  broadcasts every rebuild to all clients, so "load all commits", expanding and the index toggle apply to
-  everyone. Filtering — chosen branches, or a search — is switched off for that reason
-  (`QUESTIONS_ENABLED` in `src/types.ts`): the control is hidden and `sanitise` forces
-  `{ kind: 'all' }`, so no browser can ask a different question of the server. Turning it back on
-  is one constant, once the view is per-viewer. Intended behaviour is *the repository is shared, the view is yours* — viewers may
-  only watch the recording, never affect anyone else's canvas. The fix touches the recording's
-  design: today it is a list of pre-built snapshots made under whatever view was current, and
-  per-viewer views mean it has to hold the repository's state and let each browser ask its own
-  question of it.
+- **History older than the window cannot be reached.** A step holds the newest `COMMIT_WINDOW`
+  commits and there is no way to ask for more — paging, "load all" and search were all removed
+  rather than made to work through a per-viewer route, because a route is the thing being
+  refused. Anything that brings older history back has to do it without a browser asking: a bigger
+  window on the command line, or steps that hold the repository richly enough for each browser to
+  answer its own question. **Do not reintroduce a write route to solve it.**
 - **`--serve` has no authentication.** Any browser that reaches the port reads the whole
-  repository. It can no longer throw the recording away — that moved to `--fresh`, in the
-  presenter's hands — but the honest fix for the rest is the same one the view needs: know which
-  browser is the presenter's.
+  repository. It cannot change anything — there is no route that writes, and `--fresh` is the
+  presenter's at startup — but reading is not nothing, and the honest fix is knowing which browser
+  is the presenter's.
 - **The visual pass has been looked at once**, on a small repository — `docs/small-demo.png`, now
   at the top of the README. It has not been seen on a repo with a couple of hundred commits,
   which is the bar `INITIAL_DESIGN.md` §12 sets, and the column labels (`pointers and tags`,

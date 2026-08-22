@@ -22,6 +22,18 @@ export interface Kept {
   steps: string[];
 }
 
+/**
+ * What a step means. Bumped whenever an old step would be drawn wrongly rather
+ * than merely differently, and a recording written under another number is
+ * dropped instead of half-drawn.
+ *
+ * 2: a step carries everything any view could draw. Under 1 it carried only the
+ * trees the one shared view happened to have expanded, so on a repository too
+ * big to hold whole, expanding a commit in a kept step would silently draw
+ * nothing — there is no longer a route for the browser to ask for the rest.
+ */
+export const FORMAT = 2;
+
 /** Where the system keeps state a program owns. `GITVA_STATE_DIR` overrides,
  *  which is also how the tests keep out of the real one. */
 export function stateDir(env: NodeJS.ProcessEnv = process.env, platform: string = process.platform): string {
@@ -58,13 +70,20 @@ export function recordingFile(key: string, dir: string = stateDir()): string {
 
 export async function loadRecording(file: string): Promise<Kept> {
   try {
-    const kept = JSON.parse(await readFile(file, 'utf8')) as { signal?: string; steps: unknown[] };
+    const kept = JSON.parse(await readFile(file, 'utf8')) as {
+      format?: number;
+      signal?: string;
+      steps: unknown[];
+    };
+    // Steps that mean something else are steps this version cannot draw. Better
+    // to start the recording over — which is what a viewer would see anyway —
+    // than to hand over a step with holes in it and let the canvas lie.
+    if (kept.format !== FORMAT) return { signal: '', steps: [] };
     // Back to text, because text is how the server holds a step and how it
     // sends one.
     return { signal: String(kept.signal ?? ''), steps: kept.steps.map((s) => JSON.stringify(s)) };
   } catch {
-    // Nothing kept yet, half-written, or written by a version that wrote
-    // something else: a fresh recording always works.
+    // Nothing kept yet, or half-written: a fresh recording always works.
     return { signal: '', steps: [] };
   }
 }
@@ -76,7 +95,10 @@ export async function saveRecording(file: string, kept: Kept): Promise<void> {
     // server's own cap on it and only happens when git did something, so a few
     // megabytes at worst, a few times a minute. Append instead if it ever shows
     // up in a profile.
-    await writeFile(`${file}.tmp`, `{"signal":${JSON.stringify(kept.signal)},"steps":[${kept.steps.join(',')}]}`);
+    await writeFile(
+      `${file}.tmp`,
+      `{"format":${FORMAT},"signal":${JSON.stringify(kept.signal)},"steps":[${kept.steps.join(',')}]}`,
+    );
     // Renamed into place so a kill mid-write costs the newest step, not the
     // whole session.
     await rename(`${file}.tmp`, file);

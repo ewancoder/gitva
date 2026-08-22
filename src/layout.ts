@@ -22,8 +22,7 @@ export type NodeKind =
   | 'tag'
   | 'ref'
   | 'head'
-  | 'index'
-  | 'more';
+  | 'index';
 
 export interface SceneNode {
   id: string;
@@ -375,40 +374,14 @@ export function layout(
     });
   }
 
-  // Under a search, a parent outside the window is one that did not match, not
-  // history waiting to be loaded — so it gets neither the arrow nor the button.
-  const q = snap.view.question;
-  const searching = q.kind === 'search' && q.text.length > 0;
-
   // --- the spine: commit to parent ---
-  let danglingParents = 0;
+  // A parent outside the window is not drawn: there is nothing on screen to
+  // draw it to, and no button to load it with — the window is the run's, fixed
+  // when the step was made. The notes toolbar says how many commits are shown.
   for (const oid of commits) {
     for (const p of snap.commits[oid]?.parents ?? []) {
-      if (inWindow.has(p)) {
-        edges.push({ id: `p:${oid}:${p}`, from: oid, to: p, kind: 'parent' });
-      } else if (!searching) {
-        danglingParents++;
-        edges.push({ id: `p:${oid}:more`, from: oid, to: 'more', kind: 'parent' });
-      }
+      if (inWindow.has(p)) edges.push({ id: `p:${oid}:${p}`, from: oid, to: p, kind: 'parent' });
     }
-  }
-
-  // A parent outside the window is an arrow into "history continues", never a
-  // silently dropped edge. A dangling arrow is honest, and it is also the cue.
-  if (danglingParents > 0 || snap.window.more) {
-    put({
-      id: 'more',
-      kind: 'more',
-      x: lanesX,
-      y: y + 8,
-      w: 210,
-      h: 30,
-      label: S.canvas.more.label,
-      sub: snap.window.totalCommits
-        ? S.canvas.more.of(commits.length, snap.window.totalCommits)
-        : S.canvas.more.shown(commits.length),
-    });
-    y += 46;
   }
 
   // --- the pointer gutter ---

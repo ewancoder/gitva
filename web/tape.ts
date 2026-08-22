@@ -1,6 +1,10 @@
 /**
- * The tape: every state the browser has been shown, where the person is
- * standing in it, and the view they are asking with.
+ * The tape: every step the browser has been shown, where the person is
+ * standing in it, and the view they are looking with.
+ *
+ * Nothing in here asks the server for anything — there is nothing to ask. A
+ * step is what git did and arrives whole; a view is how you look at it, and it
+ * never leaves this object.
  *
  * No browser in here — the rules about what is recorded, what is shown and
  * what stays folded are the ones that got quietly broken by hand, so they are
@@ -8,28 +12,18 @@
  * only check by scrubbing and squinting.
  */
 
-import type { NodeKind } from '../src/layout.js';
 import { renderNote, S } from '../src/strings.js';
-import { DEFAULT_VIEW, TAPE_CAP, type Oid, type Question, type Snapshot, type TreeEntry, type View } from '../src/types.js';
+import { DEFAULT_VIEW, TAPE_CAP, type Oid, type Snapshot, type TreeEntry, type View } from '../src/types.js';
 
-/** What the caller has to repaint after a state arrived. */
+/** What the caller has to repaint after a step arrived. */
 export type Arrival =
-  | { kind: 'none'; post: View | null }
-  /** The same state, answered again — nothing happened in git. */
-  | { kind: 'inplace'; post: View | null }
-  | { kind: 'shown'; prev: Snapshot | null; first: boolean; post: View | null };
+  | { kind: 'none' }
+  | { kind: 'shown'; prev: Snapshot | null; first: boolean };
 
 export interface Prefs {
   showIndex: boolean;
   openNewCommits: boolean;
 }
-
-/** True when we mean to draw a tree the server is not reading one for — the
- *  only reason a state's arrival has anything to say back to it. */
-const wants = (mine: Oid[], theirs: Oid[]) => {
-  const has = new Set(theirs);
-  return mine.some((o) => !has.has(o));
-};
 
 export class Tape {
   readonly states: Snapshot[] = [];
@@ -37,8 +31,18 @@ export class Tape {
   cursor = -1;
   following = true;
   view: View = { ...DEFAULT_VIEW };
-  /** The server answered with less than was asked for: this is all there is. */
-  exhausted = false;
+  /** `--learning`: the presenter is showing a small repository to a room, so
+   *  every commit is expanded before anyone touches it. A fact about the run,
+   *  told once on connecting, never a property of a step. */
+  learning = false;
+
+  /** What the presenter said on the command line, heard once on connecting.
+   *  `--learning` also puts the links out of the unreachable up before anyone
+   *  asks: in a demonstration the orphans are the point. */
+  presenting(learning: boolean) {
+    this.learning = learning;
+    if (learning) this.view = { ...this.view, showCrossLinks: true };
+  }
 
   /** Every tree ever read, across every state. An object *is* its contents, so
    *  a tree read at any moment is that tree at every moment — which is what
@@ -57,19 +61,6 @@ export class Tape {
    *  that was in the repository before the session started comes back the way
    *  they left it rather than at its default. */
   answers: Record<Oid, boolean> = {};
-
-  /** The view toolbar's toggles are the viewer's, never the step's: what a
-   *  step was drawn with when git made it says nothing about what this browser
-   *  wants to see now. Held across arrivals and jumps exactly as `expanded` and
-   *  `folded` are, so walking the whole recording back with the index switched
-   *  on shows every step's index. */
-  private get mine(): Pick<View, 'showIndex' | 'showUnreachable' | 'showCrossLinks'> {
-    return {
-      showIndex: this.view.showIndex,
-      showUnreachable: this.view.showUnreachable,
-      showCrossLinks: this.view.showCrossLinks,
-    };
-  }
 
   /** Their answers over whatever the defaults worked out to. */
   private answered(open: Oid[]): Oid[] {
@@ -91,80 +82,53 @@ export class Tape {
     return s && { ...s, trees: { ...this.trees, ...s.trees } };
   }
 
-  /** A state off the wire. `post` is a view the server has to be told about.
-   *  `replay` is history the room walked before this browser arrived: it is
-   *  recorded, and a commit made during it stands as the room left it — open if
-   *  it opened itself and nobody folded it, so a reload does not fold away what
-   *  the session unfolded. Nothing is asked of the server: the room's answer is
-   *  already in the states, trees and all. */
+  /** A step off the wire. `replay` is history the room walked before this
+   *  browser arrived: it is recorded, and a commit made during it stands as this
+   *  browser left it — open if it opened itself and nobody folded it, so a
+   *  reload does not fold away what the session unfolded. Nothing is asked of
+   *  the server: everything the view could draw is already in the step, trees
+   *  and all. */
   arrive(s: Snapshot, prefs: Prefs, replay = false): Arrival {
     Object.assign(this.trees, s.trees);
-    if (s.window.commits.length < s.view.limit) this.exhausted = true;
+    if (this.restarted(s)) this.startOver();
     const first = this.states.length === 0;
     const last = this.last;
-    let post: View | null = null;
+    // Steps arrive in order and only git makes one, so anything not newer than
+    // the newest held is the recording being sent again — a reconnected stream
+    // replays the whole of it, and it must not land on the tape twice.
+    if (last && s.seq <= last.seq) return { kind: 'none' };
 
-    // `--learning`: the room is being shown a small repository, so every commit
-    // in the window is open before anyone touches it — including for a browser
-    // that joins late and replays. The server has to hear about it, because on
-    // a repository too big to hold whole it reads only the opened trees.
-    const openAll = s.view.learning ? [...s.window.commits] : [];
+    const openAll = this.learning ? [...s.window.commits] : [];
 
     if (first) {
-      // Everything otherwise starts folded: opening a repository should cost
-      // nothing to draw, and unfolding a commit is the gesture the tutorial
+      // Everything otherwise starts collapsed: opening a repository should cost
+      // nothing to draw, and expanding a commit is the gesture the tutorial
       // wants asked.
       // `folded` is this browser's and nobody else's — a tree it shut before a
-      // reload is still shut, the same way a commit it folded is.
-      this.view = {
-        ...s.view,
-        showIndex: prefs.showIndex,
-        expanded: this.answered(openAll),
-        folded: this.view.folded ?? [],
-      };
-      if (wants(this.view.expanded, s.view.expanded)) post = this.view;
+      // reload is still shut, the same way a commit it collapsed is.
+      this.view = { ...this.view, showIndex: prefs.showIndex, expanded: this.answered(openAll) };
     } else if (replay && last) {
-      // A commit born during the replayed session keeps whatever the room last
-      // said about it — opened by the rule below when it was made, or folded by
-      // hand since, which is an answer a reload must not undo. Commits older
-      // than this browser stay folded whatever anyone else opened: those folds
-      // are the watcher's, and this watcher has not said anything yet.
-      if (s.seq !== last.seq) for (const c of s.window.commits) if (!this.seen.has(c)) this.born.add(c);
+      // A commit born during the replayed session keeps whatever this browser
+      // last said about it — opened by the rule below when it was made, or
+      // collapsed by hand since, which is an answer a reload must not undo.
+      // Commits older than this browser stay collapsed: their state is the
+      // viewer's, and this viewer has not said anything about them yet.
+      for (const c of s.window.commits) if (!this.seen.has(c)) this.born.add(c);
       this.view = {
-        ...s.view,
-        ...this.mine,
-        expanded: this.answered(
-          s.view.learning ? openAll : prefs.openNewCommits ? s.view.expanded.filter((c) => this.born.has(c)) : [],
-        ),
-        folded: this.view.folded,
+        ...this.view,
+        expanded: this.answered(this.learning ? openAll : prefs.openNewCommits ? [...this.born] : []),
       };
-      if (wants(this.view.expanded, s.view.expanded)) post = this.view;
-    } else if (prefs.openNewCommits && last && s.seq !== last.seq) {
+    } else if (prefs.openNewCommits) {
       // A commit git just made opens itself: the lesson is that it points at
-      // the trees and blobs already on screen, which folding it away would
-      // hide. Only on a new state — paging in older commits is not something
-      // that just happened. Once, too: folding it afterwards is an answer, and
-      // it does not get asked again.
+      // the trees and blobs already on screen, which collapsing it away would
+      // hide. Once, too: collapsing it afterwards is an answer, and it does not
+      // get asked again.
       const had = new Set([...this.seen, ...this.view.expanded]);
       const fresh = s.window.commits.filter((c) => !had.has(c));
-      if (fresh.length > 0) {
-        this.view = { ...this.view, expanded: [...this.view.expanded, ...fresh] };
-        // Paused, the question on screen belongs to an older state while the
-        // server is still on its own: only the folds travel.
-        post = this.following ? this.view : { ...s.view, ...this.mine, expanded: this.view.expanded };
-      }
+      if (fresh.length > 0) this.view = { ...this.view, expanded: [...this.view.expanded, ...fresh] };
     }
 
     for (const c of s.window.commits) this.seen.add(c);
-
-    // A step is a state of the repository. Asking the same repository a
-    // different question — folding, filtering, paging — replaces the state in
-    // place, so stepping back and forth only ever walks over things git did.
-    const top = this.states.length - 1;
-    if (top >= 0 && this.states[top].seq === s.seq) {
-      this.states[top] = s;
-      return { kind: this.cursor === top ? 'inplace' : 'none', post };
-    }
 
     this.states.push(s);
     if (this.states.length > TAPE_CAP) {
@@ -174,10 +138,36 @@ export class Tape {
       // the same state, not on the same number.
       this.cursor = Math.max(0, this.cursor - 1);
     }
-    if (!this.following) return { kind: 'none', post };
+    if (!this.following) return { kind: 'none' };
     const prev = this.current;
     this.cursor = this.states.length - 1;
-    return { kind: 'shown', prev, first, post };
+    return { kind: 'shown', prev, first };
+  }
+
+  /**
+   * `--fresh` starts the recording over, and step numbers start over with it.
+   * The stream reconnects on its own and is handed the whole recording, so a
+   * number this browser already holds arriving *again* is the witness: the same
+   * number at another moment is not the step being re-sent, it is a different
+   * step of a recording that replaced the one being held. Held steps are
+   * numbered in order, so only a number no newer than the newest can collide.
+   */
+  private restarted(s: Snapshot): boolean {
+    if (!this.last || s.seq > this.last.seq) return false;
+    const held = this.states.find((h) => h.seq === s.seq);
+    return held !== undefined && held.time !== s.time;
+  }
+
+  /** Let go of a recording that no longer exists, and of standing anywhere in
+   *  it. What is yours is kept: the trees, because an object is its contents at
+   *  every moment, and every expand and collapse you answered by hand. */
+  private startOver() {
+    this.states.length = 0;
+    this.dropped = 0;
+    this.cursor = -1;
+    this.following = true;
+    this.seen.clear();
+    this.born.clear();
   }
 
   /** Show state `i`; returns what was on screen before, or null if it can't. */
@@ -185,12 +175,9 @@ export class Tape {
     if (!this.states[i]) return null;
     const prev = this.current;
     this.cursor = i;
-    // Each state was a state *of a view*, so going back to one puts its view
-    // back — every part of it except which commits are open. That one is held
-    // in the head of the person watching, across the whole tape: a commit they
-    // opened stays open wherever they stand, and one they folded stays folded,
-    // until they say otherwise.
-    this.view = { ...this.states[i].view, ...this.mine, expanded: this.view.expanded, folded: this.view.folded };
+    // The view does not move with the tape: it is how *you* are looking, so a
+    // commit you expanded stays expanded wherever you stand, and the toolbar's
+    // toggles hold across every step you walk over.
     return { prev };
   }
 
@@ -239,36 +226,6 @@ export class Tape {
     this.view = { ...this.view, expanded: this.view.expanded.filter((o) => !off.has(o)) };
   }
 
-  /** A different question is a different window, so what was exhausted is not. */
-  ask(q: Question) {
-    this.exhausted = false;
-    this.view = { ...this.view, question: q };
-  }
-
-  /** Paging is offered only when there is more, and only on the live end: a
-   *  state further back is a state of a window that already happened. */
-  get canLoadMore(): boolean {
-    return !this.exhausted && !!this.current?.window.more && this.following;
-  }
-
-  /** Clicking "load more history" pages — scrolling never loads anything. */
-  loadMore(): boolean {
-    if (!this.canLoadMore) return false;
-    this.view = { ...this.view, limit: this.view.limit + 1000 };
-    return true;
-  }
-
-  /**
-   * "load all" asks for no limit at all and lets the server's ceiling be the
-   * only bound. Not `totalCommits`: that is null on a big repo, and counts the
-   * whole repository rather than the matches under a search.
-   */
-  loadAll(): boolean {
-    if (!this.canLoadMore) return false;
-    this.view = { ...this.view, limit: Number.MAX_SAFE_INTEGER };
-    return true;
-  }
-
   /** The counts line: what is on screen, and what the repository holds. */
   tally(drawn: number): string {
     const snap = this.current;
@@ -295,13 +252,6 @@ export class Tape {
     }
     return notes;
   }
-}
-
-/** The toolbar's questions are one object, not three features. */
-export function questionFor(kind: string, text: string, refs: string[]): Question {
-  if (kind === 'all') return { kind: 'all' };
-  if (kind === 'branches') return { kind: 'refs', refs };
-  return { kind: 'search', text, in: kind as 'message' };
 }
 
 /**
@@ -354,18 +304,6 @@ export class Pins {
   clear() {
     this.list.length = 0;
   }
-}
-
-/**
- * Whether the right button marks this node. One gesture for every kind: a mark
- * says "keep an eye on this" and that is the same wish whether the thing is a
- * commit, a blob, a branch or a staged path — the index band is one chip per
- * file, and a file is exactly the thing you want to follow across a stage and
- * a reset. Only the "more" button is left out: there is one of it, and it
- * cannot get lost in the graph.
- */
-export function canMark(kind: NodeKind): boolean {
-  return kind !== 'more';
 }
 
 /** One press of the left button, remembered only so the next one can be told

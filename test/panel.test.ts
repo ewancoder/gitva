@@ -30,10 +30,6 @@ describe('what to read out', () => {
     assert.deepEqual(headings, ['contents', 'entries', 'raw object', 'raw object', 'contents']);
   });
 
-  it('has nothing to fetch for a node that is not an object', () => {
-    assert.equal(panelModel(state, node({ kind: 'more', id: 'more' })).body, null);
-  });
-
   it('explains a submodule as the commit it is, in another repository', () => {
     const m = panelModel(state, node({ kind: 'submodule', id: 'c1' }));
     assert.equal(m.title, 'Commit');

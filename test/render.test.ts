@@ -187,7 +187,6 @@ describe('painting', () => {
       node({ id: 'ref:refs/heads/main', kind: 'ref', x: 300, y: 60, sub: 'aaaaaaa' }),
       node({ id: 'HEAD', kind: 'head', x: 360, y: 60 }),
       node({ id: 'index:0:a.txt', kind: 'index', x: 400, y: 60, conflict: true }),
-      node({ id: 'more', kind: 'more', x: 450, y: 60 }),
       node({ id: 'sub', kind: 'submodule', x: 500, y: 60 }),
     ],
     edges: [

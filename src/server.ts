@@ -1,9 +1,14 @@
 /**
  * The server: asks git the cheap question on a timer, does real work only when
- * the answer moves, and pushes whole states down a server-sent-events stream.
+ * the answer moves, and pushes whole steps down a server-sent-events stream.
  *
- * No delta protocol. Bounding the view is what makes whole states permanently
- * affordable, and whole states are what make the diffing and the replay simple.
+ * It is the source of truth and the only writer. Nothing a browser does reaches
+ * here — there is no route that changes what is recorded — because a step is
+ * what git did, and a view is how you look at it. A step therefore carries
+ * everything any view could want to draw.
+ *
+ * No delta protocol. A bounded window is what makes whole steps permanently
+ * affordable, and whole steps are what make the diffing and the replay simple.
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -13,8 +18,8 @@ import { fileURLToPath } from 'node:url';
 import { GitError, changeSignal, measure, open, readBody, snapshot, type RepoHandle } from './git.js';
 import { lastSeq, loadRecording, recordingFile, recordingKey, saveRecording } from './store.js';
 import { S } from './strings.js';
-import type { Capabilities, Question, View } from './types.js';
-import { DEFAULT_VIEW, QUESTIONS_ENABLED, TAPE_CAP } from './types.js';
+import type { Capabilities } from './types.js';
+import { TAPE_CAP } from './types.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const MIME: Record<string, string> = {
@@ -75,9 +80,6 @@ export async function serve(
     return opened;
   }
 
-  // `--learning`: the demo repository is small and the orphans are the point,
-  // so the arrows out of them are up before anyone asks.
-  let view: View = { ...DEFAULT_VIEW, learning, showCrossLinks: learning };
   let seq = lastSeq(kept.steps);
   /** Every state of the repository, oldest first, already serialised — not
    *  just the newest one. A browser opened halfway through a session gets the
@@ -94,11 +96,9 @@ export async function serve(
   /** Rebuilds run one at a time. Anything arriving mid-build asks for one more
    * pass; further requests join that pass instead of growing an unbounded queue. */
   let pending = false;
-  let pendingMoved = false;
   let building: Promise<void> | null = null;
-  function build(repoMoved: boolean): Promise<void> {
+  function build(): Promise<void> {
     pending = true;
-    pendingMoved ||= repoMoved;
     building ??= drain();
     return building;
   }
@@ -108,26 +108,21 @@ export async function serve(
     // caller, and nothing would ever rebuild again.
     try {
       while (pending) {
-        const repoMoved = pendingMoved;
         pending = false;
-        pendingMoved = false;
-        await rebuild(repoMoved);
+        await rebuild();
       }
     } finally {
       building = null;
     }
   }
 
-  /**
-   * `seq` counts states of the *repository*, not broadcasts. Asking a different
-   * question of the same repository is not a moment to step back to, so a
-   * view rebuild reuses the number and the client redraws in place.
-   */
-  async function rebuild(repoMoved: boolean) {
+  /** `seq` counts states of the repository, and only git moves it: every
+   *  rebuild there is is a step, because only a change signal asks for one. */
+  async function rebuild() {
     try {
       const { handle, caps } = await repository();
-      const s = JSON.stringify(await snapshot(handle, view, caps, repoMoved ? ++seq : seq));
-      record(history, s, repoMoved);
+      const s = JSON.stringify(await snapshot(handle, caps, ++seq));
+      record(history, s);
       const frame = `event: snapshot\ndata: ${s}\n\n`;
       for (const c of clients) c.write(frame);
       await saveRecording(file, { signal, steps: history });
@@ -150,7 +145,7 @@ export async function serve(
       const next = await changeSignal(handle.repo, handle.gitDir);
       if (next === signal) return;
       signal = next;
-      await build(true);
+      await build();
     } catch {
       /* no repository yet, or one mid-rewrite: try again on the next tick */
     }
@@ -161,7 +156,6 @@ export async function serve(
     const url = new URL(req.url ?? '/', 'http://localhost');
     try {
       if (url.pathname === '/events') return sse(req, res);
-      if (url.pathname === '/view' && req.method === 'POST') return await setView(req, res);
       if (url.pathname === '/object') return await object(url, res);
       return await statik(url.pathname, res);
     } catch (err) {
@@ -176,9 +170,12 @@ export async function serve(
       connection: 'keep-alive',
     });
     res.write(': hello\n\n');
-    // Which recording this is. Not part of a step: it is a fact about the
-    // recording, the same for every step in it and for every viewer.
-    res.write(`event: recording\ndata: ${JSON.stringify({ id: key })}\n\n`);
+    // Which recording this is, and whether this run is a demonstration. Neither
+    // is part of a step: the identifier is a fact about the recording, and
+    // `--learning` is a fact about the run — the presenter saying every commit
+    // should arrive expanded, for whoever is watching, including a viewer who
+    // scrubs back to a step recorded before they said so.
+    res.write(`event: recording\ndata: ${JSON.stringify({ id: key, learning })}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
     // The whole tape in one frame; `snapshot` stays the live tail, so the
@@ -205,14 +202,7 @@ export async function serve(
     signal = await repository()
       .then(({ handle }) => changeSignal(handle.repo, handle.gitDir))
       .catch(() => signal);
-    await ensureFirstSnapshot(building, () => history.length > 0, () => build(true));
-  }
-
-  async function setView(req: IncomingMessage, res: ServerResponse) {
-    const body = await text(req);
-    view = sanitise(JSON.parse(body));
-    res.writeHead(204).end();
-    await build(false);
+    await ensureFirstSnapshot(building, () => history.length > 0, () => build());
   }
 
   async function object(url: URL, res: ServerResponse) {
@@ -248,28 +238,6 @@ export async function serve(
     }
   }
 
-  // A step carries the view it was answered under, so a kept recording's newest
-  // step is still answering the *last* run's question — `--learning` and the
-  // toolbar's toggles among it. The view belongs to the run, not to the
-  // recording, so that step is answered again, which is exactly what `false`
-  // means here: a different answer to the same state of the repository replaces
-  // that step instead of becoming one. Before `listen`, because a browser handed
-  // the stale step would be told about the new answer too late to use it.
-  //
-  // Only while the repository is where the recording left it. If it has moved
-  // on, the poller is about to build a step of its own and that one carries
-  // this run's view already — replacing the newest kept step then would be
-  // throwing away a step of something that has since changed, which is the
-  // whole reason the recording is kept.
-  if (history.length) {
-    const now = await repository()
-      .then(({ handle }) => changeSignal(handle.repo, handle.gitDir))
-      // No repository to compare against: nothing is re-answered, and the
-      // kept steps stand until there is something to say about them.
-      .catch(() => '');
-    if (now === signal) await build(false);
-  }
-
   await new Promise<void>((r) => server.listen(port, host, r));
   const address = server.address();
   const bound = typeof address === 'object' && address ? address.port : port;
@@ -285,14 +253,11 @@ export async function serve(
 }
 
 /**
- * The shared history. A different question about the same repository replaces
- * the answer rather than becoming a step of its own — the same dedup the tape
- * does when a state arrives — and the oldest states fall off the far end, at
- * the cap the browser's own tape uses or at `HISTORY_BYTES`, whichever the
- * repository reaches first.
+ * The shared history. Every step git made, in order, with the oldest falling
+ * off the far end at the cap the browser's own tape uses or at `HISTORY_BYTES`,
+ * whichever the repository reaches first.
  */
-export function record(history: string[], state: string, repoMoved: boolean): void {
-  if (!repoMoved) history.pop();
+export function record(history: string[], state: string): void {
   history.push(state);
   let bytes = history.reduce((n, s) => n + s.length, 0);
   // Whichever ceiling is reached first. The newest state is never dropped: on
@@ -311,51 +276,4 @@ export async function ensureFirstSnapshot(
 ): Promise<void> {
   if (active) await active;
   if (!hasSnapshot()) await build();
-}
-
-function text(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', (c) => {
-      body += c;
-      if (body.length > 1e6) reject(new Error('view too large'));
-    });
-    req.on('end', () => resolve(body));
-    req.on('error', reject);
-  });
-}
-
-/** The question, checked before it reaches git. Only reached when
- *  `QUESTIONS_ENABLED`; kept whole so re-enabling is one constant. */
-export function sanitiseQuestion(q: Question | undefined): View['question'] {
-  return q?.kind === 'refs'
-    ? // No ref name begins with a dash, and a name that did would reach
-      // `rev-list` as an option rather than as a thing to walk from.
-      { kind: 'refs', refs: (q.refs ?? []).filter((r) => /^[\w./@^~][\w./@^~-]*$/.test(r)).slice(0, 200) }
-    : q?.kind === 'search'
-      ? {
-          kind: 'search',
-          text: String(q.text ?? '').slice(0, 200),
-          in: (['message', 'author', 'path', 'content'] as const).includes(q.in) ? q.in : 'message',
-        }
-      : { kind: 'all' };
-}
-
-/** The view arrives from the browser, so it is checked before it reaches git. */
-export function sanitise(raw: unknown): View {
-  const v = (raw ?? {}) as Partial<View>;
-  const question = QUESTIONS_ENABLED ? sanitiseQuestion(v.question) : { kind: 'all' as const };
-  return {
-    question,
-    // The ceiling is only there to keep a hostile number out of `rev-list -n`;
-    // "load all" sends something huge on purpose and lands here.
-    limit: Math.min(Math.max(Math.trunc(Number(v.limit) || DEFAULT_VIEW.limit), 1), 1_000_000),
-    expanded: (v.expanded ?? []).filter((o) => /^[0-9a-f]{4,64}$/.test(o)).slice(0, 5_000),
-    folded: (v.folded ?? []).filter((o) => /^[0-9a-f]{4,64}$/.test(o)).slice(0, 5_000),
-    showIndex: v.showIndex !== false,
-    showUnreachable: v.showUnreachable !== false,
-    showCrossLinks: v.showCrossLinks === true,
-    // The browser hands it back with every view; it starts on the command line.
-    learning: v.learning === true,
-  };
 }

@@ -9,9 +9,9 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { canMark, isDouble, Pins, questionFor, Tape, type Prefs } from '../web/tape.js';
+import { isDouble, Pins, Tape, type Prefs } from '../web/tape.js';
 import { layout } from '../src/layout.js';
-import { DEFAULT_VIEW, TAPE_CAP, type Snapshot, type View } from '../src/types.js';
+import { TAPE_CAP, type Snapshot } from '../src/types.js';
 
 const oid = (n: string) => (n + '-').padEnd(40, '0');
 const OPEN: Prefs = { showIndex: true, openNewCommits: true };
@@ -21,8 +21,10 @@ const SHUT: Prefs = { showIndex: true, openNewCommits: false };
 // on arrival — that rule has its own test.
 const FILL = ['z1', 'z2', 'z3', 'z4', 'z5', 'z6', 'z7'];
 
-/** A state of a repository whose commits each hold one tree of one blob. */
-function state(seq: number, commits: string[], view: Partial<View> = {}): Snapshot {
+/** A step of a repository whose commits each hold one tree of one blob. Every
+ *  tree is in it, because that is what the server sends: a step carries
+ *  everything any view could draw. */
+function state(seq: number, commits: string[]): Snapshot {
   commits = [...commits, ...FILL];
   const list = commits.map(oid);
   return {
@@ -48,12 +50,10 @@ function state(seq: number, commits: string[], view: Partial<View> = {}): Snapsh
         },
       ]),
     ),
-    // Only what the view asked to open comes with its trees, exactly as the
-    // server sends it.
     trees: Object.fromEntries(
-      (view.expanded ?? []).map((c) => [
-        oid('t' + c.replace(/-0*$/, '')),
-        [{ mode: '100644', type: 'blob' as const, oid: oid('b' + c.replace(/-0*$/, '')), name: 'f.txt' }],
+      commits.map((c) => [
+        oid('t' + c),
+        [{ mode: '100644', type: 'blob' as const, oid: oid('b' + c), name: 'f.txt' }],
       ]),
     ),
     tags: {},
@@ -69,7 +69,6 @@ function state(seq: number, commits: string[], view: Partial<View> = {}): Snapsh
       limits: { fullLoad: 60_000, indexNodes: 400 },
     },
     window: { commits: list, totalCommits: list.length, more: false, refsOutside: 0 },
-    view: { ...DEFAULT_VIEW, ...view },
     notes: [],
   };
 }
@@ -79,12 +78,37 @@ const drawsTreeOf = (t: Tape, c: string) =>
   layout(t.world!, t.view).nodes.some((n) => n.oid === oid('t' + c));
 
 describe('the tape', () => {
-  it('does not make a step out of the same state answered twice', () => {
+  // A dropped stream reconnects and the server hands over the whole recording
+  // again. Every step of it is one the tape already holds, and a step is what
+  // git did — so none of them is news, and none of them lands twice.
+  it('ignores a step it is already holding', () => {
     const t = new Tape();
     t.arrive(state(1, ['c']), SHUT);
-    const again = t.arrive(state(1, ['c'], { limit: 500 }), SHUT);
+    t.arrive(state(2, ['d', 'c']), SHUT);
+    for (const seq of [1, 2]) {
+      const again = t.arrive(state(seq, ['c']), SHUT, true);
+      assert.equal(again.kind, 'none');
+    }
+    assert.equal(t.states.length, 2);
+  });
+
+  // `--fresh`: the presenter started the recording over. Nothing tells a tab to
+  // reload — the stream reconnects by itself and is handed a whole recording
+  // numbered from one again — so a tab left open must not take those steps for
+  // ones it already holds and sit there, live, showing a recording that is gone.
+  it('starts over when the recording it is handed is numbered from one again', () => {
+    const t = new Tape();
+    t.arrive(state(1, ['c']), SHUT);
+    t.arrive(state(2, ['d', 'c']), SHUT);
+    t.scrubTo(0);
+
+    const over = t.arrive({ ...state(1, ['e']), time: 99 }, SHUT, true);
+    assert.equal(over.kind, 'shown', 'the first step of the new recording was taken for a re-send');
     assert.equal(t.states.length, 1);
-    assert.equal(again.kind, 'inplace');
+    assert.equal(t.cursor, 0);
+    assert.ok(t.following, 'left standing in a recording that no longer exists');
+    assert.equal(t.arrive({ ...state(2, ['f', 'e']), time: 100 }, SHUT, true).kind, 'shown');
+    assert.equal(t.states.length, 2);
   });
 
   it('keeps you on the state you were watching when the oldest one drops', () => {
@@ -117,7 +141,7 @@ describe('what is folded', () => {
 
   it('stays folded on every state once it has been folded by hand', () => {
     const t = new Tape();
-    t.arrive(state(1, ['a'], { expanded: [oid('a')] }), OPEN);
+    t.arrive(state(1, ['a']), OPEN);
     t.arrive(state(2, ['b', 'a']), OPEN); // b arrives open
     assert.ok(t.view.expanded.includes(oid('b')));
     t.toggle(oid('b')); // ...and is folded by hand
@@ -127,42 +151,26 @@ describe('what is folded', () => {
     assert.ok(!t.view.expanded.includes(oid('b')), 'stepping back re-opened it');
   });
 
-  it('puts a state’s question back but not its folds', () => {
-    const t = new Tape();
-    t.arrive(state(1, ['a'], { limit: 20 }), SHUT);
-    t.arrive(state(2, ['b', 'a'], { limit: 500 }), SHUT);
-    t.toggle(oid('b'));
-    t.scrubTo(0);
-    assert.equal(t.view.limit, 20, 'the question asked at that state is the replay');
-    assert.deepEqual(t.view.expanded, [oid('b')], 'the folds are the watcher’s, not the state’s');
-    t.goLive();
-    assert.equal(t.view.limit, 500, 'coming back to live kept the old question');
-  });
-
   it('draws a commit opened now on a state recorded before it was', () => {
     const t = new Tape();
     t.arrive(state(1, ['a']), SHUT);
     t.arrive(state(2, ['b', 'a']), SHUT);
     t.scrubTo(0);
     t.toggle(oid('a'));
-    // The server answers the fold against the state it is on, not the one
-    // being watched: the tree only ever arrives attached to the newest state.
-    t.arrive(state(2, ['b', 'a'], { expanded: [oid('a')] }), SHUT);
+    // Nothing is asked for and nothing arrives: the tree was in the step all
+    // along, and expanding a commit is a redraw.
     assert.ok(drawsTreeOf(t, 'a'), 'the tree read a moment ago is the same tree');
     t.goLive();
     assert.ok(drawsTreeOf(t, 'a'));
   });
 
-  it('opens a commit made while the tape is paused, without moving the question', () => {
+  it('opens a commit made while the tape is paused, without moving the tape', () => {
     const t = new Tape();
-    t.arrive(state(1, ['a'], { limit: 20 }), OPEN);
+    t.arrive(state(1, ['a']), OPEN);
     t.scrubTo(0);
-    t.view = { ...t.view, limit: 20 }; // the old state's question is on screen
-    const arrival = t.arrive(state(2, ['b', 'a'], { limit: 500 }), OPEN);
+    const arrival = t.arrive(state(2, ['b', 'a']), OPEN);
     assert.equal(arrival.kind, 'none', 'a paused watcher is not moved');
     assert.ok(t.view.expanded.includes(oid('b')), 'the new commit was never opened');
-    assert.equal(arrival.post?.limit, 500, 'the paused question was pushed at the server');
-    assert.ok(arrival.post?.expanded.includes(oid('b')));
     t.goLive();
     assert.ok(t.view.expanded.includes(oid('b')), 'it arrived folded after all');
   });
@@ -185,14 +193,6 @@ describe('what is folded', () => {
     assert.deepEqual(t.view.expanded, []);
   });
 
-  it('does not open commits paged in from further back', () => {
-    const t = new Tape();
-    t.arrive(state(1, ['c', 'b']), OPEN);
-    // Same state of the repository, a wider window: older commits are not news.
-    t.arrive(state(1, ['c', 'b', 'a'], { limit: 500 }), OPEN);
-    assert.ok(!t.view.expanded.includes(oid('a')));
-  });
-
   it('folds and unfolds only what is on screen', () => {
     const t = new Tape();
     t.arrive(state(1, ['a']), SHUT);
@@ -205,7 +205,7 @@ describe('what is folded', () => {
     assert.ok(t.view.expanded.includes(oid('b')), 'it folded a commit nobody could see');
   });
 
-  it('opens every repository folded, however small, however the server left it', () => {
+  it('opens every repository collapsed, however small', () => {
     const big = new Tape();
     big.arrive(state(1, []), SHUT);
     assert.deepEqual(big.view.expanded, []);
@@ -213,90 +213,30 @@ describe('what is folded', () => {
     const small = new Tape();
     const s = state(1, []);
     s.window.commits = s.window.commits.slice(0, 3);
-    s.view = { ...s.view, expanded: [...s.window.commits] }; // another viewer had opened them
     small.arrive(s, SHUT);
     assert.deepEqual(small.view.expanded, []);
   });
 
-  it('opens every commit on arrival when the server was started for a room', () => {
+  it('opens every commit on arrival when the run is a demonstration', () => {
     // `--learning`: a demo repository shown to people, where nobody should have
-    // to unfold anything to see the same picture as everyone else.
+    // to expand anything to see the same picture as everyone else. It is a fact
+    // about the run, told on connecting, so it holds for a step recorded before
+    // anyone said it — and it puts the links out of the unreachable up too,
+    // because in a demonstration the orphans are the point.
     const t = new Tape();
-    const s = state(1, ['a', 'b'], { learning: true });
-    const a = t.arrive(s, SHUT);
+    t.presenting(true);
+    const s = state(1, ['a', 'b']);
+    t.arrive(s, SHUT);
     assert.deepEqual(t.view.expanded, s.window.commits);
-    assert.equal(a.post, t.view, 'the server was not told which trees to read');
+    assert.equal(t.view.showCrossLinks, true);
 
     // And so does a browser that joins the room halfway through.
     const late = new Tape();
-    late.arrive(state(1, ['a'], { learning: true }), SHUT, true);
-    const two = state(2, ['b', 'a'], { learning: true });
-    assert.equal(late.arrive(two, SHUT, true).post, late.view);
+    late.presenting(true);
+    late.arrive(state(1, ['a']), SHUT, true);
+    const two = state(2, ['b', 'a']);
+    late.arrive(two, SHUT, true);
     assert.deepEqual(late.view.expanded, two.window.commits);
-  });
-});
-
-/** A state whose window is full and has history behind it. */
-function paged(seq: number) {
-  const s = state(seq, ['a'], { limit: 8 }); // eight commits, eight asked for
-  s.window.more = true;
-  return s;
-}
-
-describe('paging', () => {
-  it('offers more history only when there is more of it', () => {
-    const t = new Tape();
-    t.arrive(paged(1), SHUT);
-    assert.equal(t.canLoadMore, true);
-    assert.equal(t.loadMore(), true);
-    assert.equal(t.view.limit, 1008);
-  });
-
-  it('stops offering it once the answer came back smaller than the question', () => {
-    const t = new Tape();
-    const s = paged(1);
-    s.view = { ...s.view, limit: 500 }; // asked for 500, got eight
-    t.arrive(s, SHUT);
-    assert.equal(t.canLoadMore, false, 'there is nothing more to ask for');
-    assert.equal(t.loadMore(), false);
-    assert.equal(t.loadAll(), false);
-    assert.equal(t.view.limit, 500, 'a refused page still moved the question');
-  });
-
-  it('does not page while the tape is standing further back', () => {
-    const t = new Tape();
-    t.arrive(paged(1), SHUT);
-    t.arrive(paged(2), SHUT);
-    t.step(-1);
-    assert.equal(t.canLoadMore, false, 'that window happened, and is not being asked again');
-    t.goLive();
-    assert.equal(t.canLoadMore, true);
-  });
-
-  it('lets the server’s own ceiling be the only bound on "load all"', () => {
-    const t = new Tape();
-    t.arrive(paged(1), SHUT);
-    assert.equal(t.loadAll(), true);
-    assert.equal(t.view.limit, Number.MAX_SAFE_INTEGER);
-  });
-
-  it('starts paging over when the question changes', () => {
-    const t = new Tape();
-    const s = paged(1);
-    s.view = { ...s.view, limit: 500 };
-    t.arrive(s, SHUT);
-    t.ask({ kind: 'search', text: 'x', in: 'message' });
-    assert.deepEqual(t.view.question, { kind: 'search', text: 'x', in: 'message' });
-    assert.equal(t.canLoadMore, true, 'a different question has its own window');
-  });
-
-  it('turns whichever control was touched into the one question', () => {
-    assert.deepEqual(questionFor('all', 'ignored', ['ignored']), { kind: 'all' });
-    assert.deepEqual(questionFor('branches', 'ignored', ['refs/heads/main']), {
-      kind: 'refs',
-      refs: ['refs/heads/main'],
-    });
-    assert.deepEqual(questionFor('author', 'ada', []), { kind: 'search', text: 'ada', in: 'author' });
   });
 });
 
@@ -351,13 +291,12 @@ describe('what the header says', () => {
     assert.equal(t.view.showIndex, true);
   });
 
-  it('does not let a state arriving turn a toggle back on', () => {
+  it('does not let a step arriving turn a toggle back on', () => {
     const t = new Tape();
     t.arrive(state(1, ['a']), SHUT);
     t.view = { ...t.view, showIndex: false };
-    // A second browser posted a view of its own; the server broadcasts it to
-    // everyone, and it is nobody else's business.
-    t.arrive(state(2, ['b'], { showIndex: true }), SHUT, true);
+    // A step says what git did and nothing about how anyone is looking at it.
+    t.arrive(state(2, ['b']), SHUT, true);
     assert.equal(t.view.showIndex, false);
   });
 
@@ -440,93 +379,93 @@ describe('pins', () => {
 });
 
 describe('history from before this browser arrived', () => {
-  it('replays it whole, standing the session\u2019s commits back up and asking the server nothing', () => {
+  it('replays it whole, standing the session’s commits back up and asking nothing', () => {
     const t = new Tape();
-    // The room got here without us; replaying it must not repeat what each
-    // state did when it was new, or the page strobes through the session and
-    // posts a view per step on the way. What it must not lose either is the
-    // room's answer about the commits git made while it ran — the server
-    // recorded each state with those open, so a reload finds them open.
-    const before = [
-      state(1, ['a']),
-      state(2, ['b', 'a'], { expanded: [oid('b')] }),
-      state(3, ['c', 'b', 'a'], { limit: 44, expanded: [oid('b'), oid('c')] }),
-    ];
-    for (const s of before) assert.equal(t.arrive(s, OPEN, true).post, null, 'replay told the server something');
+    // The room got here without us; replaying it must not repeat what each step
+    // did when it was new, or the page strobes through the session. What it must
+    // not lose either is that git made those commits while it ran — a commit
+    // born during the session comes back expanded, the way it opened itself.
+    const before = [state(1, ['a']), state(2, ['b', 'a']), state(3, ['c', 'b', 'a'])];
+    for (const s of before) assert.equal(t.arrive(s, OPEN, true).kind, 'shown');
     assert.equal(t.states.length, 3);
-    assert.equal(t.cursor, 2, 'a replay leaves you standing on the newest state');
-    assert.deepEqual(t.view.expanded, [oid('b'), oid('c')], 'a reload folded away the commits the session made');
-    assert.equal(t.view.limit, 44, 'the question the room is on is the one to carry on with');
-    assert.ok(t.world?.trees[oid('tb')], 'their trees came with the states, so nothing has to be asked for');
+    assert.equal(t.cursor, 2, 'a replay leaves you standing on the newest step');
+    assert.deepEqual(t.view.expanded, [oid('b'), oid('c')], 'a reload collapsed the session’s commits');
+    assert.ok(t.world?.trees[oid('tb')], 'their trees came with the steps, so nothing has to be asked for');
 
     // And what happens next is still something happening now.
-    t.arrive(state(4, ['d', 'c', 'b', 'a'], { limit: 44 }), OPEN);
-    assert.deepEqual(t.view.expanded, [oid('b'), oid('c'), oid('d')], 'the commit git just made stayed folded');
+    t.arrive(state(4, ['d', 'c', 'b', 'a']), OPEN);
+    assert.deepEqual(t.view.expanded, [oid('b'), oid('c'), oid('d')], 'the commit git just made stayed collapsed');
   });
 
-  it('hands back the folds of commits older than the session, and asks for their trees', () => {
-    // The gesture is the person's answer, not the state's, so it has to survive
-    // the page: an old commit they opened comes back open on the next load,
-    // and the server has to be told to read its tree again.
+  it('hands back what was expanded by hand, whatever the step says', () => {
+    // The gesture is this person's answer, not the step's, so it has to survive
+    // the page: an old commit they expanded comes back expanded, and its tree is
+    // in every step already.
     const first = new Tape();
     first.arrive(state(1, ['a']), SHUT);
     first.toggle(oid('a'));
 
     const reloaded = new Tape();
     reloaded.answers = JSON.parse(JSON.stringify(first.answers)); // through localStorage
-    const arrival = reloaded.arrive(state(1, ['a']), SHUT, true);
-    assert.ok(reloaded.view.expanded.includes(oid('a')), 'a reload folded away what was opened by hand');
-    assert.equal(arrival.post, reloaded.view, 'the server was not asked for the tree it has to read');
+    reloaded.arrive(state(1, ['a']), SHUT, true);
+    assert.ok(reloaded.view.expanded.includes(oid('a')), 'a reload collapsed what was expanded by hand');
+    assert.ok(drawsTreeOf(reloaded, 'a'));
   });
 
-  it('keeps a commit folded by hand in a room where everything else is open', () => {
+  it('keeps a commit collapsed by hand in a room where everything else is open', () => {
     const first = new Tape();
-    const s = state(1, ['a', 'b'], { learning: true });
-    first.arrive(s, SHUT);
+    first.presenting(true);
+    first.arrive(state(1, ['a', 'b']), SHUT);
     first.toggle(oid('a'));
 
     const reloaded = new Tape();
+    reloaded.presenting(true);
     reloaded.answers = { ...first.answers };
-    reloaded.arrive(s, SHUT);
-    assert.ok(!reloaded.view.expanded.includes(oid('a')), '--learning re-opened a commit somebody had folded');
-    assert.ok(reloaded.view.expanded.includes(oid('b')), 'the rest of the room lost its unfolded commits');
+    reloaded.arrive(state(1, ['a', 'b']), SHUT);
+    assert.ok(!reloaded.view.expanded.includes(oid('a')), '--learning re-opened a commit somebody had collapsed');
+    assert.ok(reloaded.view.expanded.includes(oid('b')), 'the rest of the room lost its expanded commits');
   });
 
-  it('leaves folded whatever the session folded by hand, however much later', () => {
+  it('leaves collapsed whatever was collapsed by hand, however much later', () => {
+    // `b` opened itself when git made it, and was collapsed two steps later —
+    // collapsing is an answer, and a reload is not a chance to ask again.
+    const first = new Tape();
+    first.arrive(state(1, ['a']), OPEN);
+    first.arrive(state(2, ['b', 'a']), OPEN);
+    first.arrive(state(3, ['c', 'b', 'a']), OPEN);
+    first.toggle(oid('b'));
+
     const t = new Tape();
-    // b opened itself when git made it, and was folded two states later —
-    // folding is an answer, and a reload is not a chance to ask again.
+    t.answers = { ...first.answers };
     t.arrive(state(1, ['a']), OPEN, true);
-    t.arrive(state(2, ['b', 'a'], { expanded: [oid('b')] }), OPEN, true);
-    t.arrive(state(3, ['c', 'b', 'a'], { expanded: [oid('c')] }), OPEN, true);
-    assert.deepEqual(t.view.expanded, [oid('c')], 'the replay re-opened a commit somebody had folded');
+    t.arrive(state(2, ['b', 'a']), OPEN, true);
+    t.arrive(state(3, ['c', 'b', 'a']), OPEN, true);
+    assert.deepEqual(t.view.expanded, [oid('c')], 'the replay re-opened a commit somebody had collapsed');
   });
 
-  it('inherits no folds about commits older than this browser', () => {
+  it('inherits nothing about commits older than this browser', () => {
     const t = new Tape();
-    // Another viewer had opened `a` — but the folds are the watcher's, and a
-    // repository opens folded whatever the room is looking at.
-    t.arrive(state(1, ['a'], { expanded: [oid('a')] }), OPEN, true);
-    t.arrive(state(2, ['b', 'a'], { expanded: [oid('a'), oid('b')] }), OPEN, true);
+    // The repository opens collapsed whatever anyone else is looking at: what
+    // was expanded elsewhere is that viewer's, and never travels.
+    t.arrive(state(1, ['a']), OPEN, true);
+    t.arrive(state(2, ['b', 'a']), OPEN, true);
     assert.deepEqual(t.view.expanded, [oid('b')]);
   });
 
   it('does not call a commit new because it dropped out of the window and came back', () => {
     const t = new Tape();
-    // A window is bounded and a question is a filter, so a commit can leave the
-    // states and return. It was there when this browser was not, and coming
-    // back is not git making it.
-    t.arrive(state(1, ['a'], { expanded: [oid('a')] }), OPEN, true);
-    t.arrive(state(2, ['b'], { expanded: [oid('a'), oid('b')] }), OPEN, true);
-    t.arrive(state(3, ['a', 'b'], { expanded: [oid('a'), oid('b')] }), OPEN, true);
+    // A window is bounded, so a commit can leave the steps and return. It was
+    // there when this browser was not, and coming back is not git making it.
+    t.arrive(state(1, ['a']), OPEN, true);
+    t.arrive(state(2, ['b']), OPEN, true);
+    t.arrive(state(3, ['a', 'b']), OPEN, true);
     assert.deepEqual(t.view.expanded, [oid('b')], 'a commit older than this browser was opened');
   });
 
-  it('leaves the repository as it stood before the session folded', () => {
+  it('leaves the repository as it stood before the session, when that is the setting', () => {
     const t = new Tape();
-    const before = [state(1, ['a']), state(2, ['b', 'a'], { expanded: [oid('b')] })];
-    for (const s of before) t.arrive(s, SHUT, true);
-    assert.deepEqual(t.view.expanded, [], 'replay opened commits the setting said to leave folded');
+    for (const s of [state(1, ['a']), state(2, ['b', 'a'])]) t.arrive(s, SHUT, true);
+    assert.deepEqual(t.view.expanded, [], 'replay opened commits the setting said to leave collapsed');
   });
 });
 
@@ -559,22 +498,6 @@ describe('folding a tree', () => {
     t.view = { ...t.view, folded: [oid('t2')] };
     t.arrive(state(1, ['a']), OPEN);
     assert.deepEqual(t.view.folded, [oid('t2')], 'still shut, without anyone asking again');
-  });
-});
-
-describe('what the right button can mark', () => {
-  it('marks every node that can get lost in the graph, and nothing else', () => {
-    // One gesture for every kind: a mark is "keep an eye on this", and that is
-    // the same wish for a commit as for a blob or a branch.
-    // The index band is one chip per staged file, and a file is exactly what
-    // you want to keep an eye on while it is staged and then reset.
-    for (const kind of [
-      'commit', 'tree', 'blob', 'tag', 'submodule', 'ref', 'head', 'index',
-    ] as const) {
-      assert.equal(canMark(kind), true, `${kind} could not be marked`);
-    }
-    // There is one "load more" button, and it cannot be mislaid.
-    assert.equal(canMark('more'), false);
   });
 });
 

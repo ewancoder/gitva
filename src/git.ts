@@ -15,6 +15,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
+import { COMMIT_WINDOW } from './types.js';
 import type {
   Capabilities,
   Commit,
@@ -28,7 +29,6 @@ import type {
   Snapshot,
   TagObject,
   TreeEntry,
-  View,
 } from './types.js';
 
 /** Read-only by construction: nothing else may be spawned. Third mention, deliberately. */
@@ -332,22 +332,12 @@ async function readRefs(repo: string, gitDir: string): Promise<Ref[]> {
   );
 }
 
-export function revListArgs(view: View, limit: number, hasHead: boolean): string[] | null {
-  const q = view.question;
-  const base = ['rev-list', '--topo-order', `-n${limit}`];
+/** The window: the newest commits, wherever they hang from. One question, the
+ *  same one every run — there is no browser on the other end of this asking a
+ *  different one. */
+export function revListArgs(limit: number, hasHead: boolean): string[] {
   // `--all` misses a detached HEAD, so name it too — when it resolves at all.
-  const everything = hasHead ? ['--all', 'HEAD'] : ['--all'];
-  if (q.kind === 'refs') return q.refs.length === 0 ? null : [...base, ...q.refs];
-  if (q.kind === 'search') {
-    if (q.text.length === 0) return [...base, ...everything];
-    if (q.in === 'message') return [...base, `--grep=${q.text}`, ...everything];
-    if (q.in === 'author') return [...base, `--author=${q.text}`, ...everything];
-    // rev-list refuses the pickaxe; `log --format=%H` takes it and prints the same list.
-    if (q.in === 'content')
-      return ['log', '--topo-order', `-n${limit}`, '--format=%H', `-S${q.text}`, ...everything];
-    return [...base, ...everything, '--', q.text];
-  }
-  return [...base, ...everything];
+  return ['rev-list', '--topo-order', `-n${limit}`, ...(hasHead ? ['--all', 'HEAD'] : ['--all'])];
 }
 
 async function readIndex(repo: string, caps: Capabilities) {
@@ -399,12 +389,8 @@ async function readObjects(
   }
 }
 
-export async function snapshot(
-  h: RepoHandle,
-  view: View,
-  caps: Capabilities,
-  seq: number,
-): Promise<Snapshot> {
+export async function snapshot(h: RepoHandle, caps: Capabilities, seq: number): Promise<Snapshot> {
+  const limit = COMMIT_WINDOW;
   const [head, refs, indexRead] = await Promise.all([
     readHead(h.repo),
     readRefs(h.repo, h.gitDir),
@@ -413,10 +399,9 @@ export async function snapshot(
   const { index, indexElided } = indexRead;
 
   // The window: one more than asked for, so we know whether there is more.
-  const args = revListArgs(view, view.limit + 1, head.oid !== undefined);
-  const revs = args ? lines(await text(h.repo, args)) : [];
-  const more = revs.length > view.limit;
-  const windowCommits = revs.slice(0, view.limit);
+  const revs = lines(await text(h.repo, revListArgs(limit + 1, head.oid !== undefined)));
+  const more = revs.length > limit;
+  const windowCommits = revs.slice(0, limit);
   const inWindow = new Set(windowCommits);
 
   const commits: Record<Oid, Commit> = {};
@@ -455,13 +440,15 @@ export async function snapshot(
     }
     await readObjects(h, structural, commits, trees, tags);
   } else {
-    // Bounded: only the trees the user has actually opened, plus what the
-    // index stages. Nothing here walks the object database.
-    const opened = view.expanded
-      .filter((o) => o in commits)
-      .map((o) => commits[o].tree)
-      .filter(Boolean);
-    await readObjects(h, opened, commits, trees, tags);
+    // Bounded by the window, not by what anyone has expanded: a step carries
+    // everything a view could draw, so expanding a commit is a redraw and never
+    // a question for the server. Nothing here walks the object database.
+    //
+    // ponytail: the trees of `limit` commits, whole, on every step. The window
+    // is the knob if that ever bites — nobody has measured it on a repository
+    // this size.
+    const seedTrees = windowCommits.map((o) => commits[o]?.tree).filter(Boolean);
+    await readObjects(h, seedTrees, commits, trees, tags);
     const known = new Set<Oid>([
       ...Object.keys(commits),
       ...Object.keys(trees),
@@ -517,7 +504,6 @@ export async function snapshot(
       more,
       refsOutside,
     },
-    view,
     notes: notesFor(caps, { more, shown: windowCommits.length, refsOutside, indexElided }),
   };
 }
@@ -600,10 +586,7 @@ function notesFor(
   },
 ): Note[] {
   const notes: Note[] = [];
-  if (!caps.fullLoad) {
-    notes.push({ id: 'noUnreachableDetection', args: [caps.objectCount] });
-    notes.push({ id: 'treesOnDemand' });
-  }
+  if (!caps.fullLoad) notes.push({ id: 'noUnreachableDetection', args: [caps.objectCount] });
   if (ctx.indexElided) {
     notes.push({ id: 'indexElided', args: [ctx.indexElided.shown, ctx.indexElided.total] });
   }

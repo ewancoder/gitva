@@ -148,7 +148,7 @@ step "A second branch, and a commit on it: the graph forks into lanes."
 run "git checkout -q -b feature"
 run "printf 'feature work\n' > feature.txt; git add feature.txt; git commit -q -m 'start the feature'"
 
-step "Another author, so search-by-author has something to find."
+step "Another author on the same file, so the commits differ by more than a message."
 run "printf 'more feature work\n' >> feature.txt"
 run "GIT_AUTHOR_NAME=Grace GIT_AUTHOR_EMAIL=grace@example.com git commit -q -am 'continue the feature'"
 

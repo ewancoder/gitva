@@ -1,10 +1,12 @@
 /**
  * The client: one view, one tape, one camera.
  *
- * Every way the user can change what is on screen is a change to the view —
- * branch filtering, search, paging and drill-down are one mechanism, not four
- * features. Everything the browser is shown is kept, so a demo can be replayed
- * instead of redone.
+ * It only ever reads. Every way the user can change what is on screen is a
+ * change to the view, which lives here and goes nowhere: the server is told
+ * nothing, asked nothing, and one browser cannot alter another's canvas.
+ * Everything the browser is shown is kept, so a demo can be replayed instead of
+ * redone — and once the recording has arrived, a lost connection costs nothing
+ * but the next step.
  *
  * What is left here is DOM: elements, events and painting. Every decision the
  * gestures make is in `tape.ts` and `camera.ts`, where it is tested.
@@ -13,11 +15,11 @@
 import { diffScenes, isVisible, describe, EMPTY_CHANGE, type Change } from '../src/diff.js';
 import { layout, M, type Scene, type SceneNode } from '../src/layout.js';
 import { language, LANGUAGES, S, setLanguage } from '../src/strings.js';
-import { QUESTIONS_ENABLED, type Snapshot, type View } from '../src/types.js';
+import type { Snapshot } from '../src/types.js';
 import { bounded, centre, fit, glideStep, refit, toWorld, zoom, zoomOut, type Camera } from './camera.js';
 import { renderPanel } from './panel.js';
 import { bandEdgeAt, draw, hitTest, snapPositions } from './render.js';
-import { canMark, isDouble, Pins, questionFor, Tape, type Click } from './tape.js';
+import { isDouble, Pins, Tape, type Click } from './tape.js';
 import { type Mode, setTheme, theme } from './theme.js';
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -343,39 +345,18 @@ function redressed() {
 }
 
 // ---------------------------------------------------------------------------
-// Talking to the server
+// Listening to the server
 // ---------------------------------------------------------------------------
 
-let postTimer: number | undefined;
-function postView(v: View) {
-  clearTimeout(postTimer);
-  postTimer = setTimeout(() => {
-    void fetch('/view', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(v),
-    });
-  }, 60) as unknown as number;
-}
-
-/** A toggle in the view toolbar changes what is drawn, not what is asked of
- *  git: the server reads the index and works out the unreachable set either
- *  way. So it is never posted — which is what keeps it yours, and keeps a
- *  step's own toggles out of the recording. */
+/** The view changed: write down the part of it that outlives the page, and
+ *  draw again. Nothing is sent anywhere — the step on screen already holds
+ *  everything the new view needs, which is what keeps the view yours. */
 function drawView() {
-  prefs.showIndex = tape.view.showIndex;
-  savePrefs();
-  relayout(true, false);
-  updateHeader();
-}
-
-function pushView() {
   prefs.showIndex = tape.view.showIndex;
   savePrefs();
   saveFolds();
   relayout(true, false);
   updateHeader();
-  postView(tape.view);
 }
 
 const source = new EventSource('/events');
@@ -388,10 +369,7 @@ const source = new EventSource('/events');
 source.addEventListener('history', (e) => {
   live(true);
   const states: Snapshot[] = JSON.parse((e as MessageEvent).data);
-  let post: View | null = null;
-  for (const s of states) post = tape.arrive(s, prefs, true).post ?? post;
-  if (post) postView(tape.view);
-  fillBranches(states[states.length - 1]);
+  for (const s of states) tape.arrive(s, prefs, true);
   shown(null);
   if (scene) {
     camera = fit(scene, canvas.clientWidth);
@@ -403,9 +381,7 @@ source.addEventListener('history', (e) => {
 source.addEventListener('snapshot', (e) => {
   live(true);
   const s: Snapshot = JSON.parse((e as MessageEvent).data);
-  fillBranches(s);
   const a = tape.arrive(s, prefs);
-  if (a.post) postView(a.post);
   if (a.kind === 'shown') {
     shown(a.prev);
     // The first state frames the graph; after that only if asked to, because
@@ -415,15 +391,15 @@ source.addEventListener('snapshot', (e) => {
       glide = null;
       schedule();
     }
-  } else if (a.kind === 'inplace') {
-    relayout(true, false);
-    redressed();
   } else updateHeader();
 });
-/** Which recording this is, once per connection. A click hands it over, so a
- *  repository about to move can be picked up again with `gitva --id <it>`. */
+/** Which recording this is, and whether the presenter asked for every commit
+ *  expanded — both facts about the run, told once per connection. A click hands
+ *  the identifier over, so a repository about to move can be picked up again
+ *  with `gitva --id <it>`. */
 source.addEventListener('recording', (e) => {
-  const { id } = JSON.parse((e as MessageEvent).data) as { id: string };
+  const { id, learning } = JSON.parse((e as MessageEvent).data) as { id: string; learning: boolean };
+  tape.presenting(learning);
   const el = $('recording-id');
   el.textContent = id;
   el.onclick = () => copied(id, id);
@@ -480,7 +456,6 @@ function updateHeader() {
   // Links from unreachable are drawn from the unreachable set, so with that set
   // hidden there is nothing for them to leave from.
   $<HTMLButtonElement>('toggle-cross').disabled = !unreachableShown;
-  $('load-all').hidden = !tape.canLoadMore;
   live(source.readyState !== 2);
 }
 
@@ -488,47 +463,6 @@ function renderHeaderChange(text: string) {
   $('change').textContent = text;
 }
 
-let branchNames = '';
-function fillBranches(s: Snapshot) {
-  const names = s.refs.map((r) => r.name).join(' ');
-  if (names === branchNames) return;
-  branchNames = names;
-  const sel = $<HTMLSelectElement>('branches');
-  const chosen = new Set([...sel.selectedOptions].map((o) => o.value));
-  sel.replaceChildren();
-  for (const r of s.refs) {
-    const o = document.createElement('option');
-    o.value = r.name;
-    o.textContent = r.name.replace(/^refs\//, '');
-    o.selected = chosen.has(r.name);
-    sel.append(o);
-  }
-  sel.size = Math.min(6, Math.max(2, s.refs.length));
-}
-
-/** The one question the toolbar is asking, whichever control was touched. */
-function askFromToolbar() {
-  const kind = $<HTMLSelectElement>('question').value;
-  const refs = [...$<HTMLSelectElement>('branches').selectedOptions].map((o) => o.value);
-  tape.ask(questionFor(kind, $<HTMLInputElement>('search').value, refs));
-  pushView();
-}
-
-// Filtering is off while the server holds one shared view — see types.ts.
-if (!QUESTIONS_ENABLED) $('question').hidden = true;
-
-$('question').addEventListener('change', () => {
-  const kind = $<HTMLSelectElement>('question').value;
-  $('search').hidden = kind === 'all' || kind === 'branches';
-  $('branches').hidden = kind !== 'branches';
-  askFromToolbar();
-});
-$('search').addEventListener('input', () => {
-  const kind = $<HTMLSelectElement>('question').value;
-  if (kind === 'all' || kind === 'branches') return;
-  askFromToolbar();
-});
-$('branches').addEventListener('change', askFromToolbar);
 $('toggle-index').addEventListener('click', () => {
   tape.view = { ...tape.view, showIndex: !tape.view.showIndex };
   drawView();
@@ -554,16 +488,13 @@ namesBtn.addEventListener('click', () => {
   savePrefs();
   showNames();
 });
-$('load-all').addEventListener('click', () => {
-  if (tape.loadAll()) pushView();
-});
 $('unfold').addEventListener('click', () => {
   tape.unfoldAll();
-  pushView();
+  drawView();
 });
 $('fold').addEventListener('click', () => {
   tape.foldAll();
-  pushView();
+  drawView();
 });
 // Dropping every pin, at every moment of the tape: a pin is a thing you put
 // there by hand, so taking them all back is one gesture, not a page reload.
@@ -728,14 +659,7 @@ canvas.addEventListener('pointerup', (e) => {
       schedule();
       return;
     } else return;
-    pushView();
-    return;
-  }
-
-  // A button, not an object: clicking it loads, it never becomes the thing
-  // the rest of the graph is dimmed around.
-  if (id === 'more') {
-    if (tape.loadMore()) pushView();
+    drawView();
     return;
   }
   // Shift is the undo of dragging: the pin comes out and the layout takes the
@@ -764,9 +688,10 @@ canvas.addEventListener('contextmenu', (e) => {
   const w = world(e);
   const hit = scene ? hitTest(scene, w.x, w.y) : null;
   if (!hit) return;
-  // A node moves around as history is filtered and folded, and a mark is how
-  // you follow it.
-  if (!canMark(hit.kind)) return;
+  // A shape moves around as the object graph is expanded and collapsed, and a
+  // mark is how you follow it. One gesture for every kind: a mark says "keep an
+  // eye on this", and that is the same wish whether the thing is a commit, a
+  // blob, a branch or a staged path.
   if (!marked.delete(hit.id)) marked.add(hit.id);
   schedule();
 });
