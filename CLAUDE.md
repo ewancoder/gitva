@@ -59,8 +59,14 @@ are the only things that move. That is the difference between `git commit --amen
 | **flash** | what a shape does when it changes: the one reserved accent, decaying to zero. |
 | **state** | a condition a shape is in: **staged**, **unreachable**, **conflicted**, plus the two you create — **marked** and **pinned**. |
 | **step** | one entry in the recording. **Only git causes a step** — expanding, collapsing and the toggles redraw in place and add nothing. A step is what git did; a view is how you look at it, and a step carries everything any view could draw. |
-| **recording** | the server's list of steps. Written by the server, shared by every viewer, read-only to them. |
-| **view** | how one browser is looking at the recording: what is expanded, what is folded, the toggles, the marks, the pins, the camera. **Yours alone.** It is made in the browser, lives in the browser and is never sent anywhere — `View` in `types.ts` has no route to the server, so changing yours cannot change anyone else's, and cannot make the server ask git anything. That is why gitva stays read-only and you can still rearrange everything on screen. |
+| **recording** | the server's list of steps. Written by the server, shared by every viewer, read-only to them. `Recording` in the browser holds its copy of that list, the cursor into it, *and* the view — the class comment carries the shared/yours line the type cannot. |
+| **scene** | what `layout()` makes: every shape and link, with positions, plus the columns. Ours, and a drawing word — the canvas is where a scene is painted, the scene is what gets painted. |
+| **column** | one of the four the canvas is divided into: **pointers and tags · commits · trees and blobs · index**. Its key is its name in code (`pointersAndTags`, `treesAndBlobs`), never the retired label. Its right-hand boundary is a **column edge**, and you can drag it. |
+| **stray** | a shape put down on its own because nothing on screen links to it. **Not the same as unreachable** — a stray can be reachable from something outside the window, and an unreachable object linked from another unreachable one is not a stray. |
+| **answer** | an expand or a collapse you made by hand. Held apart from the view's defaults (`Recording.answers`) and written to `localStorage`, because *an answer you gave must not be overruled by a default* — that is the whole reason it exists. |
+| **leaving** | shapes drawn at their old place while they fade out. Distinct from **ghost**, which is how an unreachable shape looks; a leaving shape is not a state, it is an animation. |
+| **silhouette** | the outline a shape is drawn with — what separates the kinds once the three hues are spent. |
+| **view** | how one browser is looking at the recording: what is expanded, what is collapsed, the toggles, the marks, the pins, the camera. **Yours alone.** It is made in the browser, lives in the browser and is never sent anywhere — `View` in `types.ts` has no route to the server, so changing yours cannot change anyone else's, and cannot make the server ask git anything. That is why gitva stays read-only and you can still rearrange everything on screen. |
 
 **Never `node`.** It makes a false claim — a branch chip is not a node in the object graph, and
 that is the one thing about branches worth understanding. Never `arrow` or `edge` for a link
@@ -108,35 +114,45 @@ pins, or your camera.
 
 ### Old term → new term
 
-**The code deliberately keeps its old identifiers** — renaming working code is risk without
-reward, and the test suite and `View`/`Snapshot` wire format depend on them. This table is for
-**prose, UI strings, comments and new code**. When you touch a user-visible string, bring it
-across; do not rename a symbol just to match.
+**The code has been brought across too** — identifiers, file names, the wire format and the
+browser's storage keys. There is no old half left: this table is history, and the rule it now
+states is that none of the left-hand column may come back, in prose, in a UI string, in a
+comment or in a symbol. A new name that means one of these things is wrong.
 
-| old (still in code, and some still on screen) | new |
+| retired | new |
 |---|---|
-| `node` | **shape** in docs/code; on screen say "anything" or the actual kind |
-| `arrow`, `edge` | **link** |
+| `node`, `SceneNode`, `NodeKind` | **shape**, `Shape`, `ShapeKind`; on screen say "anything" or the actual kind |
+| `arrow`, `edge`, `SceneEdge`, `arrowhead` | **link**, `Link`, `linkHead` |
 | fold / unfold / `folded` / `expanded` (in copy) | **collapse / expand** |
 | orphan, orphans, orphaned, "orphan detection" | **unreachable** (`--orphan` is a git flag for a *branch with no history*) |
 | dangling | **unreachable** — gitva computes the full unreachable set; `dangling` is fsck's narrower term |
-| tape | **recording** |
-| state (as a recording entry), `Snapshot` (in prose) | **step** |
+| tape, `Tape`, `TAPE_CAP` | **recording**, `Recording`, `RECORDING_CAP` |
+| state (as a recording entry), `Snapshot`, `snap`, `fakeState`, `event: snapshot`/`history` | **step**, `Step`, `fakeStep`, `event: step`/`steps` |
 | picture | **canvas** |
 | graph (as the drawn surface) | **canvas**; **object graph** only for the DAG itself |
-| cross links | **links from unreachable** |
-| column label "objects" | **trees and blobs** |
-| column label "pointers" | **pointers and tags** |
+| cross links, `showCrossLinks` | **links from unreachable**, `showLinksFromUnreachable` |
+| column label "objects", key `objects`, `Band`, `bands` | **trees and blobs**, key `treesAndBlobs`, `Column`, `columns` |
+| column label "pointers", key `pointers` | **pointers and tags**, key `pointersAndTags` |
 | header, `transport`, `notes` | **view / recording / notes toolbar** |
-| `panel` | **inspector** |
+| `panel`, `panelModel`, `renderPanel` | **inspector**, `inspectorModel`, `renderInspector` (the colour token is `surface`: dialogs and the index column use it too) |
 | legend (the dialog) | **help** — legend is one section inside it |
-| Preferences | **settings** |
+| Preferences, `Prefs`, `prefs`, `openNewCommits` | **settings**, `Settings`, `expandNewCommits` |
 | reader, watcher, person, author | **you** (interface), **viewer(s)** (docs) |
 | room | **viewers** |
+| `seam` | **column edge** — `columnEdge`, `columnEdgeAt` |
+| `world` (as coordinates), `toWorld`, `Port` | **canvas** — `toCanvas`, `Viewport` |
+| `ghosts` (as shapes on their way out) | **leaving** — `ghost` stays the unreachable look |
+| `caps`, `indexNodes` | `capabilities`, `indexShapes` |
 
-The interface, the README and the teaching text have been brought across. `explain.ts` keeps one
-deliberate "folded" — *"packed — folded into .git/packed-refs"* — because that is git's own use
-of the word, and the reason ours had to give way.
+Five uses of a retired word survive, each because it is git's or the platform's rather than
+ours: `explain.ts`'s *"packed — folded into .git/packed-refs"* (git's own word, and the reason
+ours had to give way), `git.ts`'s *folded header* for a signature continuation, `node:` builtins
+and `NodeJS` types, the DOM's `ArrowLeft`/`ArrowRight` key names, and `server.test.ts`'s
+`reader` — a WHATWG stream reader off `res.body.getReader()`, not a person.
+
+**`edge` is retired for a link only.** A **column edge** is the boundary you drag to widen a
+column — `columnEdge`, `columnEdgeAt`, `#inspector-edge`, and *"drag a column edge"* in the help.
+It is not a connection between shapes, so it does not carry node's defect.
 
 ## Commands
 
@@ -155,16 +171,16 @@ dependency passes the one-sentence test in `INITIAL_DESIGN.md` §14.
 |---|---|
 | `src/strings-en.ts` | **every user-facing string**: the toolbars, tooltips, help, teaching text, notes, what the CLI prints. `ui` is one flat entry per `data-t*` key in `web/index.html`; the rest is what code asks for by name, a string or an arrow function where a number sits in the sentence. |
 | `src/strings.ts` | the localization framework: `LANGUAGES` (the registry the buttons are drawn from), a loader per language, the live binding `S`, `setLanguage`, and `renderNote`. No language but English is loaded until it is chosen. |
-| `src/types.ts` | shared vocabulary: `Snapshot`, `View`, `Capabilities`. Imported by both sides. |
-| `src/git.ts` | the **only** place that spawns git. Parsers, `measure`, `changeSignal`, `snapshot`, `findUnreachable`, `readBody`. |
-| `src/layout.ts` | `layout(snapshot, view, pins) → Scene`. Pure. Knows nothing about painting. |
+| `src/types.ts` | shared vocabulary: `Step`, `View`, `Capabilities`. Imported by both sides. |
+| `src/git.ts` | the **only** place that spawns git. Parsers, `measure`, `changeSignal`, `readStep`, `findUnreachable`, `readBody`. |
+| `src/layout.ts` | `layout(step, view, pins) → Scene`. Pure. Knows nothing about painting. |
 | `src/diff.ts` | `diffScenes` (what to flash), `describe` (the recording toolbar's change line). Pure. |
-| `src/explain.ts` | the inspector's facts, per shape kind (`NodeKind` in code); the wording is in `strings-en.ts`. Pure. |
+| `src/explain.ts` | the inspector's facts, per `ShapeKind`; the wording is in `strings-en.ts`. Pure. |
 | `src/store.ts` | the recording on disk: where the system keeps it, `recordingKey` (the ten-character identifier, shown in the view toolbar), one file per key, load and save, and `FORMAT` — **bump it whenever a step stops meaning what it meant**, because a kept recording written under another number is dropped rather than half-drawn. Server-only. |
 | `src/server.ts` | `node:http`: static files, SSE `/events`, `GET /object`. **Nothing that writes** — there is no route a browser can reach that changes what is recorded. |
 | `src/cli.ts` | `parseArgs` (pure), `main`; opens the browser. Runs only when it *is* the command, so importing it for a test starts nothing. |
-| `web/` | `index.html` (all CSS), `tape.ts` (the recording: steps, cursor, view, pins — no DOM), `camera.ts` (where the object graph sits under the canvas — arithmetic only), `panel.ts` (the inspector: `panelModel` pure, then the elements), `render.ts` (canvas), `theme.ts`, `app.ts` (DOM, events, painting — and nothing else). |
-| `test/` | `fixture.ts` builds real repos with real plumbing, and `fakeState` for what is said rather than what git did; the rest are `node:test`. `boundary.test.ts` is the split itself, enforced. |
+| `web/` | `index.html` (all CSS), `recording.ts` (the recording: steps, cursor, view, pins — no DOM), `camera.ts` (where the object graph sits under the canvas — arithmetic only), `inspector.ts` (`inspectorModel` pure, then the elements), `render.ts` (canvas), `theme.ts`, `app.ts` (DOM, events, painting — and nothing else). |
+| `test/` | `fixture.ts` builds real repos with real plumbing, and `fakeStep` for what is said rather than what git did; the rest are `node:test`. `boundary.test.ts` is the split itself, enforced. |
 
 `src/*` is compiled to `dist/src` and served to the browser too — `web/app.ts` imports
 `../src/{diff,layout,types,explain}.js`. **Nothing under `src/` that the browser imports may
@@ -190,11 +206,11 @@ browser makes: `GET /object`, and nothing else, ever.
    process per tree.
 3. **One conversation, many answers.** Never one git process per object. `cat-file --batch` with
    a list on stdin is the pattern; `readObjects()` walks trees level by level that way.
-4. **Layout is a pure function of its inputs.** Same `Snapshot` + `View` ⇒ identical `Scene`.
+4. **Layout is a pure function of its inputs.** Same `Step` + `View` ⇒ identical `Scene`.
    Positions must not depend on what was on screen before or on processing order — otherwise
    change highlighting stops meaning anything. Tested in `test/layout.test.ts`.
 5. **Idle costs nothing.** The client's rAF loop stops when no animation is running; the server
-   polls a signal that costs O(refs), not O(objects), and only builds a snapshot when it moves.
+   polls a signal that costs O(refs), not O(objects), and only builds a step when it moves.
    It polls whether or not a browser is connected — the recording belongs to the repository, and
    a step nobody was watching for cannot be built after the repository has moved on.
 
@@ -204,12 +220,12 @@ browser makes: `GET /object`, and nothing else, ever.
 it decides everything else.
 
 The **server is the source of truth and the only writer.** It polls the change signal, and when
-the repository moves it records a step: a whole `Snapshot`, carrying *everything any view could
+the repository moves it records a step: a whole `Step`, carrying *everything any view could
 want to draw* — the window's commits, every tree in it, the index whether or not anyone is
 drawing it, the unreachable set whether or not anyone is showing it. `seq` counts steps, and only
 git moves it.
 
-The **browser only reads.** It holds a `View` — what is `expanded`, what is `folded`, and the
+The **browser only reads.** It holds a `View` — what is `expanded`, what is `collapsed`, and the
 three toggles — and that object never leaves the tab: there is no `POST`, no way to ask the server
 for more, and therefore no way for one viewer to change another's canvas. Every gesture is a
 redraw of a step already in hand, so a browser that loses its connection keeps working with
@@ -220,13 +236,13 @@ the server a question, so there is no paging, and the notes toolbar admits what 
 Filtering and search were removed for the same reason. If per-viewer windows are ever wanted, the
 answer is *not* a route — it is the browser holding enough to answer them itself.
 
-**Whole steps, never deltas.** The server sends the entire `Snapshot` on every change, and
-keeps them: a browser connecting gets the whole shared recording in one `event: history` frame
+**Whole steps, never deltas.** The server sends the entire `Step` on every change, and
+keeps them: a browser connecting gets the whole shared recording in one `event: steps` frame
 and replays it silently, so a second tab or a late joiner stands where every other viewer does.
 That is affordable *because* the window is bounded, and it is what keeps diffing, replay and
 change highlighting simple. If profiling ever argues for deltas, the burden of proof is on the
-delta. A reconnecting stream is handed the recording again, and `Tape.arrive` drops every step it
-already holds — steps arrive in order, so anything not newer is a re-send.
+delta. A reconnecting stream is handed the recording again, and `Recording.arrive` drops every
+step it already holds — steps arrive in order, so anything not newer is a re-send.
 
 **The recording outlives the process.** It is written to the user's own state directory —
 never into the observed repository — keyed by the repository's full path unless `--id` named
@@ -240,7 +256,7 @@ It reaches the browser in its own `event: recording` frame, because it is a fact
 recording rather than about a step, and a step scrubbed back to must not change it.
 
 **A step carries no view at all**, which is what makes a kept recording safe to hand over
-untouched. A `Snapshot` used to carry the `View` it was answered under, so a resumed recording was
+untouched. A `Step` used to carry the `View` it was answered under, so a resumed recording was
 still answering the *last* run's question, and `serve()` had to re-answer its newest step before
 listening — restarting with `--learning` opened nothing, and restarting was the only way to change
 your mind. All of that is gone with the field. What is a fact about the *run* rather than about a
@@ -257,7 +273,7 @@ Above `LIMITS.fullLoad` (12,000 objects) unreachable detection is off; above `LI
 (400) the index is drawn as its delta from HEAD. Both limits are estimates from the expensive
 step — reading every tree — against a 100 ms rebuild budget; **they have never been benchmarked**,
 so treat them as knobs to measure, not facts. When something is not on offer,
-the interface says why, in `snapshot()`'s `notes[]`, shown in the notes toolbar. Test degradation
+the interface says why, in `readStep()`'s `notes[]`, shown in the notes toolbar. Test degradation
 by faking the `Capabilities` object, not by building a huge repo.
 
 **The change signal** hashes `for-each-ref` + HEAD + `count-objects -v` + `stat(.git/index)`.
@@ -267,7 +283,7 @@ first two things the tutorial teaches.
 **The words are the viewer's.** A step carries note **ids** — `{ id, args }`, `Note` in
 `types.ts` — never sentences, so the same recorded step reads in whatever language the browser
 holding it is set to, including a language added long after the step was recorded. The choice is
-a preference in `localStorage`, never posted: switching it changes nobody else's canvas, and
+a setting in `localStorage`, never posted: switching it changes nobody else's canvas, and
 needs no round trip because `web/*` already imports the strings module. `S` is a live binding, so
 nothing may cache a sentence — `setLanguage` swaps the words and the caller says everything
 again (`applyWords` in `app.ts`). A language arrives when it is chosen, one module, the way every
@@ -295,12 +311,13 @@ in the language the process was built with.
 
 - **No user-facing string is written anywhere but `src/strings-en.ts`.** `web/index.html` holds
   keys — `data-t` for text, `data-t-title`, `data-t-placeholder`, and `data-t-html` for the
-  handful that carry a `<kbd>` — and `web/app.ts` fills them in on load. `test/strings.test.ts` fails if a
-  key has no string, if a string is unused, or if a `data-t-html` value smuggles in a tag other
-  than `<kbd>`. New copy goes there and is reached through `S`; the strings module is pure data,
-  so `src/` files the browser imports may use it freely. **A sentence never crosses the wire**:
-  what the server has to say about a step is a `Note` id plus its numbers, and the browser makes
-  the sentence — which is also why a count is passed raw and `toLocaleString()`d where it is read.
+  handful that carry a `<kbd>` — and `web/app.ts` fills them in on load. `test/strings.test.ts`
+  fails if a key has no string, if a string is unused, or if a `data-t-html` value smuggles in
+  a tag other than `<kbd>`. New copy goes there and is reached through `S`; the strings module
+  is pure data, so `src/` files the browser imports may use it freely. **A sentence never
+  crosses the wire**: what the server has to say about a step is a `Note` id plus its numbers,
+  and the browser makes the sentence — which is also why a count is passed raw and
+  `toLocaleString()`d where it is read.
 - Small, obvious code — the codebase is part of the teaching material. If an optimisation stops
   reading as an explanation of how git works, it has to justify itself.
 - Comments explain *why* (usually citing the design brief), not what.
@@ -311,9 +328,9 @@ in the language the process was built with.
   feature is not done when it works — it is done when it has tests and `npm test` is green with
   nothing newly uncovered.
 - **If a thing cannot be tested, split it until it can.** That is what `web/app.ts` is: DOM,
-  events and painting, with every decision it makes moved into `tape.ts` (steps, collapses,
+  events and painting, with every decision it makes moved into `recording.ts` (steps, collapses,
   pins, paging, what the recording toolbar says), `camera.ts` (bounds, gliding, zooming, fitting)
-  and `panel.ts`'s `panelModel`, all of which are pure and all of which are tested. Painting is
+  and `inspector.ts`'s `inspectorModel`, all of which are pure and all tested. Painting is
   checked by looking at it, but *what* to paint is not: `path()` and `hitTest()` decide things,
   so they have tests, and `draw()` is walked over every kind and every zoom tier with a stub
   canvas so a shape nobody drew in anger cannot throw.

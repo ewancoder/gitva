@@ -1,17 +1,17 @@
 /**
- * What the panel says about the thing you clicked. The decisions here are
- * which bytes to show and where they come from — the snapshot already has a
+ * What the inspector says about the thing you clicked. The decisions here are
+ * which bytes to show and where they come from — the step already has a
  * ref's contents, an object's has to be fetched — and getting that wrong shows
- * up as an empty panel, which looks like nothing having gone wrong at all.
+ * up as an empty inspector, which looks like nothing having gone wrong at all.
  */
 
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { bodyText, panelModel, renderPanel } from '../web/panel.js';
-import type { SceneNode } from '../src/layout.js';
-import { fakeState } from './fixture.js';
+import { bodyText, inspectorModel, renderInspector } from '../web/inspector.js';
+import type { Shape } from '../src/layout.js';
+import { fakeStep } from './fixture.js';
 
-const node = (over: Partial<SceneNode> & Pick<SceneNode, 'kind' | 'id'>): SceneNode => ({
+const shape = (over: Partial<Shape> & Pick<Shape, 'kind' | 'id'>): Shape => ({
   x: 0,
   y: 0,
   w: 10,
@@ -21,51 +21,51 @@ const node = (over: Partial<SceneNode> & Pick<SceneNode, 'kind' | 'id'>): SceneN
 });
 
 describe('what to read out', () => {
-  const state = fakeState({ objects: { b1: { oid: 'b1', type: 'blob', size: 3 } } });
+  const step = fakeStep({ objects: { b1: { oid: 'b1', type: 'blob', size: 3 } } });
 
   it('fetches an object’s bytes, under a heading that fits what it is', () => {
     const headings = (['blob', 'tree', 'commit', 'tag', 'index'] as const).map(
-      (kind) => panelModel(state, node({ kind, id: 'x', oid: 'b1' })).body?.heading,
+      (kind) => inspectorModel(step, shape({ kind, id: 'x', oid: 'b1' })).body?.heading,
     );
     assert.deepEqual(headings, ['contents', 'entries', 'raw object', 'raw object', 'contents']);
   });
 
   it('explains a submodule as the commit it is, in another repository', () => {
-    const m = panelModel(state, node({ kind: 'submodule', id: 'c1' }));
+    const m = inspectorModel(step, shape({ kind: 'submodule', id: 'c1' }));
     assert.equal(m.title, 'Commit');
     assert.equal(m.body, null);
   });
 });
 
-describe('the bytes the snapshot already has', () => {
+describe('the bytes the step already has', () => {
   it('shows a loose ref as the one line the file holds', () => {
-    const s = fakeState({ refs: [{ name: 'refs/heads/main', oid: 'aaa', objectType: 'commit', packed: false }] });
-    const m = panelModel(s, node({ kind: 'ref', id: 'ref:refs/heads/main' }));
+    const s = fakeStep({ refs: [{ name: 'refs/heads/main', oid: 'aaa', objectType: 'commit', packed: false }] });
+    const m = inspectorModel(s, shape({ kind: 'ref', id: 'ref:refs/heads/main' }));
     assert.equal(m.raw, 'aaa\n');
     assert.equal(m.body, null, 'a ref is never fetched — it is not an object');
   });
 
   it('shows a packed ref as the packed-refs line that replaced its file', () => {
-    const s = fakeState({ refs: [{ name: 'refs/tags/v1', oid: 'ttt', objectType: 'tag', packed: true }] });
-    assert.equal(panelModel(s, node({ kind: 'ref', id: 'ref:refs/tags/v1' })).raw, 'ttt refs/tags/v1\n');
+    const s = fakeStep({ refs: [{ name: 'refs/tags/v1', oid: 'ttt', objectType: 'tag', packed: true }] });
+    assert.equal(inspectorModel(s, shape({ kind: 'ref', id: 'ref:refs/tags/v1' })).raw, 'ttt refs/tags/v1\n');
   });
 
   it('shows nothing rather than guessing for a ref that has gone', () => {
-    assert.equal(panelModel(fakeState(), node({ kind: 'ref', id: 'ref:refs/heads/gone' })).raw, '');
+    assert.equal(inspectorModel(fakeStep(), shape({ kind: 'ref', id: 'ref:refs/heads/gone' })).raw, '');
   });
 
   it('shows HEAD as the pointer to a pointer it is, or the raw sha when detached', () => {
-    assert.equal(panelModel(fakeState(), node({ kind: 'head', id: 'HEAD' })).raw, 'ref: refs/heads/main\n');
-    const off = fakeState({ head: { oid: 'ccc', detached: true, unborn: false } });
-    assert.equal(panelModel(off, node({ kind: 'head', id: 'HEAD' })).raw, 'ccc\n');
+    assert.equal(inspectorModel(fakeStep(), shape({ kind: 'head', id: 'HEAD' })).raw, 'ref: refs/heads/main\n');
+    const off = fakeStep({ head: { oid: 'ccc', detached: true, unborn: false } });
+    assert.equal(inspectorModel(off, shape({ kind: 'head', id: 'HEAD' })).raw, 'ccc\n');
   });
 });
 
 /**
- * Just enough document to hang elements off. The panel is the one place the
+ * Just enough document to hang elements off. The inspector is the one place the
  * client builds DOM out of an answer that arrives later, and "later" is where
  * the bug is: an answer for the thing you clicked before must not land in the
- * panel for the thing you clicked after.
+ * inspector for the thing you clicked after.
  */
 class El {
   className = '';
@@ -93,7 +93,7 @@ class El {
 }
 globalThis.document = { createElement: (tag: string) => new El(tag) } as unknown as Document;
 
-describe('the panel on screen', () => {
+describe('the inspector on screen', () => {
   const realFetch = globalThis.fetch;
   afterEach(() => {
     globalThis.fetch = realFetch;
@@ -113,20 +113,20 @@ describe('the panel on screen', () => {
     return asked;
   }
 
-  const blob = (id: string) => node({ kind: 'blob', id, oid: id });
-  const state = fakeState({ objects: { b1: { oid: 'b1', type: 'blob', size: 3 } } });
+  const blob = (id: string) => shape({ kind: 'blob', id, oid: id });
+  const step = fakeStep({ objects: { b1: { oid: 'b1', type: 'blob', size: 3 } } });
   const settle = () => new Promise((r) => setTimeout(r, 0));
 
   it('says what to do before anything has been clicked', () => {
     const el = new El('aside');
-    renderPanel(el as unknown as HTMLElement, null, null);
+    renderInspector(el as unknown as HTMLElement, null, null);
     assert.match(el.text, /Click anything/);
   });
 
   it('writes the explanation first and fills the contents in when they arrive', async () => {
     const el = new El('aside');
     const asked = held();
-    renderPanel(el as unknown as HTMLElement, state, blob('b1'));
+    renderInspector(el as unknown as HTMLElement, step, blob('b1'));
     assert.match(el.text, /A blob is a file's contents/);
     assert.equal(el.find('pre')!.textContent, 'reading…');
     asked[0].answer({ text: 'alpha\n' });
@@ -137,8 +137,8 @@ describe('the panel on screen', () => {
   it('drops an answer for the thing that was clicked before', async () => {
     const el = new El('aside');
     const asked = held();
-    renderPanel(el as unknown as HTMLElement, state, blob('b1'));
-    renderPanel(el as unknown as HTMLElement, state, blob('b2'));
+    renderInspector(el as unknown as HTMLElement, step, blob('b1'));
+    renderInspector(el as unknown as HTMLElement, step, blob('b2'));
     asked[1].answer({ text: 'the one asked for last\n' });
     asked[0].answer({ text: 'the stale one\n' });
     await settle();
@@ -148,7 +148,7 @@ describe('the panel on screen', () => {
   it('owns up when the body could not be read', async () => {
     const el = new El('aside');
     const asked = held();
-    renderPanel(el as unknown as HTMLElement, state, blob('b1'));
+    renderInspector(el as unknown as HTMLElement, step, blob('b1'));
     asked[0].fail();
     await settle();
     assert.equal(el.find('pre')!.textContent, 'could not read it');
@@ -158,7 +158,7 @@ describe('the panel on screen', () => {
   it('marks the sha field alone, so a click can hand the key over', () => {
     const el = new El('aside');
     held();
-    renderPanel(el as unknown as HTMLElement, state, blob('b1'));
+    renderInspector(el as unknown as HTMLElement, step, blob('b1'));
     const fields = el.find('dl')!.children.filter((c) => c.tag === 'dd');
     assert.deepEqual(
       fields.map((c) => [c.textContent, c.className]),
@@ -169,7 +169,7 @@ describe('the panel on screen', () => {
   it('puts the file it is stored in under the sha, whole path hidden behind it', async () => {
     const el = new El('aside');
     const asked = held();
-    renderPanel(el as unknown as HTMLElement, state, blob('b1'));
+    renderInspector(el as unknown as HTMLElement, step, blob('b1'));
     asked[0].answer({ text: 'alpha\n', path: 'objects/b1/xyz' });
     await settle();
     const rows = el.find('dl')!.children.map((c) => c.textContent);
@@ -183,8 +183,8 @@ describe('the panel on screen', () => {
   it('puts it last when there is no sha to put it under', async () => {
     const el = new El('aside');
     const asked = held();
-    const staged = fakeState({ index: [{ path: 'a.txt', oid: 'b1', mode: '100644', stage: 0 }] });
-    renderPanel(el as unknown as HTMLElement, staged, node({ kind: 'index', id: 'index:0:a.txt', oid: 'b1' }));
+    const staged = fakeStep({ index: [{ path: 'a.txt', oid: 'b1', mode: '100644', stage: 0 }] });
+    renderInspector(el as unknown as HTMLElement, staged, shape({ kind: 'index', id: 'index:0:a.txt', oid: 'b1' }));
     asked[0].answer({ text: 'alpha\n', path: 'objects/b1/xyz' });
     await settle();
     assert.deepEqual(el.find('dl')!.children.map((c) => c.textContent).slice(-2), ['stored in', 'objects/b1/xyz']);
@@ -193,8 +193,8 @@ describe('the panel on screen', () => {
   it('shows a ref’s bytes without asking the server for anything', () => {
     const el = new El('aside');
     globalThis.fetch = (() => assert.fail('a ref is not fetched')) as unknown as typeof fetch;
-    const s = fakeState({ refs: [{ name: 'refs/heads/main', oid: 'aaa', objectType: 'commit', packed: false }] });
-    renderPanel(el as unknown as HTMLElement, s, node({ kind: 'ref', id: 'ref:refs/heads/main' }));
+    const s = fakeStep({ refs: [{ name: 'refs/heads/main', oid: 'aaa', objectType: 'commit', packed: false }] });
+    renderInspector(el as unknown as HTMLElement, s, shape({ kind: 'ref', id: 'ref:refs/heads/main' }));
     assert.match(el.text, /raw content\naaa/);
   });
 });

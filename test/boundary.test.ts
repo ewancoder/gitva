@@ -104,13 +104,13 @@ describe('the line between the server and the browser', () => {
     }
   });
 
-  it('never lets a node builtin reach the browser', () => {
+  it('never lets a node: builtin reach the browser', () => {
     for (const entry of webFiles) {
       const { builtins } = reachable(entry);
       assert.deepEqual(
         [...builtins].map(([spec, where]) => `${where} imports ${spec}`),
         [],
-        `${entry} is served to a browser, which has no node builtins`,
+        `${entry} is served to a browser, which has no node: builtins`,
       );
     }
   });
@@ -145,7 +145,7 @@ describe('the line between the server and the browser', () => {
     );
     assert.deepEqual(calls.sort(), [
       'web/app.ts: EventSource /events',
-      'web/panel.ts: fetch /object?oid=${m.body.oid}',
+      'web/inspector.ts: fetch /object?oid=${m.body.oid}',
     ]);
     for (const f of webFiles) {
       // Both halves of a write: the verb, and any way of choosing one.

@@ -1,22 +1,22 @@
 /**
  * What changed. This is what makes a plumbing command land — it is not polish.
  *
- * Whole states are compared, not deltas: bounding the view is what makes
- * sending whole states affordable, and whole states are what make this simple.
- * Each state is diffed against whatever is currently on screen, so stepping
- * backwards through the tape highlights the change in reverse — which is how
+ * Whole steps are compared, not deltas: bounding the view is what makes
+ * sending whole steps affordable, and whole steps are what make this simple.
+ * Each step is diffed against whatever is currently on screen, so stepping
+ * backwards through the recording highlights the change in reverse — which is how
  * you show a reset twice without doing it twice.
  */
 
 import type { Scene } from './layout.js';
 import { S } from './strings.js';
-import type { Snapshot } from './types.js';
+import type { Step } from './types.js';
 
 export interface Change {
   added: Set<string>;
   removed: Set<string>;
   moved: Set<string>;
-  /** Nodes present in both, but saying something different. */
+  /** Shapes present in both, but saying something different. */
   updated: Set<string>;
 }
 
@@ -34,8 +34,8 @@ export function diffScenes(prev: Scene | null, next: Scene): Change {
   const updated = new Set<string>();
   if (!prev) return { added, removed, moved, updated };
 
-  const before = new Map(prev.nodes.map((n) => [n.id, n]));
-  const after = new Map(next.nodes.map((n) => [n.id, n]));
+  const before = new Map(prev.shapes.map((n) => [n.id, n]));
+  const after = new Map(next.shapes.map((n) => [n.id, n]));
   for (const [id, n] of after) {
     const b = before.get(id);
     if (!b) {
@@ -53,19 +53,19 @@ export function diffScenes(prev: Scene | null, next: Scene): Change {
 /** Whether a diff has anything to show. A step can arrive that draws exactly
  *  the same shapes — `git status` rewrites the index's stat cache, and the
  *  change signal moves — and such a step must not cancel the flash, or a fade,
- *  that the last real change started. `moved` does not count: a band resize
+ *  that the last real change started. `moved` does not count: a column resize
  *  moves everything and changes nothing. */
 export function isVisible(c: Change): boolean {
   return c.added.size > 0 || c.removed.size > 0 || c.updated.size > 0;
 }
 
-/** The sentence in the header: what the last update actually did. */
-export function describe(prev: Snapshot | null, next: Snapshot): string {
+/** The sentence in the recording toolbar: what the last step actually did. */
+export function describe(prev: Step | null, next: Step): string {
   const T = S.change;
   if (!prev) return T.first;
   const parts: string[] = [];
 
-  const objs = (s: Snapshot) => new Set(Object.keys(s.objects));
+  const objs = (s: Step) => new Set(Object.keys(s.objects));
   const [a, b] = [objs(prev), objs(next)];
   const newObjects = [...b].filter((o) => !a.has(o));
   const goneObjects = [...a].filter((o) => !b.has(o));
@@ -94,9 +94,9 @@ export function describe(prev: Snapshot | null, next: Snapshot): string {
   if (staged) parts.push(T.staged(staged));
   if (unstaged) parts.push(T.unstaged(unstaged));
 
-  const orphansNow = (next.unreachable ?? []).length;
-  const orphansWas = (prev.unreachable ?? []).length;
-  if (orphansNow > orphansWas) parts.push(T.nowUnreachable(orphansNow - orphansWas));
+  const unreachableNow = (next.unreachable ?? []).length;
+  const unreachableWas = (prev.unreachable ?? []).length;
+  if (unreachableNow > unreachableWas) parts.push(T.nowUnreachable(unreachableNow - unreachableWas));
 
   return parts.length ? parts.join(T.join) : T.none;
 }

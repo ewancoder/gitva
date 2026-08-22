@@ -1,14 +1,14 @@
 /**
- * The teaching text. It is the product — the graph is only how you get to it —
+ * The teaching text. It is the product — the canvas is only how you get to it —
  * so every kind gitva draws has to have something true to say about itself,
- * and every fact it offers has to come out of the state rather than out of a
+ * and every fact it offers has to come out of the step rather than out of a
  * guess about it.
  */
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { entryId, explain, explainKind, refName } from '../src/explain.js';
-import { fakeState } from './fixture.js';
+import { fakeStep } from './fixture.js';
 
 const fact = (facts: [string, string][], key: string) => facts.find(([k]) => k === key)?.[1];
 
@@ -29,7 +29,7 @@ describe('what each kind is', () => {
 });
 
 describe('objects', () => {
-  const state = fakeState({
+  const step = fakeStep({
     objects: {
       b1: { oid: 'b1', type: 'blob', size: 6 },
       b2: { oid: 'b2', type: 'blob', size: 2048 },
@@ -37,29 +37,29 @@ describe('objects', () => {
     trees: { t1: [{ mode: '100644', name: 'a.txt', oid: 'b1', type: 'blob' }] },
   });
 
-  it('gives a blob its sha and its size in the units a person reads', () => {
-    assert.equal(fact(explain(state, 'blob', 'b1').facts, 'size'), '6 B');
-    assert.equal(fact(explain(state, 'blob', 'b2').facts, 'size'), '2.0 KiB');
+  it('gives a blob its sha and its size in the units you read', () => {
+    assert.equal(fact(explain(step, 'blob', 'b1').facts, 'size'), '6 B');
+    assert.equal(fact(explain(step, 'blob', 'b2').facts, 'size'), '2.0 KiB');
   });
 
-  it('says nothing about the size of an object the state does not carry', () => {
-    const facts = explain(state, 'blob', 'nope').facts;
+  it('says nothing about the size of an object the step does not carry', () => {
+    const facts = explain(step, 'blob', 'nope').facts;
     assert.deepEqual(facts, [['sha', 'nope']]);
   });
 
   it('says an unreachable object is still rescuable', () => {
-    const s = fakeState({ objects: state.objects, unreachable: ['b1'] });
+    const s = fakeStep({ objects: step.objects, unreachable: ['b1'] });
     assert.match(fact(explain(s, 'blob', 'b1').facts, 'reachable')!, /rescued/);
   });
 
   it('says a staged-only blob is held up by the index alone', () => {
-    const s = fakeState({ objects: state.objects, stagedOnly: ['b1'] });
+    const s = fakeStep({ objects: step.objects, stagedOnly: ['b1'] });
     assert.match(fact(explain(s, 'blob', 'b1').facts, 'reachable')!, /only through the index/);
   });
 
   it('counts a tree’s entries, and says nothing when the tree was never read', () => {
-    assert.equal(fact(explain(state, 'tree', 't1').facts, 'entries'), '1');
-    assert.equal(fact(explain(state, 'tree', 'unread').facts, 'entries'), undefined);
+    assert.equal(fact(explain(step, 'tree', 't1').facts, 'entries'), '1');
+    assert.equal(fact(explain(step, 'tree', 'unread').facts, 'entries'), undefined);
   });
 });
 
@@ -76,7 +76,7 @@ describe('commits', () => {
   });
 
   it('names the tree it points at, its parents, and what it says', () => {
-    const s = fakeState({ commits: { c1: commit(['p123456789', 'p223456789']) } });
+    const s = fakeStep({ commits: { c1: commit(['p123456789', 'p223456789']) } });
     const facts = explain(s, 'commit', 'c1').facts;
     assert.equal(fact(facts, 'tree'), 'tree567');
     assert.equal(fact(facts, 'parents'), 'p123456, p223456');
@@ -85,23 +85,23 @@ describe('commits', () => {
   });
 
   it('calls a commit with no parents what it is', () => {
-    const s = fakeState({ commits: { c1: commit([]) } });
+    const s = fakeStep({ commits: { c1: commit([]) } });
     assert.equal(fact(explain(s, 'commit', 'c1').facts, 'parents'), 'none (root)');
   });
 
   it('leaves out the date when git gave none', () => {
-    const s = fakeState({ commits: { c1: { ...commit([]), authorDate: 0 } } });
+    const s = fakeStep({ commits: { c1: { ...commit([]), authorDate: 0 } } });
     assert.equal(fact(explain(s, 'commit', 'c1').facts, 'authored'), undefined);
   });
 
   it('says only the sha of a commit outside the window', () => {
-    assert.deepEqual(explain(fakeState(), 'commit', 'c9').facts, [['sha', 'c9']]);
+    assert.deepEqual(explain(fakeStep(), 'commit', 'c9').facts, [['sha', 'c9']]);
   });
 });
 
 describe('tags', () => {
   it('reads an annotated tag out: its name, its target and its message', () => {
-    const s = fakeState({
+    const s = fakeStep({
       tags: {
         g1: { oid: 'g1', target: 'c123456789', targetType: 'commit', name: 'v1', tagger: 'A <a@b>', message: 'the first release\n' },
       },
@@ -113,13 +113,13 @@ describe('tags', () => {
   });
 
   it('says only the sha of a tag object it has not read', () => {
-    assert.deepEqual(explain(fakeState(), 'tag', 'g9').facts, [['sha', 'g9']]);
+    assert.deepEqual(explain(fakeStep(), 'tag', 'g9').facts, [['sha', 'g9']]);
   });
 });
 
 describe('pointers', () => {
   const ref = (packed: boolean, target?: string) =>
-    fakeState({ refs: [{ name: 'refs/heads/main', oid: 'aaa', objectType: 'commit', packed, target }] });
+    fakeStep({ refs: [{ name: 'refs/heads/main', oid: 'aaa', objectType: 'commit', packed, target }] });
 
   it('says a branch is a file with a sha in it, and where', () => {
     const e = explain(ref(false), 'ref', 'ref:refs/heads/main');
@@ -135,29 +135,29 @@ describe('pointers', () => {
     assert.equal(fact(e.facts, 'peels to'), 'ccc');
   });
 
-  it('says nothing about a ref that is not in this state', () => {
-    assert.deepEqual(explain(fakeState(), 'ref', 'ref:refs/heads/gone').facts, []);
+  it('says nothing about a ref that is not in this step', () => {
+    assert.deepEqual(explain(fakeStep(), 'ref', 'ref:refs/heads/gone').facts, []);
   });
 
   it('explains HEAD as a pointer to a pointer', () => {
-    const e = explain(fakeState(), 'head', 'HEAD');
+    const e = explain(fakeStep(), 'head', 'HEAD');
     assert.equal(fact(e.facts, 'contains'), 'ref: refs/heads/main');
     assert.equal(fact(e.facts, 'resolves to'), 'a'.repeat(40));
   });
 
   it('explains what an unborn HEAD is', () => {
-    const s = fakeState({ head: { ref: 'refs/heads/main', detached: false, unborn: true } });
+    const s = fakeStep({ head: { ref: 'refs/heads/main', detached: false, unborn: true } });
     assert.match(fact(explain(s, 'head', 'HEAD').facts, 'contains')!, /does not exist yet/);
   });
 
   it('explains a detached HEAD as the raw sha it is', () => {
-    const s = fakeState({ head: { oid: 'ccc', detached: true, unborn: false } });
+    const s = fakeStep({ head: { oid: 'ccc', detached: true, unborn: false } });
     assert.match(fact(explain(s, 'head', 'HEAD').facts, 'contains')!, /ccc — detached/);
   });
 });
 
 describe('the index', () => {
-  const s = fakeState({
+  const s = fakeStep({
     index: [
       { path: 'a.txt', oid: 'b1', mode: '100644', stage: 0 },
       { path: 'c.txt', oid: 'b2', mode: '100644', stage: 2 },

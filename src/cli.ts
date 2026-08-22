@@ -13,7 +13,7 @@ export interface Options {
   port: number;
   host: string;
   open: boolean;
-  /** Commits arrive unfolded — for demonstrating to a room. */
+  /** Commits arrive expanded — for demonstrating to viewers. */
   learning: boolean;
   /** Throw the kept recording away and start it at the repository as it is now. */
   fresh: boolean;

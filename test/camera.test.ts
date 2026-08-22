@@ -1,36 +1,36 @@
 /**
- * Where the graph sits under the window. All of this is arithmetic you cannot
- * check by looking: "the graph is a page you cannot pan off" is either true at
+ * Where the object graph sits under the canvas. All of this is arithmetic you cannot
+ * check by looking: "the object graph is a page you cannot pan off" is either true at
  * every zoom or it is a bug you only meet once you are lost in empty grey.
  */
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { bounded, centre, fit, glideStep, refit, toWorld, zoom, zoomOut } from '../web/camera.js';
+import { bounded, centre, fit, glideStep, refit, toCanvas, zoom, zoomOut } from '../web/camera.js';
 import type { Scene } from '../src/layout.js';
 
-const port = { width: 500, height: 400 };
+const viewport = { width: 500, height: 400 };
 const tall = { width: 1000, height: 3000 };
 const scene = (width: number, height: number) =>
-  ({ nodes: [], edges: [], bands: [], width, height, rows: [] }) satisfies Scene;
+  ({ shapes: [], links: [], columns: [], width, height, rows: [] }) satisfies Scene;
 
 describe('panning bounds', () => {
-  it('stops at the near edge and at the far edge of a graph bigger than the window', () => {
-    assert.deepEqual(bounded({ x: 900, y: 900 }, 1, tall, port), { x: 20, y: 20 });
-    // Far side: the window's width minus the content's, less the same margin.
-    assert.deepEqual(bounded({ x: -9999, y: -9999 }, 1, tall, port), { x: -520, y: -2620 });
+  it('stops at the near edge and at the far edge of an object graph bigger than the canvas', () => {
+    assert.deepEqual(bounded({ x: 900, y: 900 }, 1, tall, viewport), { x: 20, y: 20 });
+    // Far side: the canvas's width minus the content's, less the same margin.
+    assert.deepEqual(bounded({ x: -9999, y: -9999 }, 1, tall, viewport), { x: -520, y: -2620 });
   });
 
-  it('keeps a graph smaller than the window inside it, either way it is pushed', () => {
+  it('keeps an object graph smaller than the canvas inside it, either way it is pushed', () => {
     const small = { width: 100, height: 50 };
-    assert.deepEqual(bounded({ x: -400, y: -400 }, 1, small, port), { x: 20, y: 20 });
-    assert.deepEqual(bounded({ x: 9999, y: 9999 }, 1, small, port), { x: 380, y: 330 });
+    assert.deepEqual(bounded({ x: -400, y: -400 }, 1, small, viewport), { x: 20, y: 20 });
+    assert.deepEqual(bounded({ x: 9999, y: 9999 }, 1, small, viewport), { x: 380, y: 330 });
   });
 
   it('measures the content at the zoom it is drawn at', () => {
-    // Zoomed out far enough, a graph twice the window's width fits in it, and
+    // Zoomed out far enough, an object graph twice the canvas's width fits in it, and
     // what was a floor becomes a ceiling.
-    assert.deepEqual(bounded({ x: -9999, y: 0 }, 0.1, tall, port), { x: 20, y: 20 });
+    assert.deepEqual(bounded({ x: -9999, y: 0 }, 0.1, tall, viewport), { x: 20, y: 20 });
   });
 });
 
@@ -52,14 +52,14 @@ describe('gliding', () => {
 });
 
 describe('the pointer', () => {
-  it('reads a screen point as a graph point, through the camera', () => {
+  it('reads a screen point as a canvas point, through the camera', () => {
     const cam = { x: 30, y: 10, scale: 2 };
-    assert.deepEqual(toWorld(cam, { clientX: 130, clientY: 60 }, { left: 10, top: 0 }), { x: 45, y: 25 });
+    assert.deepEqual(toCanvas(cam, { clientX: 130, clientY: 60 }, { left: 10, top: 0 }), { x: 45, y: 25 });
   });
 
-  it('puts the middle of a clicked node in the middle of the window', () => {
-    const cam = centre({ x: 0, y: 0, scale: 2 }, { x: 100, y: 50, w: 40, h: 20 }, port);
-    assert.deepEqual([cam.x + 120 * 2, cam.y + 60 * 2], [port.width / 2, port.height / 2]);
+  it('puts the middle of a clicked shape in the middle of the canvas', () => {
+    const cam = centre({ x: 0, y: 0, scale: 2 }, { x: 100, y: 50, w: 40, h: 20 }, viewport);
+    assert.deepEqual([cam.x + 120 * 2, cam.y + 60 * 2], [viewport.width / 2, viewport.height / 2]);
   });
 });
 
@@ -68,14 +68,14 @@ describe('zooming', () => {
 
   it('keeps the point under the pointer under the pointer', () => {
     const at = { x: 300, y: 800 };
-    const next = zoom(cam, at, -200, tall, port);
+    const next = zoom(cam, at, -200, tall, viewport);
     assert.ok(next.scale > 1);
     assert.ok(Math.abs(next.x + at.x * next.scale - (cam.x + at.x * cam.scale)) < 1e-9);
   });
 
   it('will not go past four times or below a tenth', () => {
-    assert.equal(zoom(cam, { x: 0, y: 0 }, -100_000, tall, port).scale, 4);
-    assert.equal(zoom(cam, { x: 0, y: 0 }, 100_000, tall, port).scale, 0.1);
+    assert.equal(zoom(cam, { x: 0, y: 0 }, -100_000, tall, viewport).scale, 4);
+    assert.equal(zoom(cam, { x: 0, y: 0 }, 100_000, tall, viewport).scale, 0.1);
   });
 });
 
@@ -84,16 +84,16 @@ describe('fitting', () => {
     assert.deepEqual(fit(scene(460, 100_000), 500), { x: 20, y: 20, scale: 1 });
   });
 
-  it('will not blow a narrow graph up past twice, nor shrink a wide one to nothing', () => {
+  it('will not blow a narrow object graph up past twice, nor shrink a wide one to nothing', () => {
     assert.equal(fit(scene(10, 10), 500).scale, 2);
     assert.equal(fit(scene(100_000, 10), 500).scale, 0.15);
   });
 
   it('zooming out stays at the height you were reading', () => {
-    const cam = zoomOut(scene(1000, 4000), port, 1000);
+    const cam = zoomOut(scene(1000, 4000), viewport, 1000);
     assert.equal(cam.scale, 0.46);
-    // The point that was under the middle of the window still is.
-    assert.equal(cam.y + 1000 * cam.scale, port.height / 2);
+    // The point that was under the middle of the canvas still is.
+    assert.equal(cam.y + 1000 * cam.scale, viewport.height / 2);
     assert.equal(cam.x, 20);
   });
 });
@@ -102,9 +102,9 @@ describe('refitting when the repository changes', () => {
   it('takes the fitted width and leaves the height where it was being read', () => {
     const s = scene(1000, 4000);
     const before = { x: -300, y: -500, scale: 1 };
-    const middle = (port.height / 2 - before.y) / before.scale;
-    const cam = refit(s, port, before);
-    assert.equal(cam.scale, fit(s, port.width).scale);
-    assert.equal(cam.y + middle * cam.scale, port.height / 2);
+    const middle = (viewport.height / 2 - before.y) / before.scale;
+    const cam = refit(s, viewport, before);
+    assert.equal(cam.scale, fit(s, viewport.width).scale);
+    assert.equal(cam.y + middle * cam.scale, viewport.height / 2);
   });
 });

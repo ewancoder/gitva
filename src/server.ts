@@ -15,11 +15,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GitError, changeSignal, measure, open, readBody, snapshot, type RepoHandle } from './git.js';
+import { GitError, changeSignal, measure, open, readBody, readStep, type Repository } from './git.js';
 import { lastSeq, loadRecording, recordingFile, recordingKey, saveRecording } from './store.js';
 import { S } from './strings.js';
 import type { Capabilities } from './types.js';
-import { TAPE_CAP } from './types.js';
+import { RECORDING_CAP } from './types.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const MIME: Record<string, string> = {
@@ -33,14 +33,14 @@ const MIME: Record<string, string> = {
 const POLL_MS = 400;
 
 /**
- * What the shared history is allowed to weigh. Measured: a state of a repository
+ * What the shared recording is allowed to weigh. Measured: a step of a repository
  * small enough to teach on is about 12 KB, so all 400 of them are a few
- * megabytes; a state of one with a few thousand objects is a couple of
+ * megabytes; a step of one with a few thousand objects is a couple of
  * megabytes on its own, and 400 of those is not something to hand a browser
  * that has just opened. Bytes are the ceiling that bites first, so bytes are
  * the ceiling — a shorter tail rather than a delta protocol.
  */
-const HISTORY_BYTES = 16 << 20;
+const RECORDING_BYTES = 16 << 20;
 
 export interface Server {
   port: number;
@@ -69,25 +69,25 @@ export async function serve(
   // The repository need not exist yet: `gitva` in an empty directory waits for
   // `git init`, so the very first plumbing command the tutorial teaches can be
   // watched happening rather than assumed to have happened already.
-  let opened: { handle: RepoHandle; caps: Capabilities } | null = null;
+  let opened: { handle: Repository; capabilities: Capabilities } | null = null;
   async function repository() {
     if (!opened) {
       const handle = await open(repoPath).catch(() => {
         throw new GitError(S.server.noRepo(repoPath));
       });
-      opened = { handle, caps: await measure(handle.repo, handle.gitDir) };
+      opened = { handle, capabilities: await measure(handle.repo, handle.gitDir) };
     }
     return opened;
   }
 
   let seq = lastSeq(kept.steps);
-  /** Every state of the repository, oldest first, already serialised — not
+  /** Every step of the repository, oldest first, already serialised — not
    *  just the newest one. A browser opened halfway through a session gets the
-   *  whole thing on connect, so everyone in the room can walk the same steps.
+   *  whole thing on connect, so every viewer can walk the same steps.
    *  Kept as text because that is what it is sent as, and what it is measured
    *  by, and it survives a restart: see `store.ts`. Nothing here looks inside a
-   *  state, bar the step number a restart carries on from. */
-  const history: string[] = kept.steps;
+   *  step, bar the step number a restart carries on from. */
+  const steps: string[] = kept.steps;
   // Kept with the steps: an untouched repository is not a step, so a restart
   // that changed nothing adds nothing.
   let signal = kept.signal;
@@ -116,16 +116,16 @@ export async function serve(
     }
   }
 
-  /** `seq` counts states of the repository, and only git moves it: every
+  /** `seq` counts steps of the repository, and only git moves it: every
    *  rebuild there is is a step, because only a change signal asks for one. */
   async function rebuild() {
     try {
-      const { handle, caps } = await repository();
-      const s = JSON.stringify(await snapshot(handle, caps, ++seq));
-      record(history, s);
-      const frame = `event: snapshot\ndata: ${s}\n\n`;
+      const { handle, capabilities } = await repository();
+      const s = JSON.stringify(await readStep(handle, capabilities, ++seq));
+      record(steps, s);
+      const frame = `event: step\ndata: ${s}\n\n`;
       for (const c of clients) c.write(frame);
-      await saveRecording(file, { signal, steps: history });
+      await saveRecording(file, { signal, steps: steps });
     } catch (err) {
       const frame = `event: trouble\ndata: ${JSON.stringify({ message: String(err) })}\n\n`;
       for (const c of clients) c.write(frame);
@@ -135,8 +135,9 @@ export async function serve(
   // The overwhelmingly common case is "nothing happened", and it costs one
   // for-each-ref, one count-objects and one stat.
   //
-  // It is asked whether anyone is watching or not: the history is the room's
-  // tape, and a state nobody was connected for cannot be reconstructed later —
+  // It is asked whether anyone is watching or not: the recording is the repository's,
+  // not one browser's, and a step nobody was connected for cannot be
+  // reconstructed later —
   // the repository has moved on. Typing ten plumbing commands and *then*
   // opening the browser has to show ten steps.
   const timer = setInterval(async () => {
@@ -178,14 +179,14 @@ export async function serve(
     res.write(`event: recording\ndata: ${JSON.stringify({ id: key, learning })}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
-    // The whole tape in one frame; `snapshot` stays the live tail, so the
-    // client replays once instead of deciding per state what to animate.
-    if (history.length) res.write(`event: history\ndata: [${history.join(',')}]\n\n`);
+    // The whole recording in one frame; `step` stays the live tail, so the
+    // client replays once instead of deciding per step what to animate.
+    if (steps.length) res.write(`event: steps\ndata: [${steps.join(',')}]\n\n`);
     else void first();
   }
 
   /**
-   * Every client waiting for the first state shares the same read — but only
+   * Every client waiting for the first step shares the same read — but only
    * while it is in flight. A read that found no repository yet leaves nothing
    * to hand the next arrival, and the poller stays quiet until the signal moves,
    * so a later browser has to be allowed to ask again and be told the same
@@ -202,7 +203,7 @@ export async function serve(
     signal = await repository()
       .then(({ handle }) => changeSignal(handle.repo, handle.gitDir))
       .catch(() => signal);
-    await ensureFirstSnapshot(building, () => history.length > 0, () => build());
+    await ensureFirstStep(building, () => steps.length > 0, () => build());
   }
 
   async function object(url: URL, res: ServerResponse) {
@@ -253,27 +254,27 @@ export async function serve(
 }
 
 /**
- * The shared history. Every step git made, in order, with the oldest falling
- * off the far end at the cap the browser's own tape uses or at `HISTORY_BYTES`,
+ * The shared recording. Every step git made, in order, with the oldest falling
+ * off the far end at the cap the browser's own recording uses or at `RECORDING_BYTES`,
  * whichever the repository reaches first.
  */
-export function record(history: string[], state: string): void {
-  history.push(state);
-  let bytes = history.reduce((n, s) => n + s.length, 0);
-  // Whichever ceiling is reached first. The newest state is never dropped: on
+export function record(steps: string[], step: string): void {
+  steps.push(step);
+  let bytes = steps.reduce((n, s) => n + s.length, 0);
+  // Whichever ceiling is reached first. The newest step is never dropped: on
   // a repository big enough to be over the budget on its own, a browser that
-  // joins is still owed the picture everyone else is looking at.
-  while (history.length > 1 && (history.length > TAPE_CAP || bytes > HISTORY_BYTES)) {
-    bytes -= history.shift()!.length;
+  // joins is still owed the canvas everyone else is looking at.
+  while (steps.length > 1 && (steps.length > RECORDING_CAP || bytes > RECORDING_BYTES)) {
+    bytes -= steps.shift()!.length;
   }
 }
 
 /** A poll may answer while the first client is measuring the repository. */
-export async function ensureFirstSnapshot(
+export async function ensureFirstStep(
   active: Promise<void> | null,
-  hasSnapshot: () => boolean,
+  hasStep: () => boolean,
   build: () => Promise<void>,
 ): Promise<void> {
   if (active) await active;
-  if (!hasSnapshot()) await build();
+  if (!hasStep()) await build();
 }

@@ -1,7 +1,7 @@
 /**
  * Real fixture repositories, built with real plumbing commands.
  *
- * Isolated from the recording gitva keeps in the user's own state directory as
+ * Isolated from the recording gitva keeps in the user's own step directory as
  * well: a test that started a server would otherwise write into it, and load
  * back whatever an earlier run left there.
  *
@@ -14,10 +14,10 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Snapshot } from '../src/types.js';
+import type { Step } from '../src/types.js';
 
 // Every test process gets its own, and takes it away again.
-process.env.GITVA_STATE_DIR ??= mkdtempSync(join(tmpdir(), 'gitva-state-'));
+process.env.GITVA_STATE_DIR ??= mkdtempSync(join(tmpdir(), 'gitva-step-'));
 process.on('exit', () => rmSync(process.env.GITVA_STATE_DIR!, { recursive: true, force: true }));
 
 const ENV = {
@@ -57,7 +57,7 @@ export class Repo {
 /**
  * A repo built the way the tutorial teaches it: hash an object, update the
  * index, write a tree, commit — plus a branch, a merge, an annotated tag, and
- * a deliberate orphan that nothing points at.
+ * a deliberate unreachable object that nothing points at.
  */
 export function plumbedRepo(): Repo {
   const r = new Repo();
@@ -92,19 +92,19 @@ export function plumbedRepo(): Repo {
 
   r.git('tag', '-a', 'v1', '-m', 'the first release', merge);
 
-  // The orphan: a blob written into the object database and never referenced.
-  r.write('orphan.txt', 'nobody points at me\n');
-  r.git('hash-object', '-w', 'orphan.txt');
+  // The unreachable object: a blob written into the object database and never referenced.
+  r.write('unreachable.txt', 'nobody points at me\n');
+  r.git('hash-object', '-w', 'unreachable.txt');
 
   return r;
 }
 
 /**
- * An empty but valid state, for the tests that are about what gitva *says*
- * rather than about what git did — the panel, the counts, the explanations.
+ * An empty but valid step, for the tests that are about what gitva *says*
+ * rather than about what git did — the inspector, the counts, the explanations.
  * Fill in only the part being asked about.
  */
-export function fakeState(extra: Partial<Snapshot> = {}): Snapshot {
+export function fakeStep(extra: Partial<Step> = {}): Step {
   return {
     seq: 1,
     time: 0,
@@ -118,14 +118,14 @@ export function fakeState(extra: Partial<Snapshot> = {}): Snapshot {
     tags: {},
     index: [],
     unreachable: [],
-    caps: {
+    capabilities: {
       objectCount: 10,
       looseCount: 10,
       refCount: 1,
       fullLoad: true,
-      indexNodes: true,
+      indexShapes: true,
       commitGraph: false,
-      limits: { fullLoad: 60_000, indexNodes: 400 },
+      limits: { fullLoad: 60_000, indexShapes: 400 },
     },
     window: { commits: [], totalCommits: 0, more: false, refsOutside: 0 },
     notes: [],

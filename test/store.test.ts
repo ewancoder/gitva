@@ -107,7 +107,7 @@ describe('keeping the recording', () => {
     assert.deepEqual(await loadRecording(file), { signal: 'a', steps: ['{"seq":1}'] });
   });
 
-  it('writes the newest state in one move, so a kill costs one step at most', async () => {
+  it('writes the newest step in one move, so a kill costs one step at most', async () => {
     const file = join(dir, 'atomic.json');
     await saveRecording(file, { signal: 'a', steps: ['{"seq":1}'] });
     await saveRecording(file, { signal: 'b', steps: ['{"seq":1}', '{"seq":2}'] });

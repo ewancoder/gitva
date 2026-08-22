@@ -52,11 +52,11 @@ export let language = 'en';
 
 /** Which choice is the current one. Two clicks in a row are two loads, and the
  *  slower one must not land last: only the newest choice may take effect —
- *  `panel.ts` guards a fetched body the same way. */
+ *  `inspector.ts` guards a fetched body the same way. */
 let choice = 0;
 
 /** A code nobody has words for falls back to English rather than blanking the
- *  page: it comes out of a stored preference, which can outlive a language. */
+ *  page: it comes out of a stored setting, which can outlive a language. */
 export async function setLanguage(code: string): Promise<void> {
   const want = code in LOADERS ? code : 'en';
   const mine = ++choice;

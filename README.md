@@ -49,7 +49,7 @@ and `gitva --version` says which one you have. Node ≥20, no runtime dependenci
 The directory need not be a repository yet: start in an empty one and gitva waits, then draws
 the repository the moment you run `git init`.
 
-`--serve` binds every interface instead of loopback, so a room can watch one repository from
+`--serve` binds every interface instead of loopback, so viewers can watch one repository from
 their own browsers. Bare it takes `0.0.0.0:4200`; give it `HOST:PORT` to choose. There is no
 authentication — anyone who reaches the port reads the whole repository.
 
@@ -109,7 +109,7 @@ line inside a ref.
 | double-click a commit | expand or collapse what it links to |
 | double-click a tree | expand or collapse that subtree; collapsed it says how many entries it holds back (`tree +3`) |
 | drag anything | pin it where you put it, across a reload too; shift+click unpins |
-| drag a column seam | widen the left column, for room to arrange pins |
+| drag a column edge | widen the left column, for room to arrange pins |
 | drag the inspector's edge | widen or narrow the inspector; the width is kept |
 | click a sha in the inspector | copies it |
 | click the file in the inspector | where the object's bytes are kept — its loose file, or the pack holding it — shown inside `.git`; the click copies the whole path |
@@ -134,7 +134,7 @@ step — expanding, collapsing and the toggles redraw in place and add nothing. 
 behind you, so a demo can be **replayed instead of redone**; stepping backwards highlights the
 change in reverse, which is how you show a reset twice without doing it twice. Expansions are
 the exception to stepping: what you expanded stays expanded wherever you stand, and across a
-reload — and so does a tree you folded shut, which is the same answer about a different shape.
+reload — and so does a tree you collapsed shut, which is the same answer about a different shape.
 
 ☾ / ☀ turns the ground light or dark, and the glyph is the one you are in. The three object
 hues do not move with it — a commit is warm, a tree green, a blob blue on either ground, because
@@ -160,19 +160,24 @@ filename. `GITVA_STATE_DIR` moves the lot somewhere else.
 Hand it back with `--id` and the same recording comes up from anywhere: copy it before you move
 the folder, or before you clone it onto another machine. `--id` takes any string, so
 `--id teaching` is a name you can choose and remember instead — it is hashed the same way, and a
-key you copied out of the header is taken as itself.
+key you copied out of the view toolbar is taken as itself.
 
 A step no longer carries a view at all. `--learning` is a fact about the run, and the toggles are
 facts about your browser, so stopping gitva and starting it again the other way changes the
-picture and not one recorded step. What is kept is what git did.
+canvas and not one recorded step. What is kept is what git did.
 
 **Recordings made before this change are not resumed.** A step used to hold only the trees that
 whoever was driving had expanded, and there is no longer any way for a browser to ask for the
 rest — so rather than draw a commit that expands into nothing, gitva starts the recording over
 once. Nothing in the repository is affected either way.
 
+**Recordings and saved views from before this rename are dropped once, too.** A step now names its own
+fields in gitva's own words, and so do the keys your browser keeps its view under — so the first
+run starts the recording over, and your pins, marks, collapses, column widths and settings come
+back at their defaults. Once, and again nothing in the repository is affected.
+
 To start it over, restart gitva with `--fresh`. There is no button for it: the recording is
-everyone's, and no viewer's browser should be able to end the room's session.
+everyone's, and no viewer's browser should be able to end everyone's session.
 
 ## Two promises
 

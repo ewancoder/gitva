@@ -23,7 +23,7 @@
 
 export const en = {
   // -------------------------------------------------------------------------
-  // The chrome: keyed from web/index.html
+  // The toolbars and dialogs: keyed from web/index.html
   // -------------------------------------------------------------------------
   ui: {
     'recording-id.title': 'Unique ID of a repository recording. Click to copy: `gitva --id ID` picks the same recording up from anywhere',
@@ -35,8 +35,8 @@ export const en = {
     'index.title': 'Show Index on the right',
     unreachable: 'unreachable',
     'unreachable.title': 'Show unreachable objects',
-    'cross-links': 'links from unreachable',
-    'cross-links.title': 'Show links from unreachable objects to reachable ones',
+    'links-from-unreachable': 'links from unreachable',
+    'links-from-unreachable.title': 'Show links from unreachable objects to reachable ones',
     names: 'names',
     'names.title': 'Show the names tree entries carry, on the links',
     'theme.title': 'Switch between the light and the dark ground',
@@ -80,8 +80,8 @@ export const en = {
     'help.keys.drag.does': 'pin it where you put it (“reset view” drops every pin)',
     'help.keys.shiftClick': 'shift-click it',
     'help.keys.shiftClick.does': 'unpin it again',
-    'help.keys.seam': 'drag a column edge',
-    'help.keys.seam.does': 'widen that column (“reset view” puts it back)',
+    'help.keys.columnEdge': 'drag a column edge',
+    'help.keys.columnEdge.does': 'widen that column (“reset view” puts it back)',
     'help.keys.fit.does': 'fit the canvas to the width',
     'help.keys.index.does': 'show or hide the index',
     'help.keys.back.does': 'step back through the recording',
@@ -95,17 +95,17 @@ export const en = {
     'settings.centreOnClick': 'clicking something centres the view on it',
     'settings.refitOnChange': 'auto-zoom the view when something happens in the repository',
     'settings.showPins': 'visual pins for everything you moved manually',
-    'settings.openNewCommits': 'new commits expanded by default',
+    'settings.expandNewCommits': 'new commits expanded by default',
   },
 
   // -------------------------------------------------------------------------
   // The canvas: the column labels, and what a shape says about itself
   // -------------------------------------------------------------------------
   canvas: {
-    bands: {
-      pointers: 'pointers and tags',
+    columns: {
+      pointersAndTags: 'pointers and tags',
       commits: 'commits',
-      objects: 'trees and blobs',
+      treesAndBlobs: 'trees and blobs',
       index: 'index',
     },
     /** What a lightweight tag's chip is prefixed with in the gutter. */
@@ -309,10 +309,10 @@ usage: gitva [repo] [options]
 
 options:
   --port N              listen on port N (default: a free one the OS picks)
-  --serve [HOST:PORT]   bind every interface, not just loopback, so a room can
+  --serve [HOST:PORT]   bind every interface, not just loopback, so viewers can
                         watch (default 0.0.0.0:4200) — there is no authentication
   --no-open             do not open a browser
-  --learning            start with every commit expanded, for showing to a room
+  --learning            start with every commit expanded, for showing to viewers
   --id NAME             file the recording under NAME instead of the folder's path
   --fresh               throw the kept recording away and start it at the
                         repository as it is now

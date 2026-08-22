@@ -26,7 +26,7 @@ import type {
   ObjectType,
   Oid,
   Ref,
-  Snapshot,
+  Step,
   TagObject,
   TreeEntry,
 } from './types.js';
@@ -222,7 +222,7 @@ function identDate(ident: string): number {
  * so the limit is there. Both numbers are estimates, not benchmarks: nobody has
  * timed this. If a repository in the field argues with them, measure first.
  */
-export const LIMITS = { fullLoad: 12_000, indexNodes: 400 };
+export const LIMITS = { fullLoad: 12_000, indexShapes: 400 };
 
 export async function measure(repo: string, gitDir?: string): Promise<Capabilities> {
   const counts = await text(repo, ['count-objects', '-v']);
@@ -244,7 +244,7 @@ export async function measure(repo: string, gitDir?: string): Promise<Capabiliti
     looseCount,
     refCount,
     fullLoad: objectCount <= LIMITS.fullLoad,
-    indexNodes: indexCount <= LIMITS.indexNodes,
+    indexShapes: indexCount <= LIMITS.indexShapes,
     commitGraph,
     limits: { ...LIMITS },
   };
@@ -279,17 +279,17 @@ export async function changeSignal(repo: string, gitDir: string): Promise<string
 }
 
 // ---------------------------------------------------------------------------
-// The snapshot
+// The step
 // ---------------------------------------------------------------------------
 
-export interface RepoHandle {
+export interface Repository {
   repo: string;
   gitDir: string;
   name: string;
   hashLen: number;
 }
 
-export async function open(cwd: string): Promise<RepoHandle> {
+export async function open(cwd: string): Promise<Repository> {
   const gitDir = (await text(cwd, ['rev-parse', '--absolute-git-dir'])).trim();
   const top = (await maybe(cwd, ['rev-parse', '--show-toplevel'])) || gitDir;
   const format = (await maybe(cwd, ['rev-parse', '--show-object-format'])) || 'sha1';
@@ -340,14 +340,14 @@ export function revListArgs(limit: number, hasHead: boolean): string[] {
   return ['rev-list', '--topo-order', `-n${limit}`, ...(hasHead ? ['--all', 'HEAD'] : ['--all'])];
 }
 
-async function readIndex(repo: string, caps: Capabilities) {
+async function readIndex(repo: string, capabilities: Capabilities) {
   const raw = zsplit(await text(repo, ['ls-files', '--stage', '-z']));
   const all: IndexEntry[] = raw.map((l) => {
     const tab = l.indexOf('\t');
     const [mode, oid, stage] = l.slice(0, tab).split(' ');
     return { mode, oid, stage: Number(stage), path: l.slice(tab + 1) };
   });
-  if (caps.indexNodes || all.length === 0) return { index: all };
+  if (capabilities.indexShapes || all.length === 0) return { index: all };
 
   // Above the limit the interesting part of the index is the delta, not the
   // inventory: draw what differs from HEAD and count the rest.
@@ -360,7 +360,7 @@ async function readIndex(repo: string, caps: Capabilities) {
 
 /** Read the bodies of a set of oids in one conversation, following trees down. */
 async function readObjects(
-  h: RepoHandle,
+  h: Repository,
   seed: Oid[],
   commits: Record<Oid, Commit>,
   trees: Record<Oid, TreeEntry[]>,
@@ -389,12 +389,12 @@ async function readObjects(
   }
 }
 
-export async function snapshot(h: RepoHandle, caps: Capabilities, seq: number): Promise<Snapshot> {
+export async function readStep(h: Repository, capabilities: Capabilities, seq: number): Promise<Step> {
   const limit = COMMIT_WINDOW;
   const [head, refs, indexRead] = await Promise.all([
     readHead(h.repo),
     readRefs(h.repo, h.gitDir),
-    readIndex(h.repo, caps),
+    readIndex(h.repo, capabilities),
   ]);
   const { index, indexElided } = indexRead;
 
@@ -421,10 +421,10 @@ export async function snapshot(h: RepoHandle, caps: Capabilities, seq: number): 
     }
   }
 
-  if (caps.fullLoad) {
+  if (capabilities.fullLoad) {
     // Small enough to hold whole: every object's header in one conversation,
-    // then every commit, tree and tag body in another. Orphans fall out of the
-    // traversal for free, which is the lesson made executable.
+    // then every commit, tree and tag body in another. Unreachable objects fall
+    // out of the traversal for free, which is the lesson made executable.
     const all = lines(
       await text(h.repo, [
         'cat-file',
@@ -471,12 +471,12 @@ export async function snapshot(h: RepoHandle, caps: Capabilities, seq: number): 
     }
   }
 
-  const reach = caps.fullLoad
+  const reach = capabilities.fullLoad
     ? findUnreachable(objects, commits, trees, tags, head, refs, index)
     : null;
 
   // A ref pointing outside the window is left out and counted, never drawn as
-  // an edge to a node that isn't there.
+  // a link to a shape that isn't there.
   const refsOutside = refs.filter((r) => !inWindow.has(r.target ?? r.oid)).length;
 
   return {
@@ -497,14 +497,14 @@ export async function snapshot(h: RepoHandle, caps: Capabilities, seq: number): 
     indexElided,
     unreachable: reach?.unreachable ?? null,
     stagedOnly: reach?.stagedOnly ?? null,
-    caps,
+    capabilities,
     window: {
       commits: windowCommits,
-      totalCommits: caps.fullLoad ? countCommits(objects) : null,
+      totalCommits: capabilities.fullLoad ? countCommits(objects) : null,
       more,
       refsOutside,
     },
-    notes: notesFor(caps, { more, shown: windowCommits.length, refsOutside, indexElided }),
+    notes: notesFor(capabilities, { more, shown: windowCommits.length, refsOutside, indexElided }),
   };
 }
 
@@ -517,13 +517,13 @@ function countCommits(objects: Record<Oid, GitObject>): number {
 /**
  * Reachability, computed rather than asked for: walk out from the roots — HEAD,
  * every ref, every index entry — and anything the walk never reached is an
- * orphan. Faster than the built-in checker, and it is the lesson itself.
+ * unreachable object. Faster than the built-in checker, and it is the lesson itself.
  *
  * The walk runs in two halves because the index is a root of a different kind.
- * History is drawn as a graph; the index is not, so an object only the index
+ * History is drawn as an object graph; the index is not, so an object only the index
  * holds — everything `git add` has ever written and no commit names yet — has
  * nothing on screen pointing at it, and would otherwise be drawn nowhere at
- * all. It is not an orphan (gc keeps it), so it gets its own list.
+ * all. It is not an unreachable object (gc keeps it), so it gets its own list.
  */
 export function findUnreachable(
   objects: Record<Oid, GitObject>,
@@ -577,7 +577,7 @@ export function findUnreachable(
 }
 
 function notesFor(
-  caps: Capabilities,
+  capabilities: Capabilities,
   ctx: {
     more: boolean;
     shown: number;
@@ -586,21 +586,21 @@ function notesFor(
   },
 ): Note[] {
   const notes: Note[] = [];
-  if (!caps.fullLoad) notes.push({ id: 'noUnreachableDetection', args: [caps.objectCount] });
+  if (!capabilities.fullLoad) notes.push({ id: 'noUnreachableDetection', args: [capabilities.objectCount] });
   if (ctx.indexElided) {
     notes.push({ id: 'indexElided', args: [ctx.indexElided.shown, ctx.indexElided.total] });
   }
   if (ctx.more) notes.push({ id: 'more', args: [ctx.shown] });
   if (ctx.refsOutside > 0) notes.push({ id: 'refsOutside', args: [ctx.refsOutside] });
   // Nothing here about what the view toolbar's toggles hide: those are the
-  // viewer's, so the sentence is theirs to make too (`Tape.notes`), and a step
+  // viewer's, so the sentence is theirs to make too (`Recording.notes`), and a step
   // must not still claim the index is hidden once they show it again.
   // Teaching the user about a git internal they didn't know existed is gitva
   // working as designed. Detect it, hint at it, never build it — that would be
   // a write.
-  if (!caps.commitGraph && caps.objectCount > LIMITS.fullLoad) notes.push({ id: 'noCommitGraph' });
-  if (caps.looseCount > 0 && caps.objectCount > 5_000)
-    notes.push({ id: 'looseObjects', args: [caps.looseCount] });
+  if (!capabilities.commitGraph && capabilities.objectCount > LIMITS.fullLoad) notes.push({ id: 'noCommitGraph' });
+  if (capabilities.looseCount > 0 && capabilities.objectCount > 5_000)
+    notes.push({ id: 'looseObjects', args: [capabilities.looseCount] });
   notes.push({ id: 'bodiesOnSelection' });
   return notes;
 }
@@ -612,7 +612,7 @@ function notesFor(
  * index file so gitva never has to. It wants that file on stdin, and reads the
  * whole of it: only on selection, and only for something already packed.
  */
-export async function objectPath(h: RepoHandle, oid: Oid): Promise<string | null> {
+export async function objectPath(h: Repository, oid: Oid): Promise<string | null> {
   const loose = `objects/${oid.slice(0, 2)}/${oid.slice(2)}`;
   if (await stat(join(h.gitDir, loose)).then(() => true, () => false)) return loose;
   const dir = join(h.gitDir, 'objects/pack');
@@ -632,7 +632,7 @@ export async function objectPath(h: RepoHandle, oid: Oid): Promise<string | null
 
 /** A body is for reading one thing. Fetched on selection, never broadcast —
  *  and with it, where in .git that one thing is kept. */
-export async function readBody(h: RepoHandle, oid: Oid): Promise<{
+export async function readBody(h: Repository, oid: Oid): Promise<{
   type: ObjectType;
   size: number;
   text: string | null;
@@ -653,7 +653,7 @@ export async function readBody(h: RepoHandle, oid: Oid): Promise<{
     type: got.type,
     size: got.body.length,
     text: binary ? null : slice.toString('utf8'),
-    // The panel must not present the first 64 KiB of a blob as the whole blob.
+    // The inspector must not present the first 64 KiB of a blob as the whole blob.
     truncated: got.body.length > slice.length,
     path,
   };

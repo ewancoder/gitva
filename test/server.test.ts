@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { ensureFirstSnapshot, record, serve, type Server } from '../src/server.js';
+import { ensureFirstStep, record, serve, type Server } from '../src/server.js';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { plumbedRepo, fakeState, type Repo } from './fixture.js';
-import { TAPE_CAP, type Snapshot } from '../src/types.js';
+import { plumbedRepo, fakeStep, type Repo } from './fixture.js';
+import { RECORDING_CAP, type Step } from '../src/types.js';
 
-/** The snapshots off an event stream, one frame at a time. `quietMs` ends it
+/** The steps off an event stream, one frame at a time. `quietMs` ends it
  *  when nothing more arrives, which is how a test asserts that nothing did. */
-async function* snapshots(res: Response, quietMs = 0) {
+async function* stepsOf(res: Response, quietMs = 0) {
   const reader = res.body!.getReader();
   let buf = '';
   try {
@@ -26,10 +26,10 @@ async function* snapshots(res: Response, quietMs = 0) {
       const frame = buf.slice(0, end);
       buf = buf.slice(end + 2);
       const data = frame.split('\ndata: ')[1];
-      // A connect hands over every state at once; the live tail is one at a
-      // time. Either way what a reader wants is states, in order.
-      if (frame.startsWith('event: history')) yield* JSON.parse(data);
-      else if (frame.startsWith('event: snapshot')) yield JSON.parse(data);
+      // A connect hands over every step at once; the live tail is one at a
+      // time. Either way what a viewer wants is steps, in order.
+      if (frame.startsWith('event: steps\n')) yield* JSON.parse(data);
+      else if (frame.startsWith('event: step\n')) yield JSON.parse(data);
     }
   }
   } finally {
@@ -60,7 +60,7 @@ describe('the server', () => {
   it('serves the page', async () => {
     const res = await fetch(base);
     assert.equal(res.status, 200);
-    assert.match(await res.text(), /<canvas id="graph">/);
+    assert.match(await res.text(), /<canvas id="canvas">/);
   });
 
   it('serves the favicon the page asks for', async () => {
@@ -74,11 +74,11 @@ describe('the server', () => {
     assert.equal((await fetch(base + '../package.json')).status, 404);
   });
 
-  it('pushes a whole state down the stream', async () => {
-    const stream = snapshots(await fetch(base + 'events'));
-    const snap = (await stream.next()).value;
-    assert.equal(snap.repo, repo.dir.split('/').pop());
-    assert.ok(snap.window.commits.length >= 3);
+  it('pushes a whole step down the stream', async () => {
+    const stream = stepsOf(await fetch(base + 'events'));
+    const step = (await stream.next()).value;
+    assert.equal(step.repo, repo.dir.split('/').pop());
+    assert.ok(step.window.commits.length >= 3);
     await stream.return(undefined);
   });
 
@@ -94,7 +94,7 @@ describe('the server', () => {
   // and every step already carries everything that view could ask about.
   it('numbers steps of the repository, and takes nothing from a browser', async () => {
     const res = await fetch(base + 'events');
-    const stream = snapshots(res);
+    const stream = stepsOf(res);
     const a = (await stream.next()).value;
 
     for (const method of ['POST', 'GET']) {
@@ -138,7 +138,7 @@ async function recordingFrame(port: number): Promise<{ id: string; learning: boo
 }
 
 describe('a repository that moves under the server', () => {
-  it('does not count the first state twice when the poller answers first', async () => {
+  it('does not count the first step twice when the poller answers first', async () => {
     let recorded = false;
     let finish!: () => void;
     const active = new Promise<void>((resolve) => {
@@ -148,7 +148,7 @@ describe('a repository that moves under the server', () => {
       };
     });
     let builds = 0;
-    const first = ensureFirstSnapshot(active, () => recorded, async () => {
+    const first = ensureFirstStep(active, () => recorded, async () => {
       builds++;
     });
     finish();
@@ -160,7 +160,7 @@ describe('a repository that moves under the server', () => {
     const repo = plumbedRepo();
     const server = await serve(repo.dir, 0);
     // Measured at startup, gone before the first browser arrives: the first
-    // state cannot be built, and saying so out loud is the whole answer.
+    // step cannot be built, and saying so out loud is the whole answer.
     repo.dispose();
     try {
       const res = await fetch(`http://127.0.0.1:${server.port}/events`);
@@ -205,8 +205,8 @@ describe('a repository that moves under the server', () => {
     const base = `http://127.0.0.1:${server.port}/`;
     try {
       const res = await fetch(base + 'events');
-      const stream = snapshots(res);
-      await stream.next(); // the first state, off a repository that exists
+      const stream = stepsOf(res);
+      await stream.next(); // the first step, off a repository that exists
       // The poller now asks a repository that has gone. It must not take the
       // process with it: a repo mid-rewrite is a normal thing to catch a git
       // command in, and the next tick is the answer.
@@ -227,12 +227,12 @@ describe('a directory that is not a repository yet', () => {
     const server = await serve(dir, 0);
     try {
       // Two viewers arriving together share the first repository read. Without
-      // that, the same state is recorded twice merely because a room joined.
+      // that, the same step is recorded twice merely because a viewer joined.
       const [a, b] = await Promise.all([
         fetch(`http://127.0.0.1:${server.port}/events`),
         fetch(`http://127.0.0.1:${server.port}/events`),
       ]);
-      const streams = [snapshots(a), snapshots(b)];
+      const streams = [stepsOf(a), stepsOf(b)];
       // `git init` is the first plumbing command the tutorial teaches, so the
       // browser has to be able to watch it happen.
       execFileSync('git', ['-C', dir, 'init', '-q', '-b', 'main'], {
@@ -243,7 +243,7 @@ describe('a directory that is not a repository yet', () => {
       assert.deepEqual(s.refs, []);
       assert.equal(same.seq, s.seq);
 
-      // The next frame really is the next repository state, not a duplicate
+      // The next frame really is the next repository step, not a duplicate
       // initial build that was waiting behind the first one.
       const oid = execFileSync('git', ['-C', dir, 'hash-object', '-w', '--stdin'], {
         env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' },
@@ -251,7 +251,7 @@ describe('a directory that is not a repository yet', () => {
         encoding: 'utf8',
       }).trim();
       const next = await Promise.all(streams.map(async (stream) => (await stream.next()).value));
-      assert.ok(next.every((state) => state.seq === s.seq + 1 && state.objects[oid]));
+      assert.ok(next.every((step) => step.seq === s.seq + 1 && step.objects[oid]));
       await Promise.all(streams.map((stream) => stream.return(undefined)));
     } finally {
       await server.close();
@@ -287,37 +287,37 @@ describe('a directory that is not a repository yet', () => {
   });
 });
 
-describe('the history everyone shares', () => {
-  /** States reach the history the way they reach the wire: already serialised. */
-  const state = (seq: number, extra: Partial<Snapshot> = {}) => JSON.stringify(fakeState({ seq, ...extra }));
-  const seqs = (history: string[]) => history.map((s) => JSON.parse(s).seq);
-  /** A state of a repository big enough for the byte ceiling to be the one that bites. */
+describe('the steps everyone shares', () => {
+  /** Steps reach the steps the way they reach the wire: already serialised. */
+  const step = (seq: number, extra: Partial<Step> = {}) => JSON.stringify(fakeStep({ seq, ...extra }));
+  const seqs = (steps: string[]) => steps.map((s) => JSON.parse(s).seq);
+  /** A step of a repository big enough for the byte ceiling to be the one that bites. */
   const heavy = (seq: number, mb: number) =>
-    state(seq, { notes: [{ id: 'more', args: ['x'.repeat(mb << 20)] }] });
+    step(seq, { notes: [{ id: 'more', args: ['x'.repeat(mb << 20)] }] });
 
-  it('forgets the oldest states at the same cap the browser’s tape uses', () => {
-    const history: string[] = [];
-    for (let seq = 1; seq <= TAPE_CAP + 5; seq++) record(history, state(seq));
-    assert.equal(history.length, TAPE_CAP);
-    assert.equal(seqs(history)[0], 6);
+  it('forgets the oldest steps at the same cap the browser’s recording uses', () => {
+    const steps: string[] = [];
+    for (let seq = 1; seq <= RECORDING_CAP + 5; seq++) record(steps, step(seq));
+    assert.equal(steps.length, RECORDING_CAP);
+    assert.equal(seqs(steps)[0], 6);
   });
 
-  // Measured: a state of a tutorial repository is ~3 KB and all 400 fit in a
-  // megabyte, but a state of a repository with a few thousand objects is a
+  // Measured: a step of a tutorial repository is ~3 KB and all 400 fit in a
+  // megabyte, but a step of a repository with a few thousand objects is a
   // third of a megabyte, and 400 of those is not something to hand a browser
   // that has just opened.
-  it('forgets sooner than that when the states are heavy enough to be unpleasant', () => {
-    const history: string[] = [];
-    for (const seq of [1, 2, 3]) record(history, heavy(seq, 6));
-    assert.deepEqual(seqs(history), [2, 3], 'the tail was not trimmed to what fits');
+  it('forgets sooner than that when the steps are heavy enough to be unpleasant', () => {
+    const steps: string[] = [];
+    for (const seq of [1, 2, 3]) record(steps, heavy(seq, 6));
+    assert.deepEqual(seqs(steps), [2, 3], 'the tail was not trimmed to what fits');
 
-    record(history, heavy(4, 20));
-    assert.deepEqual(seqs(history), [4], 'a state too big to fit on its own still has to be sent');
+    record(steps, heavy(4, 20));
+    assert.deepEqual(seqs(steps), [4], 'a step too big to fit on its own still has to be sent');
   });
 
   // The situation this was found in: `gitva` left running, a handful of
   // plumbing commands typed, the browser opened afterwards — and one step on
-  // the tape instead of a handful. A state nobody was connected for cannot be
+  // the recording instead of a handful. A step nobody was connected for cannot be
   // built later, because by then the repository has moved on.
   it('records what happened while nobody was watching', async () => {
     const repo = plumbedRepo();
@@ -332,11 +332,11 @@ describe('the history everyone shares', () => {
         await polled();
       }
 
-      const watching = snapshots(await fetch(`http://127.0.0.1:${server.port}/events`));
-      const seen: Snapshot[] = [];
+      const watching = stepsOf(await fetch(`http://127.0.0.1:${server.port}/events`));
+      const seen: Step[] = [];
       for (let i = 0; i < 3; i++) seen.push((await watching.next()).value);
       assert.deepEqual(seen.map((s) => s.seq), [1, 2, 3]);
-      assert.ok(seen[2].objects[repo.git('hash-object', 'f.txt')], 'the newest state is the repository now');
+      assert.ok(seen[2].objects[repo.git('hash-object', 'f.txt')], 'the newest step is the repository now');
       await watching.return(undefined);
     } finally {
       await server.close();
@@ -344,13 +344,13 @@ describe('the history everyone shares', () => {
     }
   });
 
-  it('hands a browser opened later every state that happened before it', async () => {
+  it('hands a browser opened later every step that happened before it', async () => {
     const repo = plumbedRepo();
     const server = await serve(repo.dir, 0);
     const base = `http://127.0.0.1:${server.port}/`;
     try {
       // Somebody has to be watching for the poller to be asking at all.
-      const watching = snapshots(await fetch(base + 'events'));
+      const watching = stepsOf(await fetch(base + 'events'));
       const start = (await watching.next()).value;
       for (const name of ['e', 'f']) {
         repo.write(`${name}.txt`, `${name}\n`);
@@ -358,8 +358,8 @@ describe('the history everyone shares', () => {
         await watching.next();
       }
 
-      const late = snapshots(await fetch(base + 'events'));
-      const seen: Snapshot[] = [];
+      const late = stepsOf(await fetch(base + 'events'));
+      const seen: Step[] = [];
       for (let i = 0; i < 3; i++) seen.push((await late.next()).value);
       assert.deepEqual(
         seen.map((s) => s.seq),
@@ -387,7 +387,7 @@ describe('the page the server hands the browser', () => {
       .map((t) => t.slice(5));
     assert.deepEqual(
       children.filter((t) => t !== 'script' && t !== 'dialog'),
-      ['header', 'div', 'div', 'main'],
+      ['div', 'div', 'div', 'main'],
     );
     assert.equal(rows.length, 4, 'one track per row of the page');
     assert.equal(rows[rows.length - 1], '1fr', 'the canvas is last and takes the rest');
@@ -400,10 +400,10 @@ describe('the page the server hands the browser', () => {
  * it having ended is not something git did.
  */
 describe('a recording that outlives the process', () => {
-  /** Every state a browser is handed before the stream goes quiet. */
-  async function watch(port: number): Promise<Snapshot[]> {
-    const seen: Snapshot[] = [];
-    for await (const s of snapshots(await fetch(`http://127.0.0.1:${port}/events`), 900)) seen.push(s);
+  /** Every step a browser is handed before the stream goes quiet. */
+  async function watch(port: number): Promise<Step[]> {
+    const seen: Step[] = [];
+    for await (const s of stepsOf(await fetch(`http://127.0.0.1:${port}/events`), 900)) seen.push(s);
     return seen;
   }
 
@@ -478,7 +478,7 @@ describe('a recording that outlives the process', () => {
     }
   });
 
-  /** The identifier the header shows, which is what a click on it copies. */
+  /** The identifier the view toolbar shows, which is what a click on it copies. */
   async function recordingId(port: number): Promise<string> {
     const res = await fetch(`http://127.0.0.1:${port}/events`);
     const reader = res.body!.getReader();
@@ -493,7 +493,7 @@ describe('a recording that outlives the process', () => {
     return (JSON.parse(found[1]) as { id: string }).id;
   }
 
-  // What the identifier in the header is for: copy it before you move the
+  // What the identifier in the view toolbar is for: copy it before you move the
   // folder, and the recording is still yours afterwards.
   it('tells the browser what it filed the recording under, and takes it back as --id', async () => {
     const here = plumbedRepo();
@@ -554,18 +554,18 @@ describe('a recording that outlives the process', () => {
   });
 
   /** The whole kept recording, as a browser is handed it on connect. */
-  async function historyOf(port: number): Promise<Snapshot[]> {
+  async function historyOf(port: number): Promise<Step[]> {
     const res = await fetch(`http://127.0.0.1:${port}/events`);
     const reader = res.body!.getReader();
     let buf = '';
     let found: RegExpExecArray | null = null;
-    while (!(found = /event: history\ndata: (.*)\n/.exec(buf))) {
+    while (!(found = /event: steps\ndata: (.*)\n/.exec(buf))) {
       const { value, done } = await reader.read();
       if (done) assert.fail('the stream handed over no recording');
       buf += new TextDecoder().decode(value);
     }
     await reader.cancel();
-    return JSON.parse(found[1]) as Snapshot[];
+    return JSON.parse(found[1]) as Step[];
   }
 
   // The bug this exists for: a step used to carry the view it was answered

@@ -1,8 +1,9 @@
 /**
  * Colour: three hues, and no more.
  *
- * A node-link graph is an all-pairs problem — any kind can end up next to any
- * other — so every pair has to separate. On this dark ground exactly three hues
+ * A canvas of shapes and links is an all-pairs problem — any kind can end up
+ * next to any other — so every pair has to separate. On this dark ground
+ * exactly three hues
  * clear the contrast and colour-vision floors; four does not. So the three go
  * to the three things you look at constantly, and everything else is separated
  * by silhouette and by the name it already carries.
@@ -20,7 +21,7 @@
 
 export const theme = {
   ground: '#0d0f13',
-  panel: '#171a21',
+  surface: '#171a21',
   raised: '#20242e',
   line: '#2c313d',
 
@@ -48,15 +49,15 @@ export const theme = {
   refTag: '#e0c74f',
   tagObject: '#8fb0ff',
 
-  // A mark the reader put there by hand, to follow one object as the graph
-  // moves. Not a hue on a node and not the accent: an outline outside the
+  // A mark you put there by hand, to follow one object as the object graph
+  // moves. Not a hue on a shape and not the accent: an outline outside the
   // silhouette, in the one colour nothing else on this surface uses.
   mark: '#e5484d',
 
   ghost: '#6b7488',
 
-  /** The tint a band carries over the ground. Barely there on purpose. */
-  bandTint: 'rgba(255,255,255,0.014)',
+  /** The tint a column carries over the ground. Barely there on purpose. */
+  columnTint: 'rgba(255,255,255,0.014)',
 
   sans: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
   mono: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
@@ -75,7 +76,7 @@ export type Theme = typeof theme;
  */
 const light: Partial<Theme> = {
   ground: '#fbfbfd',
-  panel: '#f1f2f6',
+  surface: '#f1f2f6',
   raised: '#e5e7ee',
   line: '#d2d6e0',
 
@@ -95,7 +96,7 @@ const light: Partial<Theme> = {
 
   ghost: '#9aa2b1',
 
-  bandTint: 'rgba(0,0,0,0.022)',
+  columnTint: 'rgba(0,0,0,0.022)',
 };
 
 const dark: Partial<Theme> = { ...theme };
@@ -110,7 +111,7 @@ const matrix: Partial<Theme> = {
   // The only translucent ground: the rain canvas is behind this one, and this
   // is the veil that keeps it faint enough to read shapes over.
   ground: 'rgba(0,6,0,0.45)',
-  panel: '#01120a',
+  surface: '#01120a',
   raised: '#04240f',
   line: '#0d4a1e',
 
@@ -135,7 +136,7 @@ const matrix: Partial<Theme> = {
 
   ghost: '#1b7a33',
 
-  bandTint: 'rgba(0,255,90,0.025)',
+  columnTint: 'rgba(0,255,90,0.025)',
 
   sans: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
 };

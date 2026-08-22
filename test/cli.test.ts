@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -35,7 +35,7 @@ describe('arguments', () => {
     assert.equal(parseArgs(['--no-open']).open, false);
   });
 
-  it('takes --learning, for showing a repository to a room', () => {
+  it('takes --learning, for showing a repository to viewers', () => {
     assert.equal(parseArgs(['--learning']).learning, true);
     // A flag is not a repository.
     assert.equal(parseArgs(['--learning']).repo, '.');
@@ -179,5 +179,36 @@ describe('starting up', () => {
 
   it('compares argv[1] as given when there is nothing on disk to resolve', () => {
     assert.equal(entryPath('/no/such/gitva'), '/no/such/gitva');
+  });
+});
+
+/**
+ * `gitva` installed globally is `dist/src/cli.js` run by the OS, and the only
+ * thing that tells the OS how is the first line. Nothing else here executes the
+ * file as a program — every other test imports it as a module — so a first line
+ * that is wrong is a first line nothing notices until the command is typed. It
+ * once said `#!/usr/bin/env shape`, because a rename swept the word `node`
+ * through the tree and this line does not look like code.
+ */
+describe('the line that makes it a command', () => {
+  const cli = join(fileURLToPath(new URL('../../', import.meta.url)), 'src/cli.ts');
+
+  it('hands the file to a runtime the OS can find', () => {
+    assert.equal(readFileSync(cli, 'utf8').split('\n')[0], '#!/usr/bin/env node');
+  });
+
+  it('runs when the OS runs it, not only when a test imports it', async () => {
+    const built = join(fileURLToPath(new URL('../../', import.meta.url)), 'dist/src/cli.js');
+    const said = await new Promise<string>((done) => {
+      // No shell, no `node` in front of it: exactly how the installed command is
+      // spawned, so the shebang is what has to work.
+      const p = spawn(built, ['--version'], { stdio: ['ignore', 'pipe', 'pipe'] });
+      let out = '';
+      p.stdout.on('data', (b) => (out += b));
+      p.stderr.on('data', (b) => (out += b));
+      p.on('close', () => done(out));
+      p.on('error', (e) => done(String(e)));
+    });
+    assert.equal(said, `${version()}\n`);
   });
 });

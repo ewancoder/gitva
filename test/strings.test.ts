@@ -43,7 +43,7 @@ describe('the strings behind the chrome', () => {
 
 
 // The help is what someone reads before they know any of the flags, so a
-// translation that quietly drops one leaves that reader with no way to find it.
+// translation that quietly drops one leaves that viewer with no way to find it.
 describe('the command line help', () => {
   it('names every flag the parser understands, in every language', async () => {
     try {
@@ -74,7 +74,7 @@ describe('the language in force', () => {
   });
 
   it('falls back to English for a language nobody wrote', async () => {
-    // The code comes out of a stored preference, which can outlive a language.
+    // The code comes out of a stored setting, which can outlive a language.
     await setLanguage('kx');
     assert.equal(language, 'en');
   });

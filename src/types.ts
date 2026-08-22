@@ -76,13 +76,13 @@ export interface Capabilities {
   objectCount: number;
   looseCount: number;
   refCount: number;
-  /** Cheap enough to read every object, so orphans can be found by walking. */
+  /** Cheap enough to read every object, so unreachable objects can be found by walking. */
   fullLoad: boolean;
-  /** Cheap enough to draw one node per staged path. */
-  indexNodes: boolean;
+  /** Cheap enough to draw one shape per staged path. */
+  indexShapes: boolean;
   /** Whether the repo has the commit-graph cache git offers. Hinted, never built. */
   commitGraph: boolean;
-  limits: { fullLoad: number; indexNodes: number };
+  limits: { fullLoad: number; indexShapes: number };
 }
 
 /**
@@ -95,22 +95,22 @@ export interface Capabilities {
  */
 export interface View {
   expanded: Oid[];
-  /** Trees the reader closed. Trees arrive open — a commit you opened is a
-   *  promise to show what is in it — so this is the folded ones, not the open
+  /** Trees you closed. Trees arrive open — a commit you opened is a
+   *  promise to show what is in it — so this is the collapsed ones, not the open
    *  ones, and an empty list means the whole tree is on screen. */
-  folded?: Oid[];
+  collapsed?: Oid[];
   showIndex: boolean;
-  /** Orphans are half the lesson, so they are drawn unless asked otherwise. */
+  /** Unreachable objects are half the lesson, so they are drawn unless asked otherwise. */
   showUnreachable?: boolean;
-  /** Arrows from an orphaned object to things that are still reachable — a
-   *  tree's entries, and a discarded commit's parent. They cross the picture,
+  /** Links from an unreachable object to things that are still reachable — a
+   *  tree's entries, and a discarded commit's parent. They cross the canvas,
    *  so they are asked for rather than assumed. */
-  showCrossLinks?: boolean;
+  showLinksFromUnreachable?: boolean;
 }
 
-/** How many states either side keeps. The server holds the history and the
- *  browser holds the tape; sharing the number makes them forget together. */
-export const TAPE_CAP = 400;
+/** How many steps either side keeps. The server holds the recording and the
+ *  browser holds its copy; sharing the number makes them forget together. */
+export const RECORDING_CAP = 400;
 
 /** How many commits a step carries. Fixed for the run: a step holds everything
  *  a view could want to draw, so there is nothing for a browser to page in. */
@@ -118,14 +118,14 @@ export const COMMIT_WINDOW = 120;
 
 export const DEFAULT_VIEW: View = {
   expanded: [],
-  folded: [],
+  collapsed: [],
   showIndex: true,
   showUnreachable: true,
-  showCrossLinks: false,
+  showLinksFromUnreachable: false,
 };
 
-export interface Snapshot {
-  /** Which state of the repository this is. Only git makes one: nothing a
+export interface Step {
+  /** Which step of the recording this is. Only git makes one: nothing a
    *  viewer does is a step, because nothing a viewer does reaches here. */
   seq: number;
   time: number;
@@ -138,14 +138,14 @@ export interface Snapshot {
   trees: Record<Oid, TreeEntry[]>;
   tags: Record<Oid, TagObject>;
   index: IndexEntry[];
-  /** Set when the index is drawn as a delta instead of one node per path. */
+  /** Set when the index is drawn as a delta instead of one shape per path. */
   indexElided?: { shown: number; total: number };
-  /** null means orphan detection is off — not that there are none. */
+  /** null means unreachable detection is off — not that there are none. */
   unreachable: Oid[] | null;
   /** Objects only the index holds: staged, uncommitted, and named by nothing
-   *  that is drawn as a graph. Same null meaning as `unreachable`. */
+   *  that the object graph draws. Same null meaning as `unreachable`. */
   stagedOnly?: Oid[] | null;
-  caps: Capabilities;
+  capabilities: Capabilities;
   window: {
     commits: Oid[];
     totalCommits: number | null;

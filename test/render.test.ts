@@ -1,6 +1,6 @@
 /**
  * The painter. What it draws is checked by looking at it — but what it *picks*
- * is not: which nodes a selection lights, what is under the pointer, and which
+ * is not: which shapes a selection lights, what is under the pointer, and which
  * hue each thing gets are decisions, and a decision belongs in a test.
  *
  * `path` has already been got wrong once — hover had pre-lit neighbours the
@@ -9,24 +9,24 @@
 
 import test, { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import type { Scene, SceneEdge, SceneNode } from '../src/layout.js';
+import type { Scene, Link, Shape } from '../src/layout.js';
 import { EMPTY_CHANGE } from '../src/diff.js';
-import { bandEdgeAt, draw, hitTest, path, snapPositions, type Paint } from '../web/render.js';
+import { columnEdgeAt, draw, hitTest, path, snapPositions, type Paint } from '../web/render.js';
 import { chipHue, hueFor, setTheme, theme } from '../web/theme.js';
 
 /** c2 → c1 → c0, and c2 holds a tree holding a blob. */
-const edges: SceneEdge[] = [
+const links: Link[] = [
   { id: 'p:c2:c1', from: 'c2', to: 'c1', kind: 'parent' },
   { id: 'p:c1:c0', from: 'c1', to: 'c0', kind: 'parent' },
   { id: 't:c2', from: 'c2', to: 't2', kind: 'tree' },
   { id: 'e:t2:b', from: 't2', to: 'b', kind: 'entry' },
 ];
-const scene = { nodes: [], edges, bands: [], width: 0, height: 0, rows: [] } satisfies Scene;
+const scene = { shapes: [], links, columns: [], width: 0, height: 0, rows: [] } satisfies Scene;
 
 function lit(start: string, already: string[] = []) {
-  const nodes = new Set(already);
-  path(scene, start, nodes, new Set());
-  return nodes;
+  const shapes = new Set(already);
+  path(scene, start, shapes, new Set());
+  return shapes;
 }
 
 test('a selected commit lights its parents, one level only', () => {
@@ -38,14 +38,14 @@ test('a commit reached from a blob brings its parents too', () => {
 });
 
 test('hover does not extend the parent walk past one level', () => {
-  // Hovering c2 lights c1 through the parent edge before the selection walk
+  // Hovering c2 lights c1 through the parent link before the selection walk
   // runs. c1's own parent is not on the selection's path and must stay dark.
   assert.ok(!lit('c2', ['c1']).has('c0'));
 });
 
 // ---------------------------------------------------------------------------
 
-const node = (over: Partial<SceneNode> & Pick<SceneNode, 'id' | 'kind'>): SceneNode => ({
+const shape = (over: Partial<Shape> & Pick<Shape, 'id' | 'kind'>): Shape => ({
   x: 0,
   y: 0,
   w: 40,
@@ -56,19 +56,19 @@ const node = (over: Partial<SceneNode> & Pick<SceneNode, 'id' | 'kind'>): SceneN
 
 describe('what is under the pointer', () => {
   const hits = {
-    nodes: [node({ id: 'a', kind: 'blob' }), node({ id: 'b', kind: 'commit', x: 100, y: 100 })],
-    edges: [],
-    bands: [],
+    shapes: [shape({ id: 'a', kind: 'blob' }), shape({ id: 'b', kind: 'commit', x: 100, y: 100 })],
+    links: [],
+    columns: [],
     width: 200,
     height: 200,
     rows: [],
   } satisfies Scene;
 
-  it('finds the node the point is inside', () => {
+  it('finds the shape the point is inside', () => {
     assert.equal(hitTest(hits, 110, 110)?.id, 'b');
   });
 
-  it('finds nothing in the space between nodes', () => {
+  it('finds nothing in the space between shapes', () => {
     assert.equal(hitTest(hits, 70, 70), null);
   });
 
@@ -78,17 +78,17 @@ describe('what is under the pointer', () => {
   });
 
   it('takes the last one drawn, which is the one on top', () => {
-    const stacked = { ...hits, nodes: [node({ id: 'under', kind: 'blob' }), node({ id: 'over', kind: 'tree' })] };
+    const stacked = { ...hits, shapes: [shape({ id: 'under', kind: 'blob' }), shape({ id: 'over', kind: 'tree' })] };
     assert.equal(hitTest(stacked, 5, 5)?.id, 'over');
   });
 });
 
-describe('the seam a column is widened by', () => {
-  const seams = {
-    nodes: [],
-    edges: [],
-    bands: [
-      { key: 'pointers', label: 'pointers', x: 12, w: 100 },
+describe('the edge a column is widened by', () => {
+  const columns = {
+    shapes: [],
+    links: [],
+    columns: [
+      { key: 'pointersAndTags', label: 'pointers and tags', x: 12, w: 100 },
       { key: 'commits', label: 'commits', x: 140, w: 88 },
       { key: 'index', label: 'index', x: 256, w: 176 },
     ],
@@ -97,18 +97,18 @@ describe('the seam a column is widened by', () => {
     rows: [],
   } satisfies Scene;
 
-  it('finds the band whose gap the point is in', () => {
-    assert.equal(bandEdgeAt(seams, 126), 'pointers'); // 12 + 100 + 28/2
-    assert.equal(bandEdgeAt(seams, 242), 'commits');
+  it('finds the column whose gap the point is in', () => {
+    assert.equal(columnEdgeAt(columns, 126), 'pointersAndTags'); // 12 + 100 + 28/2
+    assert.equal(columnEdgeAt(columns, 242), 'commits');
   });
 
-  it('finds nothing out in the band itself', () => {
-    assert.equal(bandEdgeAt(seams, 60), null);
-    assert.equal(bandEdgeAt(seams, 136), null);
+  it('finds nothing out in the column itself', () => {
+    assert.equal(columnEdgeAt(columns, 60), null);
+    assert.equal(columnEdgeAt(columns, 136), null);
   });
 
-  it('gives the index no seam: it is last, and its width is its content', () => {
-    assert.equal(bandEdgeAt(seams, 256 + 176 + 14), null);
+  it('gives the index no edge: it is last, and its width is its content', () => {
+    assert.equal(columnEdgeAt(columns, 256 + 176 + 14), null);
   });
 });
 
@@ -156,7 +156,7 @@ describe('hues', () => {
 /**
  * A canvas that records nothing and refuses nothing. Painting is checked by
  * looking at it; this is only here so the branches that decide *what* to paint
- * — every shape, every tier of label, ghosts, marks, flashes — are walked, and
+ * — every shape, every tier of label, leaving, marks, flashes — are walked, and
  * so the easing that tells the client whether to ask for another frame is.
  */
 function fakeCtx(): CanvasRenderingContext2D {
@@ -177,19 +177,19 @@ function fakeCtx(): CanvasRenderingContext2D {
 
 describe('painting', () => {
   const full = {
-    nodes: [
-      node({ id: 'c1', kind: 'commit', oid: 'c1', sub: 'a subject', y: 0 }),
-      node({ id: 'c0', kind: 'commit', oid: 'c0', y: 100, unreachable: true }),
-      node({ id: 'c2', kind: 'commit', oid: 'c2', x: 80, y: 200 }), // another lane
-      node({ id: 't1', kind: 'tree', oid: 't1', x: 100 }),
-      node({ id: 'b1', kind: 'blob', oid: 'b1', x: 200, staged: true, origin: 't1' }),
-      node({ id: 'g1', kind: 'tag', oid: 'g1', x: 240 }),
-      node({ id: 'ref:refs/heads/main', kind: 'ref', x: 300, y: 60, sub: 'aaaaaaa' }),
-      node({ id: 'HEAD', kind: 'head', x: 360, y: 60 }),
-      node({ id: 'index:0:a.txt', kind: 'index', x: 400, y: 60, conflict: true }),
-      node({ id: 'sub', kind: 'submodule', x: 500, y: 60 }),
+    shapes: [
+      shape({ id: 'c1', kind: 'commit', oid: 'c1', sub: 'a subject', y: 0 }),
+      shape({ id: 'c0', kind: 'commit', oid: 'c0', y: 100, unreachable: true }),
+      shape({ id: 'c2', kind: 'commit', oid: 'c2', x: 80, y: 200 }), // another lane
+      shape({ id: 't1', kind: 'tree', oid: 't1', x: 100 }),
+      shape({ id: 'b1', kind: 'blob', oid: 'b1', x: 200, staged: true, origin: 't1' }),
+      shape({ id: 'g1', kind: 'tag', oid: 'g1', x: 240 }),
+      shape({ id: 'ref:refs/heads/main', kind: 'ref', x: 300, y: 60, sub: 'aaaaaaa' }),
+      shape({ id: 'HEAD', kind: 'head', x: 360, y: 60 }),
+      shape({ id: 'index:0:a.txt', kind: 'index', x: 400, y: 60, conflict: true }),
+      shape({ id: 'sub', kind: 'submodule', x: 500, y: 60 }),
     ],
-    edges: [
+    links: [
       { id: 'p', from: 'c1', to: 'c0', kind: 'parent' },
       { id: 'p2', from: 'c0', to: 'c1', kind: 'parent' }, // a child dragged above its parent
       { id: 'p3', from: 'c0', to: 'c2', kind: 'parent' }, // a parent in another lane: an elbow
@@ -197,8 +197,8 @@ describe('painting', () => {
       { id: 'e', from: 't1', to: 'b1', kind: 'entry', label: 'a.txt' },
       { id: 'ptr', from: 'ref:refs/heads/main', to: 'c1', kind: 'pointer' },
       { id: 's', from: 'index:0:a.txt', to: 'b1', kind: 'stage' },
-    ] satisfies SceneEdge[],
-    bands: [
+    ] satisfies Link[],
+    columns: [
       { key: 'commits' as const, label: 'commits', x: 0, w: 90 },
       { key: 'index' as const, label: 'index', x: 400, w: 90 },
     ],
@@ -220,7 +220,7 @@ describe('painting', () => {
     showPins: true,
     showNames: true,
     enter: 1,
-    ghosts: [],
+    leaving: [],
     exit: 1,
     motion: true,
     ...over,
@@ -235,7 +235,7 @@ describe('painting', () => {
 
   const dragged = (s: Scene) => ({
     ...s,
-    nodes: [node({ id: 'c1', kind: 'commit', x: 0, y: 900 }), ...s.nodes.slice(1)],
+    shapes: [shape({ id: 'c1', kind: 'commit', x: 0, y: 900 }), ...s.shapes.slice(1)],
   });
 
   /** Every value the painter gave one style property, in order. */
@@ -255,13 +255,14 @@ describe('painting', () => {
 
   const strokes = (s: Scene, over: Partial<Paint> = {}) => painted(s, 'strokeStyle', over);
 
-  it('draws a parent line touching an orphan in ghost grey, not in ink', () => {
-    const pair = (from: Partial<SceneNode>, to: Partial<SceneNode>): Scene => ({
+  it('draws a parent line touching an unreachable object in ghost grey, not in ink', () => {
+    const pair = (from: Partial<Shape>, to: Partial<Shape>): Scene => ({
       ...full,
-      nodes: [node({ id: 'a', kind: 'commit', ...from }), node({ id: 'b', kind: 'commit', y: 100, ...to })],
-      edges: [{ id: 'p', from: 'a', to: 'b', kind: 'parent' }],
+      shapes: [shape({ id: 'a', kind: 'commit', ...from }), shape({ id: 'b', kind: 'commit', y: 100, ...to })],
+      links: [{ id: 'p', from: 'a', to: 'b', kind: 'parent' }],
     });
-    // An orphan's line to its live parent, and one orphan to the next.
+    // An unreachable object's line to its live parent, and one unreachable
+    // object to the next.
     for (const s of [pair({ unreachable: true }, {}), pair({ unreachable: true }, { unreachable: true })]) {
       const seen = strokes(s);
       assert.ok(seen.includes(theme.ghost));
@@ -270,21 +271,21 @@ describe('painting', () => {
     assert.ok(strokes(pair({}, {})).includes(theme.ink));
   });
 
-  it('shows a folded tree has more in it: a bold count and an arrow off its edge', () => {
+  it('shows a collapsed tree has more in it: a bold count and a link off its edge', () => {
     const bold = (s: Scene) => painted(s, 'font').some((f) => f.startsWith('700 '));
-    const shut = { ...full, nodes: [node({ id: 't9', kind: 'tree', sub: 'tree +3', folded: true })], edges: [] };
-    assert.ok(strokes(shut).includes(theme.tree), 'the stub arrow, in the tree hue');
+    const shut = { ...full, shapes: [shape({ id: 't9', kind: 'tree', sub: 'tree +3', collapsed: true })], links: [] };
+    assert.ok(strokes(shut).includes(theme.tree), 'the stub link, in the tree hue');
     assert.ok(bold(shut), 'and the count in bold');
-    const open = { ...shut, nodes: [node({ id: 't9', kind: 'tree', sub: 'tree' })] };
+    const open = { ...shut, shapes: [shape({ id: 't9', kind: 'tree', sub: 'tree' })] };
     assert.ok(!strokes(open).includes(theme.tree), 'an open tree gets neither');
     assert.ok(!bold(open));
   });
 
-  it('sticks a pushpin through a pinned node, but only when asked to', () => {
-    const put = { ...full, nodes: [node({ id: 'b1', kind: 'blob', pinned: true })], edges: [] };
-    assert.ok(strokes(put).includes(theme.mark), 'the pin, in the colour the reader\'s own marks use');
-    const loose = { ...put, nodes: [node({ id: 'b1', kind: 'blob' })] };
-    assert.ok(!strokes(loose).includes(theme.mark), 'an unpinned node gets none');
+  it('sticks a pushpin through a pinned shape, but only when asked to', () => {
+    const put = { ...full, shapes: [shape({ id: 'b1', kind: 'blob', pinned: true })], links: [] };
+    assert.ok(strokes(put).includes(theme.mark), 'the pin, in the colour your own marks use');
+    const loose = { ...put, shapes: [shape({ id: 'b1', kind: 'blob' })] };
+    assert.ok(!strokes(loose).includes(theme.mark), 'an unpinned shape gets none');
     assert.ok(!strokes(put, { showPins: false }).includes(theme.mark), 'nor does one with pins turned off');
   });
 
@@ -325,19 +326,19 @@ describe('painting', () => {
         hover: 'c1',
         selected: 'b1',
         marked: new Set(['b1']),
-        ghosts: [node({ id: 'old', kind: 'blob', x: 50 })],
+        leaving: [shape({ id: 'old', kind: 'blob', x: 50 })],
       }),
     );
   });
 
-  it('keeps asking for frames while a node is still travelling, and stops when it arrives', () => {
+  it('keeps asking for frames while a shape is still travelling, and stops when it arrives', () => {
     snapPositions();
     settle(full);
     assert.equal(draw(fakeCtx(), dragged(full), paint()), true, 'it has somewhere to get to');
     settle(dragged(full));
   });
 
-  it('snaps rather than eases when the reader asked for no motion', () => {
+  it('snaps rather than eases when you asked for no motion', () => {
     snapPositions();
     const still = paint({ motion: false });
     draw(fakeCtx(), full, still);
@@ -346,7 +347,7 @@ describe('painting', () => {
 
   it('draws nothing that is off screen', () => {
     snapPositions();
-    // The camera is miles away: every node and every edge is culled, and the
+    // The camera is miles away: every shape and every link is culled, and the
     // frame still comes out settled.
     assert.equal(draw(fakeCtx(), full, paint({ camera: { x: -50_000, y: -50_000, scale: 1 } })), false);
   });

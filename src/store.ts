@@ -31,8 +31,13 @@ export interface Kept {
  * trees the one shared view happened to have expanded, so on a repository too
  * big to hold whole, expanding a commit in a kept step would silently draw
  * nothing — there is no longer a route for the browser to ask for the rest.
+ *
+ * 3: a step says `capabilities`, not `caps`. The same facts under the domain's
+ * own word — but a step read under the old name loses its limits, and a canvas
+ * that cannot tell whether unreachable detection was on would draw a repository
+ * as having nothing unreachable in it.
  */
-export const FORMAT = 2;
+export const FORMAT = 3;
 
 /** Where the system keeps state a program owns. `GITVA_STATE_DIR` overrides,
  *  which is also how the tests keep out of the real one. */
@@ -44,7 +49,7 @@ export function stateDir(env: NodeJS.ProcessEnv = process.env, platform: string 
   return join(env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'gitva');
 }
 
-/** Long enough that two of a person's repositories will not land on the same
+/** Long enough that two of your repositories will not land on the same
  *  one, short enough to read out, copy, and type after `--id`. */
 const KEY_CHARS = 10;
 const KEY = new RegExp(`^[0-9a-f]{${KEY_CHARS}}$`);
@@ -58,7 +63,7 @@ const KEY = new RegExp(`^[0-9a-f]{${KEY_CHARS}}$`);
  * A key is an identifier too. That is what makes the one the interface shows
  * you worth copying: `--id` takes it back verbatim, so the same recording is
  * resumable from a folder that has moved, or from a second clone — while
- * `--id teaching` is still a name a person can choose and remember.
+ * `--id teaching` is still a name you can choose and remember.
  */
 export function recordingKey(id: string): string {
   return KEY.test(id) ? id : createHash('sha1').update(id).digest('hex').slice(0, KEY_CHARS);

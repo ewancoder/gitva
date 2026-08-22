@@ -1,9 +1,9 @@
 /**
  * Where everything goes.
  *
- * Positions are a pure function of the state being drawn — never of what was
+ * Positions are a pure function of the step being drawn — never of what was
  * on screen before, never of the order things were processed. That property is
- * what makes change highlighting legible: a node that flashes *and* moves
+ * what makes change highlighting legible: a shape that flashes *and* moves
  * teaches nothing. Nothing in here knows how anything is painted.
  *
  * gitva draws exactly two structures, a commit DAG and a directory tree, and
@@ -12,9 +12,9 @@
  */
 
 import { S } from './strings.js';
-import type { Oid, Snapshot, TreeEntry, View } from './types.js';
+import type { Oid, Step, TreeEntry, View } from './types.js';
 
-export type NodeKind =
+export type ShapeKind =
   | 'commit'
   | 'tree'
   | 'blob'
@@ -24,34 +24,34 @@ export type NodeKind =
   | 'head'
   | 'index';
 
-export interface SceneNode {
+export interface Shape {
   id: string;
-  kind: NodeKind;
+  kind: ShapeKind;
   oid?: Oid;
   x: number;
   y: number;
   w: number;
   h: number;
-  /** What is written on the node: a short sha, or a name. */
+  /** What is written on the shape: a short sha, or a name. */
   label: string;
   /** Row text drawn beside a commit, or the path on an index chip. */
   sub?: string;
   unreachable?: boolean;
   conflict?: boolean;
-  /** A tree drawn without its entries: the reader folded it shut. */
-  folded?: boolean;
+  /** A tree drawn without its entries: you collapsed it shut. */
+  collapsed?: boolean;
   /** Put down here because nothing on screen points at it, not beside anything. */
   stray?: boolean;
-  /** The reader dragged this one somewhere by hand; the painter says so. */
+  /** You dragged this one somewhere by hand; the painter says so. */
   pinned?: boolean;
   /** Only the index holds this: written, not committed, and safe from gc while
    *  the entry beside it lasts. A state, like `unreachable`, not a kind. */
   staged?: boolean;
-  /** Where this node came from, so it can grow out of it rather than fly in. */
+  /** Where this shape came from, so it can grow out of it rather than fly in. */
   origin?: string;
 }
 
-export interface SceneEdge {
+export interface Link {
   id: string;
   from: string;
   to: string;
@@ -59,17 +59,17 @@ export interface SceneEdge {
   label?: string;
 }
 
-export interface Band {
-  key: 'pointers' | 'commits' | 'objects' | 'index';
+export interface Column {
+  key: 'pointersAndTags' | 'commits' | 'treesAndBlobs' | 'index';
   label: string;
   x: number;
   w: number;
 }
 
 export interface Scene {
-  nodes: SceneNode[];
-  edges: SceneEdge[];
-  bands: Band[];
+  shapes: Shape[];
+  links: Link[];
+  columns: Column[];
   width: number;
   height: number;
   /** Rows, for the renderer's culling and for the hover backdrop. */
@@ -85,7 +85,7 @@ export const M = {
   chipH: 20,
   chipPitch: 80,
   // A commit is a pill wide enough for its own sha, so the lane pitch has to
-  // clear it: the sha is written in the node, not in a column beside it.
+  // clear it: the sha is written in the shape, not in a column beside it.
   laneW: 88,
   commitW: 76,
   commitH: 24,
@@ -98,14 +98,14 @@ export const M = {
   indexW: 176,
   indexH: 24,
   indexGap: 6,
-  bandGap: 28,
+  columnGap: 28,
 };
 
 /** HEAD → branch → tag object: the longest a pointer chain can get. */
 const GUTTER_COLS = 3;
 
 const short = (oid: Oid) => oid.slice(0, 7);
-/** The name is in the tree, never in the blob — so the arrow carries it. */
+/** The name is in the tree, never in the blob — so the link carries it. */
 const entryLabel = (e: { name: string; mode: string }) =>
   `${e.name}${e.mode === '100755' ? ' +x' : e.mode === '120000' ? ' ->' : ''}`;
 const refLabel = (name: string) =>
@@ -147,7 +147,7 @@ export function assignLanes(order: Oid[], parentsOf: (oid: Oid) => Oid[]) {
     // This commit's lane is free the moment it is drawn; it carries on only if
     // it has a first parent no other lane is already holding. Reserving a
     // parent twice would leave the duplicate lane occupied forever — that is
-    // what made the graph creep rightwards on every branch point.
+    // what made the object graph creep rightwards on every branch point.
     lanes[i] = null;
     if (parents[0] !== undefined && !lanes.includes(parents[0])) lanes[i] = parents[0];
     // A merge fans out: every other parent gets a lane of its own.
@@ -164,27 +164,27 @@ export function assignLanes(order: Oid[], parentsOf: (oid: Oid) => Oid[]) {
 interface ObjectGraph {
   /** Column index per object, by *longest* path from the root tree. */
   depth: Map<Oid, number>;
-  /** Objects per column, in the order git lists them. */
-  columns: Oid[][];
-  edges: { from: Oid; to: Oid; label: string }[];
+  /** Objects per level, in the order git lists them. */
+  levels: Oid[][];
+  links: { from: Oid; to: Oid; label: string }[];
 }
 
 /**
  * Depth is the *longest* path from the root tree, so a blob shared between a
- * top-level file and a nested one sits at the deeper column and no arrow ever
+ * top-level file and a nested one sits at the deeper level and no link ever
  * points backwards.
  */
 export function objectGraph(
   root: Oid,
   trees: Record<Oid, { name: string; oid: Oid; mode: string; type: string }[]>,
-  folded: Set<Oid> = new Set(),
+  collapsed: Set<Oid> = new Set(),
 ): ObjectGraph {
   const depth = new Map<Oid, number>([[root, 0]]);
   const order: Oid[] = [root];
   // One blob can sit in a tree under several names — same from, same to, one
-  // arrow, so the names go on it together rather than on top of each other.
-  const edges = new Map<string, { from: Oid; to: Oid; names: Set<string> }>();
-  const queue: Oid[] = folded.has(root) ? [] : [root];
+  // link, so the names go on it together rather than on top of each other.
+  const links = new Map<string, { from: Oid; to: Oid; names: Set<string> }>();
+  const queue: Oid[] = collapsed.has(root) ? [] : [root];
   let guard = 20_000;
 
   while (queue.length > 0 && guard-- > 0) {
@@ -192,29 +192,29 @@ export function objectGraph(
     const d = depth.get(t)!;
     for (const e of trees[t] ?? []) {
       const key = `${t}>${e.oid}`;
-      let edge = edges.get(key);
-      if (!edge) edges.set(key, (edge = { from: t, to: e.oid, names: new Set<string>() }));
-      edge.names.add(entryLabel(e));
+      let link = links.get(key);
+      if (!link) links.set(key, (link = { from: t, to: e.oid, names: new Set<string>() }));
+      link.names.add(entryLabel(e));
       if (!depth.has(e.oid)) order.push(e.oid);
       if ((depth.get(e.oid) ?? -1) < d + 1) {
         depth.set(e.oid, d + 1);
-        // A folded tree is drawn, but nothing under it is: hidden means absent,
+        // A collapsed tree is drawn, but nothing under it is: hidden means absent,
         // so what it holds leaves the scene rather than going invisible.
-        if (e.type === 'tree' && trees[e.oid] && !folded.has(e.oid)) queue.push(e.oid);
+        if (e.type === 'tree' && trees[e.oid] && !collapsed.has(e.oid)) queue.push(e.oid);
       }
     }
   }
 
-  const columns: Oid[][] = [];
+  const levels: Oid[][] = [];
   for (const oid of order) {
     const d = depth.get(oid)!;
-    (columns[d] ??= []).push(oid);
+    (levels[d] ??= []).push(oid);
   }
-  for (let i = 0; i < columns.length; i++) columns[i] ??= [];
+  for (let i = 0; i < levels.length; i++) levels[i] ??= [];
   return {
     depth,
-    columns,
-    edges: [...edges.values()].map(({ from, to, names }) => ({ from, to, label: [...names].join(', ') })),
+    levels,
+    links: [...links.values()].map(({ from, to, names }) => ({ from, to, label: [...names].join(', ') })),
   };
 }
 
@@ -223,56 +223,56 @@ export function objectGraph(
 // ---------------------------------------------------------------------------
 
 export function layout(
-  snap: Snapshot,
+  step: Step,
   view: View,
   pins: Record<string, { x: number; y: number }> = {},
-  bandWidths: Record<string, number> = {},
+  columnWidths: Record<string, number> = {},
 ): Scene {
-  const commits = snap.window.commits;
-  const { lane, laneCount } = assignLanes(commits, (o) => snap.commits[o]?.parents ?? []);
+  const commits = step.window.commits;
+  const { lane, laneCount } = assignLanes(commits, (o) => step.commits[o]?.parents ?? []);
   const inWindow = new Set(commits);
   const expanded = new Set(view.expanded);
-  const folded = new Set(view.folded ?? []);
-  /** A folded tree looks like an empty one, so it says how much it holds. */
-  const heldBack = (oid: Oid) => S.canvas.heldBack(snap.trees[oid]?.length ?? 0);
-  const unreachable = new Set(snap.unreachable ?? []);
-  const stagedOnly = new Set(snap.stagedOnly ?? []);
+  const collapsed = new Set(view.collapsed ?? []);
+  /** A collapsed tree looks like an empty one, so it says how much it holds. */
+  const heldBack = (oid: Oid) => S.canvas.heldBack(step.trees[oid]?.length ?? 0);
+  const unreachable = new Set(step.unreachable ?? []);
+  const stagedOnly = new Set(step.stagedOnly ?? []);
 
-  // A band can be widened by hand — dragging the gap after it — when the
-  // reader wants room to arrange pinned nodes. Never narrower than its content:
-  // a band that cannot hold what it holds would spill into the next one.
-  const widen = (key: string, natural: number) => Math.max(natural, bandWidths[key] ?? 0);
+  // A column can be widened by hand — dragging the gap after it — when the
+  // you want room to arrange pinned shapes. Never narrower than its content:
+  // a column that cannot hold what it holds would spill into the next one.
+  const widen = (key: string, natural: number) => Math.max(natural, columnWidths[key] ?? 0);
 
   // --- what each row holds, so we know how tall it is ---
   const graphs = new Map<Oid, ObjectGraph>();
   const chains = new Map<Oid, string[][]>(); // commit -> pointer chains, outermost first
 
   for (const oid of commits) {
-    const c = snap.commits[oid];
-    if (c && expanded.has(oid) && snap.trees[c.tree]) {
-      graphs.set(oid, objectGraph(c.tree, snap.trees, folded));
+    const c = step.commits[oid];
+    if (c && expanded.has(oid) && step.trees[c.tree]) {
+      graphs.set(oid, objectGraph(c.tree, step.trees, collapsed));
     }
   }
 
   // A ref sits at the height of the commit it names. An annotated tag is a
   // name and a message pointing at an object, so it joins the pointer family.
-  const headRef = snap.head.ref;
+  const headRef = step.head.ref;
   const chainAt = (oid: Oid, chain: string[]) => {
     const list = chains.get(oid) ?? [];
     list.push(chain);
     chains.set(oid, list);
   };
-  for (const r of snap.refs) {
+  for (const r of step.refs) {
     const target = r.target ?? r.oid;
-    if (!inWindow.has(target)) continue; // counted in notes, never drawn dangling
+    if (!inWindow.has(target)) continue; // counted in notes, never drawn as a stray
     const chain: string[] = [];
     if (headRef === r.name) chain.push('HEAD');
     chain.push(`ref:${r.name}`);
-    if (r.objectType === 'tag' && snap.tags[r.oid]) chain.push(`tag:${r.oid}`);
+    if (r.objectType === 'tag' && step.tags[r.oid]) chain.push(`tag:${r.oid}`);
     chainAt(target, chain);
   }
-  if (snap.head.detached && snap.head.oid && inWindow.has(snap.head.oid)) {
-    chainAt(snap.head.oid, ['HEAD']);
+  if (step.head.detached && step.head.oid && inWindow.has(step.head.oid)) {
+    chainAt(step.head.oid, ['HEAD']);
   }
 
   // The gutter is a grid of chip columns and chains are right-aligned in it, so
@@ -283,36 +283,36 @@ export function layout(
     GUTTER_COLS,
     Math.max(1, ...[...chains.values()].flat().map((c) => c.length)),
   );
-  const gutterW = widen('pointers', M.gutterW - (GUTTER_COLS - chipCols) * M.chipPitch);
-  const lanesX = M.gutterX + gutterW + M.bandGap;
+  const gutterW = widen('pointersAndTags', M.gutterW - (GUTTER_COLS - chipCols) * M.chipPitch);
+  const lanesX = M.gutterX + gutterW + M.columnGap;
   const lanesW = widen('commits', laneCount * M.laneW);
-  const objectsX = lanesX + lanesW + M.bandGap;
+  const objectsX = lanesX + lanesW + M.columnGap;
 
   // `git add` writes a blob before anything points at it, and that blob is the
-  // first thing the tutorial has to show. Down with the orphans it is off the
+  // first thing the tutorial has to show. Down with the unreachable it is off the
   // bottom of a page of history; up here it is beside the newest commit — where
   // the index chip holding it already sits, and where the commit that will name
   // it is about to appear. Blobs only: a staged tree fans out, and fanning out
-  // is what the orphanage below is shaped for, and a blob any drawn tree names —
-  // staged or orphaned — belongs to that tree's fan-out rather than up here on
-  // its own, because that is where the arrow saying so can be drawn. `git
-  // write-tree` is exactly this: the tree it writes is an orphan, and the blobs
-  // still in the index are what it names.
-  const orphans = view.showUnreachable === false ? [] : unreachable;
+  // is what the stray region below is shaped for, and a blob any drawn tree names —
+  // staged or unreachable — belongs to that tree's fan-out rather than up here on
+  // its own, because that is where the link saying so can be drawn. `git
+  // write-tree` is exactly this: the tree it writes is unreachable, and the
+  // blobs still in the index are what it names.
+  const shownUnreachable = view.showUnreachable === false ? [] : unreachable;
   const under = new Set(
-    [...stagedOnly, ...orphans].flatMap((o) => (snap.trees[o] ?? []).map((e) => e.oid)),
+    [...stagedOnly, ...shownUnreachable].flatMap((o) => (step.trees[o] ?? []).map((e) => e.oid)),
   );
   const stagedTop = [...stagedOnly].filter(
-    (o) => (snap.objects[o]?.type ?? 'blob') === 'blob' && !under.has(o),
+    (o) => (step.objects[o]?.type ?? 'blob') === 'blob' && !under.has(o),
   );
 
   const rows: { oid: Oid; y: number; h: number }[] = [];
   let y = 16 + (stagedTop.length > 0 ? stagedTop.length * M.objRowH + M.rowPad : 0);
-  let maxColumns = 0;
+  let maxLevels = 0;
   for (const oid of commits) {
     const g = graphs.get(oid);
-    const objRows = g ? Math.max(...g.columns.map((c) => c.length), 1) : 0;
-    maxColumns = Math.max(maxColumns, g ? g.columns.length : 0);
+    const objRows = g ? Math.max(...g.levels.map((c) => c.length), 1) : 0;
+    maxLevels = Math.max(maxLevels, g ? g.levels.length : 0);
     const chainRows = chains.get(oid)?.length ?? 0;
     const h = Math.max(
       M.rowH,
@@ -323,25 +323,25 @@ export function layout(
     y += h;
   }
 
-  // Widened below if the orphans reach further right than any open commit does.
-  let objectsW = Math.max(maxColumns, 1) * M.objColW;
+  // Widened below if the unreachable reach further right than any open commit does.
+  let objectsW = Math.max(maxLevels, 1) * M.objColW;
 
-  const nodes: SceneNode[] = [];
-  const edges: SceneEdge[] = [];
-  const at = new Map<string, SceneNode>();
-  const put = (n: SceneNode) => {
-    const pin = pins[n.id];
+  const shapes: Shape[] = [];
+  const links: Link[] = [];
+  const at = new Map<string, Shape>();
+  const put = (shape: Shape) => {
+    const pin = pins[shape.id];
     if (pin) {
-      n.x = pin.x;
-      n.y = pin.y;
-      n.pinned = true;
+      shape.x = pin.x;
+      shape.y = pin.y;
+      shape.pinned = true;
     }
-    nodes.push(n);
-    at.set(n.id, n);
-    return n;
+    shapes.push(shape);
+    at.set(shape.id, shape);
+    return shape;
   };
 
-  // --- staged blobs, above everything, in the object band ---
+  // --- staged blobs, above everything, in the object column ---
   stagedTop.forEach((oid, i) => {
     put({
       id: oid,
@@ -379,8 +379,8 @@ export function layout(
   // draw it to, and no button to load it with — the window is the run's, fixed
   // when the step was made. The notes toolbar says how many commits are shown.
   for (const oid of commits) {
-    for (const p of snap.commits[oid]?.parents ?? []) {
-      if (inWindow.has(p)) edges.push({ id: `p:${oid}:${p}`, from: oid, to: p, kind: 'parent' });
+    for (const p of step.commits[oid]?.parents ?? []) {
+      if (inWindow.has(p)) links.push({ id: `p:${oid}:${p}`, from: oid, to: p, kind: 'parent' });
     }
   }
 
@@ -411,15 +411,15 @@ export function layout(
           });
         }
         const next = chain[j + 1] ?? row.oid;
-        edges.push({ id: `ptr:${id}:${next}`, from: id, to: next, kind: 'pointer' });
+        links.push({ id: `ptr:${id}:${next}`, from: id, to: next, kind: 'pointer' });
       });
     });
   }
 
   // An unborn HEAD has nothing to sit beside, so it sits alone at the top of
   // the gutter — a fresh `git init` is a pointer to a branch file that does not
-  // exist yet, and that pointer is the whole picture until the first commit.
-  if (snap.head.unborn && snap.head.ref && !at.has('HEAD')) {
+  // exist yet, and that pointer is the whole canvas until the first commit.
+  if (step.head.unborn && step.head.ref && !at.has('HEAD')) {
     put({
       id: 'HEAD',
       kind: 'head',
@@ -428,7 +428,7 @@ export function layout(
       w: M.chipW,
       h: M.chipH + 8, // two lines: the name it holds is written under it
       label: 'HEAD',
-      sub: refLabel(snap.head.ref),
+      sub: refLabel(step.head.ref),
     });
   }
 
@@ -436,11 +436,11 @@ export function layout(
   for (const row of rows) {
     const g = graphs.get(row.oid);
     if (!g) continue;
-    const c = snap.commits[row.oid]!;
-    g.columns.forEach((col, d) => {
+    const c = step.commits[row.oid]!;
+    g.levels.forEach((col, d) => {
       col.forEach((oid, i) => {
         if (at.has(oid)) return; // placed once, near the things that point at it
-        const type = snap.objects[oid]?.type ?? (snap.trees[oid] ? 'tree' : 'blob');
+        const type = step.objects[oid]?.type ?? (step.trees[oid] ? 'tree' : 'blob');
         put({
           id: oid,
           kind: type === 'tree' ? 'tree' : type === 'commit' ? 'submodule' : 'blob',
@@ -450,71 +450,71 @@ export function layout(
           w: M.objW,
           h: M.objH,
           label: short(oid),
-          sub: type !== 'tree' ? 'blob' : folded.has(oid) ? heldBack(oid) : 'tree',
-          folded: type === 'tree' && folded.has(oid),
+          sub: type !== 'tree' ? 'blob' : collapsed.has(oid) ? heldBack(oid) : 'tree',
+          collapsed: type === 'tree' && collapsed.has(oid),
           unreachable: unreachable.has(oid),
           origin: d === 0 ? row.oid : undefined,
         });
       });
     });
-    edges.push({ id: `t:${row.oid}`, from: row.oid, to: c.tree, kind: 'tree' });
-    for (const e of g.edges) {
+    links.push({ id: `t:${row.oid}`, from: row.oid, to: c.tree, kind: 'tree' });
+    for (const e of g.links) {
       if (!at.has(e.to)) continue;
-      edges.push({ id: `e:${e.from}:${e.to}:${e.label}`, from: e.from, to: e.to, kind: 'entry', label: e.label });
+      links.push({ id: `e:${e.from}:${e.to}:${e.label}`, from: e.from, to: e.to, kind: 'entry', label: e.label });
     }
   }
 
   // --- objects nothing on screen points at ---
   //
-  // Orphaned together, drawn together, and drawn in the bands everything else
-  // uses: a discarded commit carries on down the commit band as a ghost, its
+  // Unreachable together, drawn together, and drawn in the columns everything else
+  // uses: a discarded commit carries on down the commit column as a ghost, its
   // tree fans out to the right of it exactly as an open commit's does, and what
-  // no orphaned commit or tree names any more hangs below, from the object
-  // band's first column. Losing its last referrer does not make a commit forget
-  // its own tree — that is how you see a whole discarded state sitting there
+  // no unreachable commit or tree names any more hangs below, from the trees-and-blobs
+  // column's first level. Losing its last referrer does not make a commit forget
+  // its own tree — that is how you see a whole discarded commit sitting there
   // intact, waiting for gc. Links out to objects that are still reachable are
-  // dropped: they would cross the picture to say what the ghost already says.
+  // dropped: they would cross the canvas to say what the ghost already says.
   //
   // A staged object comes down here too, solid rather than a ghost: `git add`
   // wrote a real blob, and the index chip beside it is the only thing holding
   // it. Objects do not vanish because something started pointing at them.
-  // Hidden means absent, so switching orphans off takes them out of the scene
-  // the way a fold does. A staged object is held by the index, not orphaned,
+  // Hidden means absent, so switching the unreachable off takes them out of the scene
+  // the way a collapse does. A staged object is held by the index, not unreachable,
   // and stays.
-  const strays = [...orphans, ...stagedOnly].filter((oid) => !at.has(oid));
+  const strays = [...shownUnreachable, ...stagedOnly].filter((oid) => !at.has(oid));
   if (strays.length > 0) {
     const strayed = new Set(strays);
-    // The orphaned set's own subgraph, cut once here: entries pointing back
+    // The unreachable set's own subgraph, cut once here: entries pointing back
     // into reachable territory are gone, and everything below follows what is
     // left, through the same objectGraph the live commits go through.
     const strayTrees: Record<Oid, TreeEntry[]> = {};
     for (const oid of strays) {
-      if (snap.trees[oid]) strayTrees[oid] = snap.trees[oid].filter((e) => strayed.has(e.oid));
+      if (step.trees[oid]) strayTrees[oid] = step.trees[oid].filter((e) => strayed.has(e.oid));
     }
 
-    // What that cut throws away, drawn back on request. The arrow crosses the
-    // whole picture, which is why it is off by default — but it is the answer
-    // to "what does gc actually free": a discarded state shares almost every
+    // What that cut throws away, drawn back on request. The link crosses the
+    // whole canvas, which is why it is off by default — but it is the answer
+    // to "what does gc actually free": a discarded commit shares almost every
     // blob with the live one, and only the objects down here on their own are
-    // its own. The node is already on screen where something reachable names
-    // it, so this adds an arrow and moves nothing. A folded tree says nothing
+    // its own. The shape is already on screen where something reachable names
+    // it, so this adds a link and moves nothing. A collapsed tree says nothing
     // about its entries, here as anywhere.
-    if (view.showCrossLinks) {
+    if (view.showLinksFromUnreachable) {
       for (const oid of strays) {
         // A discarded commit still names its parent, and after a reset that
-        // parent is usually still on a branch: the arrow is the whole point of
+        // parent is usually still on a branch: the link is the whole point of
         // "the old tip is still there, hanging off the one you moved to".
-        for (const p of snap.commits[oid]?.parents ?? []) {
-          if (!strayed.has(p)) edges.push({ id: `p:${oid}:${p}`, from: oid, to: p, kind: 'parent' });
+        for (const p of step.commits[oid]?.parents ?? []) {
+          if (!strayed.has(p)) links.push({ id: `p:${oid}:${p}`, from: oid, to: p, kind: 'parent' });
         }
-        if (folded.has(oid)) continue;
+        if (collapsed.has(oid)) continue;
         const names = new Map<Oid, string[]>();
-        for (const e of snap.trees[oid] ?? []) {
+        for (const e of step.trees[oid] ?? []) {
           if (strayed.has(e.oid)) continue;
           names.set(e.oid, [...(names.get(e.oid) ?? []), e.name]);
         }
         for (const [to, ns] of names) {
-          edges.push({ id: `x:${oid}:${to}`, from: oid, to, kind: 'entry', label: ns.join(', ') });
+          links.push({ id: `x:${oid}:${to}`, from: oid, to, kind: 'entry', label: ns.join(', ') });
         }
       }
     }
@@ -524,12 +524,12 @@ export function layout(
     let bottom = y;
     let strayCols = 0;
 
-    /** One root's objects, in columns to the right of `top`. Returns its height. */
+    /** One root's objects, in levels to the right of `top`. Returns its height. */
     const objectRow = (top: number, g: ObjectGraph, from?: string) => {
-      g.columns.forEach((col, d) => {
+      g.levels.forEach((col, d) => {
         col.forEach((oid, i) => {
           if (at.has(oid)) return;
-          const type = snap.objects[oid]?.type ?? (strayTrees[oid] ? 'tree' : 'blob');
+          const type = step.objects[oid]?.type ?? (strayTrees[oid] ? 'tree' : 'blob');
           const n = put({
             id: oid,
             kind: type === 'tree' ? 'tree' : type === 'commit' ? 'submodule' : 'blob',
@@ -539,8 +539,8 @@ export function layout(
             w: M.objW,
             h: M.objH,
             label: short(oid),
-            sub: type === 'tree' && folded.has(oid) ? heldBack(oid) : type,
-            folded: type === 'tree' && folded.has(oid),
+            sub: type === 'tree' && collapsed.has(oid) ? heldBack(oid) : type,
+            collapsed: type === 'tree' && collapsed.has(oid),
             unreachable: unreachable.has(oid),
             staged: stagedOnly.has(oid),
             stray: true,
@@ -549,22 +549,22 @@ export function layout(
           bottom = Math.max(bottom, n.y + n.h);
         });
       });
-      for (const e of g.edges) {
-        edges.push({ id: `e:${e.from}:${e.to}:${e.label}`, from: e.from, to: e.to, kind: 'entry', label: e.label });
+      for (const e of g.links) {
+        links.push({ id: `e:${e.from}:${e.to}:${e.label}`, from: e.from, to: e.to, kind: 'entry', label: e.label });
       }
-      strayCols = Math.max(strayCols, g.columns.length);
-      return Math.max(M.rowH, Math.max(...g.columns.map((c) => c.length), 1) * M.objRowH + M.rowPad);
+      strayCols = Math.max(strayCols, g.levels.length);
+      return Math.max(M.rowH, Math.max(...g.levels.map((c) => c.length), 1) * M.objRowH + M.rowPad);
     };
 
-    // Orphaned commits carry on down the commit band, in the first lane.
+    // Unreachable commits carry on down the commit column, in the first lane.
     // ponytail: newest first by date, not topologically — a skewed clock could
     // draw a parent above its child. rev-list does not reach down here, and a
-    // second lane sweep to fix an arrow direction is not worth the width.
+    // second lane sweep to fix a link direction is not worth the width.
     const strayCommits = strays
-      .filter((oid) => snap.commits[oid])
-      .sort((a, b) => snap.commits[b].authorDate - snap.commits[a].authorDate || a.localeCompare(b));
+      .filter((oid) => step.commits[oid])
+      .sort((a, b) => step.commits[b].authorDate - step.commits[a].authorDate || a.localeCompare(b));
     for (const oid of strayCommits) {
-      const c = snap.commits[oid];
+      const c = step.commits[oid];
       const n = put({
         id: oid,
         kind: 'commit',
@@ -580,39 +580,39 @@ export function layout(
       bottom = Math.max(bottom, n.y + n.h);
       let h = M.rowH;
       if (strayed.has(c.tree)) {
-        edges.push({ id: `t:${oid}`, from: oid, to: c.tree, kind: 'tree' });
-        h = objectRow(cursor + M.rowPad, objectGraph(c.tree, strayTrees, folded), oid);
+        links.push({ id: `t:${oid}`, from: oid, to: c.tree, kind: 'tree' });
+        h = objectRow(cursor + M.rowPad, objectGraph(c.tree, strayTrees, collapsed), oid);
       }
-      // One lane, so a parent arrow is the same straight drop it is above.
+      // One lane, so a parent link is the same straight drop it is above.
       for (const p of c.parents) {
-        if (strayed.has(p)) edges.push({ id: `p:${oid}:${p}`, from: oid, to: p, kind: 'parent' });
+        if (strayed.has(p)) links.push({ id: `p:${oid}:${p}`, from: oid, to: p, kind: 'parent' });
       }
       rows.push({ oid, y: cursor, h });
       cursor += h;
     }
 
-    // Trees and blobs with no orphaned parent left: they dangle, one root per
-    // row, never in the commit band — only commits live over there. Roots
+    // Trees and blobs with no unreachable parent left: they are strays, one root per
+    // row, never in the commit column — only commits live over there. Roots
     // first, whatever order they arrived in: a blob laid down before the tree
     // that names it takes the first column and leaves the tree stacked under
     // it, instead of the tree fanning out rightwards into it.
-    // Whatever a fold above left undrawn turns up here: an unreachable object is
-    // never silently dropped, so folding a ghost tree moves its entries into the
-    // dangling band rather than taking them off the screen.
+    // Whatever a collapse above left undrawn turns up here: an unreachable object is
+    // never silently dropped, so collapsing a ghost tree moves its entries into the
+    // stray column rather than taking them off the screen.
     const named = new Set(Object.values(strayTrees).flat().map((e) => e.oid));
     const roots = [...strays].sort((a, b) => Number(named.has(a)) - Number(named.has(b)));
     for (const oid of roots) {
-      if (at.has(oid) || snap.tags[oid]) continue;
-      cursor += objectRow(cursor, objectGraph(oid, strayTrees, folded));
+      if (at.has(oid) || step.tags[oid]) continue;
+      cursor += objectRow(cursor, objectGraph(oid, strayTrees, collapsed));
     }
 
     // A tag is a pointer, so it goes in the pointer gutter beside the thing it
     // names, exactly as a live one does above. Nothing left to name, and it
-    // joins the danglers.
+    // joins the strays.
     const stacked = new Map<Oid, number>();
     for (const oid of strays) {
       if (at.has(oid)) continue; // by now, only tags are left
-      const t = snap.tags[oid];
+      const t = step.tags[oid];
       const target = strayed.has(t.target) ? at.get(t.target) : undefined;
       const i = stacked.get(t.target) ?? 0;
       stacked.set(t.target, i + 1);
@@ -629,7 +629,7 @@ export function layout(
         unreachable: true,
         stray: true,
       });
-      if (target) edges.push({ id: `ptr:${oid}:${t.target}`, from: oid, to: t.target, kind: 'pointer' });
+      if (target) links.push({ id: `ptr:${oid}:${t.target}`, from: oid, to: t.target, kind: 'pointer' });
       else cursor += M.objRowH;
       bottom = Math.max(bottom, n.y + n.h);
     }
@@ -639,14 +639,14 @@ export function layout(
   }
 
   // --- the index, apart, at the far right ---
-  objectsW = widen('objects', objectsW);
-  const indexX = objectsX + objectsW + M.bandGap;
-  // The index is the last band, so it can simply grow to hold what is dragged
+  objectsW = widen('treesAndBlobs', objectsW);
+  const indexX = objectsX + objectsW + M.columnGap;
+  // The index is the last column, so it can simply grow to hold what is dragged
   // into it: a path pulled rightwards stays inside its own column rather than
-  // hanging off the end of the picture.
+  // hanging off the end of the canvas.
   let indexW = M.indexW;
   if (view.showIndex) {
-    const placed = snap.index
+    const placed = step.index
       .map((e) => ({ e, blob: at.get(e.oid) }))
       .sort((a, b) => (a.blob?.y ?? Infinity) - (b.blob?.y ?? Infinity));
     let cursor = 16;
@@ -668,21 +668,21 @@ export function layout(
         conflict: e.stage !== 0,
       });
       indexW = Math.max(indexW, n.x + n.w - indexX);
-      if (blob) edges.push({ id: `s:${id}`, from: id, to: e.oid, kind: 'stage' });
+      if (blob) links.push({ id: `s:${id}`, from: id, to: e.oid, kind: 'stage' });
     }
     y = Math.max(y, cursor);
   }
 
   const height = Math.max(y + 40, 200);
   return {
-    nodes,
-    edges: edges.filter((e) => at.has(e.from) && at.has(e.to)),
-    bands: [
-      { key: 'pointers', label: S.canvas.bands.pointers, x: M.gutterX, w: gutterW },
-      { key: 'commits', label: S.canvas.bands.commits, x: lanesX, w: lanesW },
-      { key: 'objects', label: S.canvas.bands.objects, x: objectsX, w: objectsW },
+    shapes,
+    links: links.filter((e) => at.has(e.from) && at.has(e.to)),
+    columns: [
+      { key: 'pointersAndTags', label: S.canvas.columns.pointersAndTags, x: M.gutterX, w: gutterW },
+      { key: 'commits', label: S.canvas.columns.commits, x: lanesX, w: lanesW },
+      { key: 'treesAndBlobs', label: S.canvas.columns.treesAndBlobs, x: objectsX, w: objectsW },
       ...(view.showIndex
-        ? [{ key: 'index' as const, label: S.canvas.bands.index, x: indexX, w: indexW }]
+        ? [{ key: 'index' as const, label: S.canvas.columns.index, x: indexX, w: indexW }]
         : []),
     ],
     width: (view.showIndex ? indexX + indexW : objectsX + objectsW) + 40,
