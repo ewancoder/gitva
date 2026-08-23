@@ -16,141 +16,149 @@ import { chipHue, hueFor, setTheme, theme } from '../web/theme.js';
 
 /** c2 → c1 → c0, and c2 holds a tree holding a blob. */
 const links: Link[] = [
-  { id: 'p:c2:c1', from: 'c2', to: 'c1', kind: 'parent' },
-  { id: 'p:c1:c0', from: 'c1', to: 'c0', kind: 'parent' },
-  { id: 't:c2', from: 'c2', to: 't2', kind: 'tree' },
-  { id: 'e:t2:b', from: 't2', to: 'b', kind: 'entry' },
+    { id: 'p:c2:c1', from: 'c2', to: 'c1', kind: 'parent' },
+    { id: 'p:c1:c0', from: 'c1', to: 'c0', kind: 'parent' },
+    { id: 't:c2', from: 'c2', to: 't2', kind: 'tree' },
+    { id: 'e:t2:b', from: 't2', to: 'b', kind: 'entry' },
 ];
 const scene = { shapes: [], links, columns: [], width: 0, height: 0, rows: [] } satisfies Scene;
 
 function lit(start: string, already: string[] = []) {
-  const shapes = new Set(already);
-  path(scene, start, shapes, new Set());
-  return shapes;
+    const shapes = new Set(already);
+    path(scene, start, shapes, new Set());
+    return shapes;
 }
 
 test('a selected commit lights its parents, one level only', () => {
-  assert.deepEqual([...lit('c2')].sort(), ['b', 'c1', 'c2', 't2']);
+    assert.deepEqual([...lit('c2')].sort(), ['b', 'c1', 'c2', 't2']);
 });
 
 test('a commit reached from a blob brings its parents too', () => {
-  assert.ok(lit('b').has('c1'));
+    assert.ok(lit('b').has('c1'));
 });
 
 test('hover does not extend the parent walk past one level', () => {
-  // Hovering c2 lights c1 through the parent link before the selection walk
-  // runs. c1's own parent is not on the selection's path and must stay dark.
-  assert.ok(!lit('c2', ['c1']).has('c0'));
+    // Hovering c2 lights c1 through the parent link before the selection walk
+    // runs. c1's own parent is not on the selection's path and must stay dark.
+    assert.ok(!lit('c2', ['c1']).has('c0'));
 });
 
 // ---------------------------------------------------------------------------
 
 const shape = (over: Partial<Shape> & Pick<Shape, 'id' | 'kind'>): Shape => ({
-  x: 0,
-  y: 0,
-  w: 40,
-  h: 20,
-  label: over.id,
-  ...over,
+    x: 0,
+    y: 0,
+    w: 40,
+    h: 20,
+    label: over.id,
+    ...over,
 });
 
 describe('what is under the pointer', () => {
-  const hits = {
-    shapes: [shape({ id: 'a', kind: 'blob' }), shape({ id: 'b', kind: 'commit', x: 100, y: 100 })],
-    links: [],
-    columns: [],
-    width: 200,
-    height: 200,
-    rows: [],
-  } satisfies Scene;
+    const hits = {
+        shapes: [
+            shape({ id: 'a', kind: 'blob' }),
+            shape({ id: 'b', kind: 'commit', x: 100, y: 100 }),
+        ],
+        links: [],
+        columns: [],
+        width: 200,
+        height: 200,
+        rows: [],
+    } satisfies Scene;
 
-  it('finds the shape the point is inside', () => {
-    assert.equal(hitTest(hits, 110, 110)?.id, 'b');
-  });
+    it('finds the shape the point is inside', () => {
+        assert.equal(hitTest(hits, 110, 110)?.id, 'b');
+    });
 
-  it('finds nothing in the space between shapes', () => {
-    assert.equal(hitTest(hits, 70, 70), null);
-  });
+    it('finds nothing in the space between shapes', () => {
+        assert.equal(hitTest(hits, 70, 70), null);
+    });
 
-  it('forgives three pixels, so a small chip can still be clicked', () => {
-    assert.equal(hitTest(hits, -2, -2)?.id, 'a');
-    assert.equal(hitTest(hits, -4, -4), null);
-  });
+    it('forgives three pixels, so a small chip can still be clicked', () => {
+        assert.equal(hitTest(hits, -2, -2)?.id, 'a');
+        assert.equal(hitTest(hits, -4, -4), null);
+    });
 
-  it('takes the last one drawn, which is the one on top', () => {
-    const stacked = { ...hits, shapes: [shape({ id: 'under', kind: 'blob' }), shape({ id: 'over', kind: 'tree' })] };
-    assert.equal(hitTest(stacked, 5, 5)?.id, 'over');
-  });
+    it('takes the last one drawn, which is the one on top', () => {
+        const stacked = {
+            ...hits,
+            shapes: [shape({ id: 'under', kind: 'blob' }), shape({ id: 'over', kind: 'tree' })],
+        };
+        assert.equal(hitTest(stacked, 5, 5)?.id, 'over');
+    });
 });
 
 describe('the edge a column is widened by', () => {
-  const columns = {
-    shapes: [],
-    links: [],
-    columns: [
-      { key: 'pointersAndTags', label: 'pointers and tags', x: 12, w: 100 },
-      { key: 'commits', label: 'commits', x: 140, w: 88 },
-      { key: 'index', label: 'index', x: 256, w: 176 },
-    ],
-    width: 400,
-    height: 200,
-    rows: [],
-  } satisfies Scene;
+    const columns = {
+        shapes: [],
+        links: [],
+        columns: [
+            { key: 'pointersAndTags', label: 'pointers and tags', x: 12, w: 100 },
+            { key: 'commits', label: 'commits', x: 140, w: 88 },
+            { key: 'index', label: 'index', x: 256, w: 176 },
+        ],
+        width: 400,
+        height: 200,
+        rows: [],
+    } satisfies Scene;
 
-  it('finds the column whose gap the point is in', () => {
-    assert.equal(columnEdgeAt(columns, 126), 'pointersAndTags'); // 12 + 100 + 28/2
-    assert.equal(columnEdgeAt(columns, 242), 'commits');
-  });
+    it('finds the column whose gap the point is in', () => {
+        assert.equal(columnEdgeAt(columns, 126), 'pointersAndTags'); // 12 + 100 + 28/2
+        assert.equal(columnEdgeAt(columns, 242), 'commits');
+    });
 
-  it('finds nothing out in the column itself', () => {
-    assert.equal(columnEdgeAt(columns, 60), null);
-    assert.equal(columnEdgeAt(columns, 136), null);
-  });
+    it('finds nothing out in the column itself', () => {
+        assert.equal(columnEdgeAt(columns, 60), null);
+        assert.equal(columnEdgeAt(columns, 136), null);
+    });
 
-  it('gives the index no edge: it is last, and its width is its content', () => {
-    assert.equal(columnEdgeAt(columns, 256 + 176 + 14), null);
-  });
+    it('gives the index no edge: it is last, and its width is its content', () => {
+        assert.equal(columnEdgeAt(columns, 256 + 176 + 14), null);
+    });
 });
 
 describe('hues', () => {
-  it('gives the three object kinds the three hues, and everything else ink', () => {
-    assert.deepEqual(
-      ['commit', 'tree', 'blob', 'ref'].map(hueFor),
-      [theme.commit, theme.tree, theme.blob, theme.ink],
-    );
-  });
+    it('gives the three object kinds the three hues, and everything else ink', () => {
+        assert.deepEqual(['commit', 'tree', 'blob', 'ref'].map(hueFor), [
+            theme.commit,
+            theme.tree,
+            theme.blob,
+            theme.ink,
+        ]);
+    });
 
-  it('tells the kinds of pointer apart by their outline', () => {
-    assert.equal(chipHue('head', 'HEAD'), theme.head);
-    assert.equal(chipHue('tag', 'g1'), theme.tagObject);
-    assert.equal(chipHue('ref', 'ref:refs/heads/main'), theme.refLocal);
-    assert.equal(chipHue('ref', 'ref:refs/remotes/origin/main'), theme.refRemote);
-    assert.equal(chipHue('ref', 'ref:refs/tags/v1'), theme.refTag);
-    assert.equal(chipHue('index', 'index:0:a.txt'), theme.muted);
-  });
+    it('tells the kinds of pointer apart by their outline', () => {
+        assert.equal(chipHue('head', 'HEAD'), theme.head);
+        assert.equal(chipHue('tag', 'g1'), theme.tagObject);
+        assert.equal(chipHue('ref', 'ref:refs/heads/main'), theme.refLocal);
+        assert.equal(chipHue('ref', 'ref:refs/remotes/origin/main'), theme.refRemote);
+        assert.equal(chipHue('ref', 'ref:refs/tags/v1'), theme.refTag);
+        assert.equal(chipHue('index', 'index:0:a.txt'), theme.muted);
+    });
 
-  // Every module holds this one object, so the swap has to happen in place —
-  // and it has to go back, or a light session would leave the dark palette
-  // half-written for the next thing that reads it.
-  it('swaps the ground in place, and keeps the three object hues across it', () => {
-    const dark = { ...theme };
-    try {
-      setTheme('light');
-      assert.notEqual(theme.ground, dark.ground);
-      assert.equal(theme.ink, '#1a1d24');
-      assert.deepEqual(
-        [theme.commit, theme.tree, theme.blob],
-        [dark.commit, dark.tree, dark.blob],
-        'a kind is recognised by its hue, so the ground must not move it',
-      );
-      setTheme('matrix');
-      assert.equal(theme.commit, theme.blob, 'one ground tells no kind from another');
-      setTheme('dark');
-      assert.deepEqual({ ...theme }, dark);
-    } finally {
-      setTheme('dark');
-    }
-  });
+    // Every module holds this one object, so the swap has to happen in place —
+    // and it has to go back, or a light session would leave the dark palette
+    // half-written for the next thing that reads it.
+    it('swaps the ground in place, and keeps the three object hues across it', () => {
+        const dark = { ...theme };
+        try {
+            setTheme('light');
+            assert.notEqual(theme.ground, dark.ground);
+            assert.equal(theme.ink, '#1a1d24');
+            assert.deepEqual(
+                [theme.commit, theme.tree, theme.blob],
+                [dark.commit, dark.tree, dark.blob],
+                'a kind is recognised by its hue, so the ground must not move it',
+            );
+            setTheme('matrix');
+            assert.equal(theme.commit, theme.blob, 'one ground tells no kind from another');
+            setTheme('dark');
+            assert.deepEqual({ ...theme }, dark);
+        } finally {
+            setTheme('dark');
+        }
+    });
 });
 
 /**
@@ -160,195 +168,220 @@ describe('hues', () => {
  * so the easing that tells the client whether to ask for another frame is.
  */
 function fakeCtx(): CanvasRenderingContext2D {
-  const it = {
-    globalAlpha: 1,
-    lineWidth: 1,
-    font: '',
-    fillStyle: '',
-    strokeStyle: '',
-    textAlign: 'left',
-    measureText: (s: string) => ({ width: s.length * 7 }),
-  } as unknown as Record<string, unknown>;
-  return new Proxy(it, {
-    get: (t, k) => (k in t ? t[k as string] : () => {}),
-    set: (t, k, v) => ((t[k as string] = v), true),
-  }) as unknown as CanvasRenderingContext2D;
+    const it = {
+        globalAlpha: 1,
+        lineWidth: 1,
+        font: '',
+        fillStyle: '',
+        strokeStyle: '',
+        textAlign: 'left',
+        measureText: (s: string) => ({ width: s.length * 7 }),
+    } as unknown as Record<string, unknown>;
+    return new Proxy(it, {
+        get: (t, k) => (k in t ? t[k as string] : () => {}),
+        set: (t, k, v) => ((t[k as string] = v), true),
+    }) as unknown as CanvasRenderingContext2D;
 }
 
 describe('painting', () => {
-  const full = {
-    shapes: [
-      shape({ id: 'c1', kind: 'commit', oid: 'c1', sub: 'a subject', y: 0 }),
-      shape({ id: 'c0', kind: 'commit', oid: 'c0', y: 100, unreachable: true }),
-      shape({ id: 'c2', kind: 'commit', oid: 'c2', x: 80, y: 200 }), // another lane
-      shape({ id: 't1', kind: 'tree', oid: 't1', x: 100 }),
-      shape({ id: 'b1', kind: 'blob', oid: 'b1', x: 200, staged: true, origin: 't1' }),
-      shape({ id: 'g1', kind: 'tag', oid: 'g1', x: 240 }),
-      shape({ id: 'ref:refs/heads/main', kind: 'ref', x: 300, y: 60, sub: 'aaaaaaa' }),
-      shape({ id: 'HEAD', kind: 'head', x: 360, y: 60 }),
-      shape({ id: 'index:0:a.txt', kind: 'index', x: 400, y: 60, conflict: true }),
-      shape({ id: 'sub', kind: 'submodule', x: 500, y: 60 }),
-    ],
-    links: [
-      { id: 'p', from: 'c1', to: 'c0', kind: 'parent' },
-      { id: 'p2', from: 'c0', to: 'c1', kind: 'parent' }, // a child dragged above its parent
-      { id: 'p3', from: 'c0', to: 'c2', kind: 'parent' }, // a parent in another lane: an elbow
-      { id: 't', from: 'c1', to: 't1', kind: 'tree' },
-      { id: 'e', from: 't1', to: 'b1', kind: 'entry', label: 'a.txt' },
-      { id: 'ptr', from: 'ref:refs/heads/main', to: 'c1', kind: 'pointer' },
-      { id: 's', from: 'index:0:a.txt', to: 'b1', kind: 'stage' },
-    ] satisfies Link[],
-    columns: [
-      { key: 'commits' as const, label: 'commits', x: 0, w: 90 },
-      { key: 'index' as const, label: 'index', x: 400, w: 90 },
-    ],
-    width: 700,
-    height: 200,
-    rows: [],
-  } satisfies Scene;
+    const full = {
+        shapes: [
+            shape({ id: 'c1', kind: 'commit', oid: 'c1', sub: 'a subject', y: 0 }),
+            shape({ id: 'c0', kind: 'commit', oid: 'c0', y: 100, unreachable: true }),
+            shape({ id: 'c2', kind: 'commit', oid: 'c2', x: 80, y: 200 }), // another lane
+            shape({ id: 't1', kind: 'tree', oid: 't1', x: 100 }),
+            shape({ id: 'b1', kind: 'blob', oid: 'b1', x: 200, staged: true, origin: 't1' }),
+            shape({ id: 'g1', kind: 'tag', oid: 'g1', x: 240 }),
+            shape({ id: 'ref:refs/heads/main', kind: 'ref', x: 300, y: 60, sub: 'aaaaaaa' }),
+            shape({ id: 'HEAD', kind: 'head', x: 360, y: 60 }),
+            shape({ id: 'index:0:a.txt', kind: 'index', x: 400, y: 60, conflict: true }),
+            shape({ id: 'sub', kind: 'submodule', x: 500, y: 60 }),
+        ],
+        links: [
+            { id: 'p', from: 'c1', to: 'c0', kind: 'parent' },
+            { id: 'p2', from: 'c0', to: 'c1', kind: 'parent' }, // a child dragged above its parent
+            { id: 'p3', from: 'c0', to: 'c2', kind: 'parent' }, // a parent in another lane: an elbow
+            { id: 't', from: 'c1', to: 't1', kind: 'tree' },
+            { id: 'e', from: 't1', to: 'b1', kind: 'entry', label: 'a.txt' },
+            { id: 'ptr', from: 'ref:refs/heads/main', to: 'c1', kind: 'pointer' },
+            { id: 's', from: 'index:0:a.txt', to: 'b1', kind: 'stage' },
+        ] satisfies Link[],
+        columns: [
+            { key: 'commits' as const, label: 'commits', x: 0, w: 90 },
+            { key: 'index' as const, label: 'index', x: 400, w: 90 },
+        ],
+        width: 700,
+        height: 200,
+        rows: [],
+    } satisfies Scene;
 
-  const paint = (over: Partial<Paint> = {}): Paint => ({
-    camera: { x: 0, y: 0, scale: 1.5 },
-    width: 800,
-    height: 400,
-    dpr: 2,
-    change: EMPTY_CHANGE,
-    flash: 0,
-    hover: null,
-    selected: null,
-    marked: new Set<string>(),
-    showPins: true,
-    showNames: true,
-    enter: 1,
-    leaving: [],
-    exit: 1,
-    motion: true,
-    ...over,
-  });
-
-  /** Draw until nothing is still moving; the frame count, or a failure. */
-  function settle(s: Scene, p: Paint = paint()): number {
-    let frames = 1;
-    while (draw(fakeCtx(), s, p)) assert.ok(++frames < 200, 'easing has to converge');
-    return frames;
-  }
-
-  const dragged = (s: Scene) => ({
-    ...s,
-    shapes: [shape({ id: 'c1', kind: 'commit', x: 0, y: 900 }), ...s.shapes.slice(1)],
-  });
-
-  /** Every value the painter gave one style property, in order. */
-  function painted(s: Scene, prop: 'strokeStyle' | 'font', over: Partial<Paint> = {}): string[] {
-    const seen: string[] = [];
-    const ctx = new Proxy(
-      { measureText: (t: string) => ({ width: t.length * 7 }) } as Record<string, unknown>,
-      {
-        get: (t, k) => (k in t ? t[k as string] : () => {}),
-        set: (t, k, v) => (k === prop && seen.push(String(v)), (t[k as string] = v), true),
-      },
-    ) as unknown as CanvasRenderingContext2D;
-    snapPositions();
-    draw(ctx, s, { ...paint(), ...over });
-    return seen;
-  }
-
-  const strokes = (s: Scene, over: Partial<Paint> = {}) => painted(s, 'strokeStyle', over);
-
-  it('draws a parent line touching an unreachable object in ghost grey, not in ink', () => {
-    const pair = (from: Partial<Shape>, to: Partial<Shape>): Scene => ({
-      ...full,
-      shapes: [shape({ id: 'a', kind: 'commit', ...from }), shape({ id: 'b', kind: 'commit', y: 100, ...to })],
-      links: [{ id: 'p', from: 'a', to: 'b', kind: 'parent' }],
+    const paint = (over: Partial<Paint> = {}): Paint => ({
+        camera: { x: 0, y: 0, scale: 1.5 },
+        width: 800,
+        height: 400,
+        dpr: 2,
+        change: EMPTY_CHANGE,
+        flash: 0,
+        hover: null,
+        selected: null,
+        marked: new Set<string>(),
+        showPins: true,
+        showNames: true,
+        enter: 1,
+        leaving: [],
+        exit: 1,
+        motion: true,
+        ...over,
     });
-    // An unreachable object's line to its live parent, and one unreachable
-    // object to the next.
-    for (const s of [pair({ unreachable: true }, {}), pair({ unreachable: true }, { unreachable: true })]) {
-      const seen = strokes(s);
-      assert.ok(seen.includes(theme.ghost));
-      assert.ok(!seen.includes(theme.ink));
+
+    /** Draw until nothing is still moving; the frame count, or a failure. */
+    function settle(s: Scene, p: Paint = paint()): number {
+        let frames = 1;
+        while (draw(fakeCtx(), s, p)) assert.ok(++frames < 200, 'easing has to converge');
+        return frames;
     }
-    assert.ok(strokes(pair({}, {})).includes(theme.ink));
-  });
 
-  it('shows a collapsed tree has more in it: a bold count and a link off its edge', () => {
-    const bold = (s: Scene) => painted(s, 'font').some((f) => f.startsWith('700 '));
-    const shut = { ...full, shapes: [shape({ id: 't9', kind: 'tree', sub: 'tree +3', collapsed: true })], links: [] };
-    assert.ok(strokes(shut).includes(theme.tree), 'the stub link, in the tree hue');
-    assert.ok(bold(shut), 'and the count in bold');
-    const open = { ...shut, shapes: [shape({ id: 't9', kind: 'tree', sub: 'tree' })] };
-    assert.ok(!strokes(open).includes(theme.tree), 'an open tree gets neither');
-    assert.ok(!bold(open));
-  });
+    const dragged = (s: Scene) => ({
+        ...s,
+        shapes: [shape({ id: 'c1', kind: 'commit', x: 0, y: 900 }), ...s.shapes.slice(1)],
+    });
 
-  it('sticks a pushpin through a pinned shape, but only when asked to', () => {
-    const put = { ...full, shapes: [shape({ id: 'b1', kind: 'blob', pinned: true })], links: [] };
-    assert.ok(strokes(put).includes(theme.mark), 'the pin, in the colour your own marks use');
-    const loose = { ...put, shapes: [shape({ id: 'b1', kind: 'blob' })] };
-    assert.ok(!strokes(loose).includes(theme.mark), 'an unpinned shape gets none');
-    assert.ok(!strokes(put, { showPins: false }).includes(theme.mark), 'nor does one with pins turned off');
-  });
-
-  it("puts a tree entry's name on the link, unless the names are turned off", () => {
-    const written = (over: Partial<Paint> = {}) => {
-      const said: string[] = [];
-      const ctx = new Proxy(
-        {
-          measureText: (t: string) => ({ width: t.length * 7 }),
-          fillText: (t: string) => said.push(t),
-        } as Record<string, unknown>,
-        { get: (t, k) => (k in t ? t[k as string] : () => {}) },
-      ) as unknown as CanvasRenderingContext2D;
-      snapPositions();
-      draw(ctx, full, { ...paint(), ...over });
-      return said;
-    };
-    assert.ok(written().includes('a.txt'), 'the name is on the link, not in the blob');
-    assert.ok(!written({ showNames: false }).includes('a.txt'));
-  });
-
-  it('draws every kind, at every tier of detail, without falling over', () => {
-    for (const scale of [0.1, 0.2, 0.3, 0.5, 1.2, 1.5]) {
-      snapPositions();
-      settle(full, paint({ camera: { x: 0, y: 0, scale } }));
+    /** Every value the painter gave one style property, in order. */
+    function painted(s: Scene, prop: 'strokeStyle' | 'font', over: Partial<Paint> = {}): string[] {
+        const seen: string[] = [];
+        const ctx = new Proxy(
+            { measureText: (t: string) => ({ width: t.length * 7 }) } as Record<string, unknown>,
+            {
+                get: (t, k) => (k in t ? t[k as string] : () => {}),
+                set: (t, k, v) => (k === prop && seen.push(String(v)), (t[k as string] = v), true),
+            },
+        ) as unknown as CanvasRenderingContext2D;
+        snapPositions();
+        draw(ctx, s, { ...paint(), ...over });
+        return seen;
     }
-  });
 
-  it('draws what is arriving, what is going, and what is picked out', () => {
-    snapPositions();
-    settle(
-      full,
-      paint({
-        change: { added: new Set(['b1']), removed: new Set(['old']), updated: new Set(['c1']), moved: new Set() },
-        flash: 1,
-        enter: 0.5,
-        exit: 0.5,
-        hover: 'c1',
-        selected: 'b1',
-        marked: new Set(['b1']),
-        leaving: [shape({ id: 'old', kind: 'blob', x: 50 })],
-      }),
-    );
-  });
+    const strokes = (s: Scene, over: Partial<Paint> = {}) => painted(s, 'strokeStyle', over);
 
-  it('keeps asking for frames while a shape is still travelling, and stops when it arrives', () => {
-    snapPositions();
-    settle(full);
-    assert.equal(draw(fakeCtx(), dragged(full), paint()), true, 'it has somewhere to get to');
-    settle(dragged(full));
-  });
+    it('draws a parent line touching an unreachable object in ghost grey, not in ink', () => {
+        const pair = (from: Partial<Shape>, to: Partial<Shape>): Scene => ({
+            ...full,
+            shapes: [
+                shape({ id: 'a', kind: 'commit', ...from }),
+                shape({ id: 'b', kind: 'commit', y: 100, ...to }),
+            ],
+            links: [{ id: 'p', from: 'a', to: 'b', kind: 'parent' }],
+        });
+        // An unreachable object's line to its live parent, and one unreachable
+        // object to the next.
+        for (const s of [
+            pair({ unreachable: true }, {}),
+            pair({ unreachable: true }, { unreachable: true }),
+        ]) {
+            const seen = strokes(s);
+            assert.ok(seen.includes(theme.ghost));
+            assert.ok(!seen.includes(theme.ink));
+        }
+        assert.ok(strokes(pair({}, {})).includes(theme.ink));
+    });
 
-  it('snaps rather than eases when you asked for no motion', () => {
-    snapPositions();
-    const still = paint({ motion: false });
-    draw(fakeCtx(), full, still);
-    assert.equal(draw(fakeCtx(), dragged(full), still), false);
-  });
+    it('shows a collapsed tree has more in it: a bold count and a link off its edge', () => {
+        const bold = (s: Scene) => painted(s, 'font').some((f) => f.startsWith('700 '));
+        const shut = {
+            ...full,
+            shapes: [shape({ id: 't9', kind: 'tree', sub: 'tree +3', collapsed: true })],
+            links: [],
+        };
+        assert.ok(strokes(shut).includes(theme.tree), 'the stub link, in the tree hue');
+        assert.ok(bold(shut), 'and the count in bold');
+        const open = { ...shut, shapes: [shape({ id: 't9', kind: 'tree', sub: 'tree' })] };
+        assert.ok(!strokes(open).includes(theme.tree), 'an open tree gets neither');
+        assert.ok(!bold(open));
+    });
 
-  it('draws nothing that is off screen', () => {
-    snapPositions();
-    // The camera is miles away: every shape and every link is culled, and the
-    // frame still comes out settled.
-    assert.equal(draw(fakeCtx(), full, paint({ camera: { x: -50_000, y: -50_000, scale: 1 } })), false);
-  });
+    it('sticks a pushpin through a pinned shape, but only when asked to', () => {
+        const put = {
+            ...full,
+            shapes: [shape({ id: 'b1', kind: 'blob', pinned: true })],
+            links: [],
+        };
+        assert.ok(strokes(put).includes(theme.mark), 'the pin, in the colour your own marks use');
+        const loose = { ...put, shapes: [shape({ id: 'b1', kind: 'blob' })] };
+        assert.ok(!strokes(loose).includes(theme.mark), 'an unpinned shape gets none');
+        assert.ok(
+            !strokes(put, { showPins: false }).includes(theme.mark),
+            'nor does one with pins turned off',
+        );
+    });
+
+    it("puts a tree entry's name on the link, unless the names are turned off", () => {
+        const written = (over: Partial<Paint> = {}) => {
+            const said: string[] = [];
+            const ctx = new Proxy(
+                {
+                    measureText: (t: string) => ({ width: t.length * 7 }),
+                    fillText: (t: string) => said.push(t),
+                } as Record<string, unknown>,
+                { get: (t, k) => (k in t ? t[k as string] : () => {}) },
+            ) as unknown as CanvasRenderingContext2D;
+            snapPositions();
+            draw(ctx, full, { ...paint(), ...over });
+            return said;
+        };
+        assert.ok(written().includes('a.txt'), 'the name is on the link, not in the blob');
+        assert.ok(!written({ showNames: false }).includes('a.txt'));
+    });
+
+    it('draws every kind, at every tier of detail, without falling over', () => {
+        for (const scale of [0.1, 0.2, 0.3, 0.5, 1.2, 1.5]) {
+            snapPositions();
+            settle(full, paint({ camera: { x: 0, y: 0, scale } }));
+        }
+    });
+
+    it('draws what is arriving, what is going, and what is picked out', () => {
+        snapPositions();
+        settle(
+            full,
+            paint({
+                change: {
+                    added: new Set(['b1']),
+                    removed: new Set(['old']),
+                    updated: new Set(['c1']),
+                    moved: new Set(),
+                },
+                flash: 1,
+                enter: 0.5,
+                exit: 0.5,
+                hover: 'c1',
+                selected: 'b1',
+                marked: new Set(['b1']),
+                leaving: [shape({ id: 'old', kind: 'blob', x: 50 })],
+            }),
+        );
+    });
+
+    it('keeps asking for frames while a shape is still travelling, and stops when it arrives', () => {
+        snapPositions();
+        settle(full);
+        assert.equal(draw(fakeCtx(), dragged(full), paint()), true, 'it has somewhere to get to');
+        settle(dragged(full));
+    });
+
+    it('snaps rather than eases when you asked for no motion', () => {
+        snapPositions();
+        const still = paint({ motion: false });
+        draw(fakeCtx(), full, still);
+        assert.equal(draw(fakeCtx(), dragged(full), still), false);
+    });
+
+    it('draws nothing that is off screen', () => {
+        snapPositions();
+        // The camera is miles away: every shape and every link is culled, and the
+        // frame still comes out settled.
+        assert.equal(
+            draw(fakeCtx(), full, paint({ camera: { x: -50_000, y: -50_000, scale: 1 } })),
+            false,
+        );
+    });
 });

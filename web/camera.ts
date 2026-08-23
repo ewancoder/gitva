@@ -7,15 +7,15 @@
 import type { Scene } from './layout.js';
 
 export interface Camera {
-  x: number;
-  y: number;
-  scale: number;
+    x: number;
+    y: number;
+    scale: number;
 }
 
 /** The canvas the object graph is seen through, in css pixels. */
 export interface Viewport {
-  width: number;
-  height: number;
+    width: number;
+    height: number;
 }
 
 /** How far past the content the camera may go, so an edge is visibly an edge. */
@@ -27,19 +27,22 @@ const MARGIN = 20;
  * whole thing and have to scroll back for it.
  */
 export function bounded(
-  c: { x: number; y: number },
-  scale: number,
-  scene: { width: number; height: number },
-  viewport: Viewport,
+    c: { x: number; y: number },
+    scale: number,
+    scene: { width: number; height: number },
+    viewport: Viewport,
 ): { x: number; y: number } {
-  const axis = (v: number, span: number, content: number) => {
-    const far = span - content * scale - MARGIN;
-    // Content shorter than the canvas makes `far` the larger of the two, so the
-    // pair is ordered rather than assumed — otherwise the clamp inverts and
-    // pins a small object graph to the bottom right.
-    return Math.min(Math.max(v, Math.min(MARGIN, far)), Math.max(MARGIN, far));
-  };
-  return { x: axis(c.x, viewport.width, scene.width), y: axis(c.y, viewport.height, scene.height) };
+    const axis = (v: number, span: number, content: number) => {
+        const far = span - content * scale - MARGIN;
+        // Content shorter than the canvas makes `far` the larger of the two, so the
+        // pair is ordered rather than assumed — otherwise the clamp inverts and
+        // pins a small object graph to the bottom right.
+        return Math.min(Math.max(v, Math.min(MARGIN, far)), Math.max(MARGIN, far));
+    };
+    return {
+        x: axis(c.x, viewport.width, scene.width),
+        y: axis(c.y, viewport.height, scene.height),
+    };
 }
 
 /**
@@ -48,56 +51,62 @@ export function bounded(
  * `k` is 1 under prefers-reduced-motion, which arrives in one step.
  */
 export function glideStep(
-  cam: Camera,
-  to: { x: number; y: number },
-  k: number,
+    cam: Camera,
+    to: { x: number; y: number },
+    k: number,
 ): { camera: Camera; done: boolean } {
-  const x = cam.x + (to.x - cam.x) * k;
-  const y = cam.y + (to.y - cam.y) * k;
-  const done = Math.abs(to.x - x) < 0.5 && Math.abs(to.y - y) < 0.5;
-  return { camera: { ...cam, x: done ? to.x : x, y: done ? to.y : y }, done };
+    const x = cam.x + (to.x - cam.x) * k;
+    const y = cam.y + (to.y - cam.y) * k;
+    const done = Math.abs(to.x - x) < 0.5 && Math.abs(to.y - y) < 0.5;
+    return { camera: { ...cam, x: done ? to.x : x, y: done ? to.y : y }, done };
 }
 
 /** Screen point to canvas point. */
 export function toCanvas(
-  cam: Camera,
-  ev: { clientX: number; clientY: number },
-  rect: { left: number; top: number },
+    cam: Camera,
+    ev: { clientX: number; clientY: number },
+    rect: { left: number; top: number },
 ): { x: number; y: number } {
-  return { x: (ev.clientX - rect.left - cam.x) / cam.scale, y: (ev.clientY - rect.top - cam.y) / cam.scale };
+    return {
+        x: (ev.clientX - rect.left - cam.x) / cam.scale,
+        y: (ev.clientY - rect.top - cam.y) / cam.scale,
+    };
 }
 
 /** Put a shape in the middle of the canvas without changing the zoom. */
 export function centre(
-  cam: Camera,
-  shape: { x: number; y: number; w: number; h: number },
-  viewport: Viewport,
+    cam: Camera,
+    shape: { x: number; y: number; w: number; h: number },
+    viewport: Viewport,
 ): Camera {
-  return {
-    ...cam,
-    x: viewport.width / 2 - (shape.x + shape.w / 2) * cam.scale,
-    y: viewport.height / 2 - (shape.y + shape.h / 2) * cam.scale,
-  };
+    return {
+        ...cam,
+        x: viewport.width / 2 - (shape.x + shape.w / 2) * cam.scale,
+        y: viewport.height / 2 - (shape.y + shape.h / 2) * cam.scale,
+    };
 }
 
 /** Zoom about the point under the pointer, so that point stays under it. */
 export function zoom(
-  cam: Camera,
-  at: { x: number; y: number },
-  deltaY: number,
-  scene: { width: number; height: number },
-  viewport: Viewport,
+    cam: Camera,
+    at: { x: number; y: number },
+    deltaY: number,
+    scene: { width: number; height: number },
+    viewport: Viewport,
 ): Camera {
-  const scale = Math.min(4, Math.max(0.1, cam.scale * Math.exp(-deltaY / 400)));
-  return {
-    scale,
-    ...bounded(
-      { x: cam.x + (at.x * cam.scale - at.x * scale), y: cam.y + (at.y * cam.scale - at.y * scale) },
-      scale,
-      scene,
-      viewport,
-    ),
-  };
+    const scale = Math.min(4, Math.max(0.1, cam.scale * Math.exp(-deltaY / 400)));
+    return {
+        scale,
+        ...bounded(
+            {
+                x: cam.x + (at.x * cam.scale - at.x * scale),
+                y: cam.y + (at.y * cam.scale - at.y * scale),
+            },
+            scale,
+            scene,
+            viewport,
+        ),
+    };
 }
 
 /**
@@ -106,8 +115,8 @@ export function zoom(
  * be read — the object graph is meant to be scrolled, not squinted at.
  */
 export function fit(scene: Scene, width: number): Camera {
-  const scale = Math.min(2, Math.max(0.15, (width - 40) / scene.width));
-  return { x: 20, y: 20, scale };
+    const scale = Math.min(2, Math.max(0.15, (width - 40) / scene.width));
+    return { x: 20, y: 20, scale };
 }
 
 /**
@@ -116,8 +125,11 @@ export function fit(scene: Scene, width: number): Camera {
  * place you were reading.
  */
 export function zoomOut(scene: Scene, viewport: Viewport, canvasY: number): Camera {
-  const { scale } = fit(scene, viewport.width);
-  return { scale, ...bounded({ x: 20, y: viewport.height / 2 - canvasY * scale }, scale, scene, viewport) };
+    const { scale } = fit(scene, viewport.width);
+    return {
+        scale,
+        ...bounded({ x: 20, y: viewport.height / 2 - canvasY * scale }, scale, scene, viewport),
+    };
 }
 
 /**
@@ -127,5 +139,5 @@ export function zoomOut(scene: Scene, viewport: Viewport, canvasY: number): Came
  * stays there.
  */
 export function refit(scene: Scene, viewport: Viewport, cam: Camera): Camera {
-  return zoomOut(scene, viewport, (viewport.height / 2 - cam.y) / cam.scale);
+    return zoomOut(scene, viewport, (viewport.height / 2 - cam.y) / cam.scale);
 }
