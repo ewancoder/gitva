@@ -35,12 +35,16 @@
   "scripts": {
     "build": "tsc && chmod +x dist/src/cli.js",
     "start": "node dist/src/cli.js",
+    "pretest": "eslint .",
     "test": "npm run build && node --test --experimental-test-coverage dist/test/*.test.js",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "lint": "eslint ."
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
+    "eslint": "^10.9.0",
     "prettier": "^3.9.6",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0"
   }
 }
