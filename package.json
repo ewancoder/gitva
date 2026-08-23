@@ -39,8 +39,8 @@
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^20.19.43",
     "prettier": "^3.9.6",
-    "typescript": "^5.9.0"
+    "typescript": "^6.0.3"
   }
 }
