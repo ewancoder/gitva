@@ -68,6 +68,7 @@ export const en = {
         'help.legend.ref': 'ref / HEAD',
         'help.legend.tag': 'annotated tag',
         'help.legend.index': 'index entry',
+        'help.legend.conflict': 'conflict stage',
         'help.legend.unreachable': 'unreachable',
         'help.legend.changed': 'just changed',
         'help.keyboard': 'keyboard',

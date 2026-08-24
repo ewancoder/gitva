@@ -432,8 +432,10 @@ function drawShape(ctx: CanvasRenderingContext2D, shape: Shape, p: Paint, lit: S
     } else {
         ctx.fillStyle = theme.raised;
         ctx.fill();
-        ctx.strokeStyle = chipHue(shape.kind, shape.id);
-        ctx.lineWidth = shape.kind === 'head' ? 1.8 : 1.2;
+        // Dashed already said an entry is conflicted; the colour says which paths
+        // the merge is about, in a column where every other chip is the same grey.
+        ctx.strokeStyle = shape.conflict ? theme.conflict : chipHue(shape.kind, shape.id);
+        ctx.lineWidth = shape.conflict ? 2 : shape.kind === 'head' ? 1.8 : 1.2;
         if (shape.conflict) ctx.setLineDash([4, 2]);
         ctx.stroke();
     }

@@ -52,6 +52,7 @@ export const ru: Strings = {
         'help.legend.ref': 'ссылка / HEAD',
         'help.legend.tag': 'аннотированный тег',
         'help.legend.index': 'запись индекса',
+        'help.legend.conflict': 'сторона конфликта',
         'help.legend.unreachable': 'недостижимый обьект',
         'help.legend.changed': 'только что изменилось',
         'help.keyboard': 'клавиатура',

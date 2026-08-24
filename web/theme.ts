@@ -55,6 +55,11 @@ export const theme = {
     refTag: '#e0c74f',
     tagObject: '#8fb0ff',
 
+    // The three stages of one path, and the only thing in the index column worth
+    // picking out of a row of identical chips: which files the merge is actually
+    // about. An outline, like the chips and the mark, so it joins no hue count.
+    conflict: '#e0c74f',
+
     // A mark you put there by hand, to follow one object as the object graph
     // moves. Not a hue on a shape and not the accent: an outline outside the
     // silhouette, in the one colour nothing else on this surface uses.
@@ -98,6 +103,7 @@ const light: Partial<Theme> = {
     refTag: '#a16207',
     tagObject: '#3b5bdb',
 
+    conflict: '#a16207',
     mark: '#c62a2f',
 
     ghost: '#9aa2b1',
@@ -141,6 +147,7 @@ const matrix: Partial<Theme> = {
     refTag: '#3ee06a',
     tagObject: '#3ee06a',
 
+    conflict: '#c9ff2e',
     mark: '#e8ffe8',
 
     ghost: '#1b7a33',

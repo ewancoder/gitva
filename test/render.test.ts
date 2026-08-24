@@ -311,6 +311,21 @@ describe('painting', () => {
         assert.ok(!bold(open));
     });
 
+    it('outlines the three stages of a conflicted path, so a merge names its files', () => {
+        // Stages 1, 2 and 3 of one path are the whole of what a merge is arguing
+        // about, and every other chip in that column is the same grey.
+        const conflicted = (over: Partial<Shape> = {}): Scene => ({
+            ...full,
+            shapes: [shape({ id: 'index:2:a.txt', kind: 'index', conflict: true, ...over })],
+            links: [],
+        });
+        assert.ok(strokes(conflicted()).includes(theme.conflict));
+        assert.ok(
+            !strokes(conflicted({ conflict: false })).includes(theme.conflict),
+            'and a clean entry keeps the chip grey',
+        );
+    });
+
     it('sticks a pushpin through a pinned shape, but only when asked to', () => {
         const put = {
             ...full,
