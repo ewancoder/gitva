@@ -57,7 +57,7 @@ pause_or_wait() {
 queued=()
 
 # The commands are shown when the step is announced and only run after the pause,
-# so the reader knows what is about to happen to the repo before it happens.
+# so you know what is about to happen to the repo before it happens.
 flush() {
 	[ "${#queued[@]}" -gt 0 ] || return 0
 	local line
@@ -131,6 +131,11 @@ step "A nested directory — a tree inside a tree."
 run "mkdir -p lib; printf 'def f(): pass\n' > lib/f.py"
 run "git add lib/f.py; git commit -q -m 'add lib/f.py'"
 
+step "A submodule: mode 160000, an entry naming a commit that lives in another repository — never in this one."
+run "git init -q -b main sub; printf 'a library, versioned on its own\n' > sub/lib.txt; git -C sub add lib.txt; git -C sub commit -q -m 'the submodule repository'"
+run "printf '[submodule \"sub\"]\n\tpath = sub\n\turl = ./sub\n' > .gitmodules; git update-index --add --cacheinfo 160000,\$(git -C sub rev-parse HEAD),sub; git add .gitmodules"
+run "git commit -q -m 'add sub as a submodule'"
+
 step "Change one file: a new commit, a new tree, and the untouched blobs shared with the parent."
 run "printf 'alpha, revised\n' > a.txt"
 run "git add a.txt; git commit -q -m 'revise alpha'"
@@ -144,11 +149,11 @@ step "An annotated tag — a real object with its own sha — and a lightweight 
 run "git tag -a v1 -m 'version one'"
 run "git tag v1-lightweight HEAD~1"
 
-step "A second branch, and a commit on it: the graph forks into lanes."
+step "A second branch, and a commit on it: the object graph forks into lanes."
 run "git checkout -q -b feature"
 run "printf 'feature work\n' > feature.txt; git add feature.txt; git commit -q -m 'start the feature'"
 
-step "Another author, so search-by-author has something to find."
+step "Another author on the same file, so the commits differ by more than a message."
 run "printf 'more feature work\n' >> feature.txt"
 run "GIT_AUTHOR_NAME=Grace GIT_AUTHOR_EMAIL=grace@example.com git commit -q -am 'continue the feature'"
 
@@ -186,8 +191,8 @@ run "git update-ref refs/remotes/origin/main refs/heads/main"
 step "git pack-refs — the branch files vanish into .git/packed-refs; the pointers do not change."
 run "git pack-refs --all"
 
-step "git gc — everything packed. To git there is no difference, and the picture says so."
-run "git gc -q"   # no --prune: the ghosts have to survive, they are half the picture
+step "git gc — everything packed. To git there is no difference, and the canvas says so."
+run "git gc -q"   # no --prune: the ghosts have to survive, they are half the canvas
 
 step "One last bare blob, so the change signal has to notice an object nothing points at."
 run "printf 'the last word\n' | git hash-object -w --stdin"
@@ -197,7 +202,7 @@ flush
 
 echo
 echo "${bold}done.${off} ${n} steps. Things to try by hand now, at $URL:"
-echo "  · click a blob, a tree, a commit, a tag, a ref chip — read the panel"
+echo "  · click a blob, a tree, a commit, a tag, a ref chip — read the inspector"
 echo "  · double-click a commit or a tree to expand it, right-click to mark, drag to pin"
 echo "  · view toolbar: expand/collapse all · index · unreachable · links from unreachable"
 echo "  · f fit · [ ] step through the recording · space pause · i index"

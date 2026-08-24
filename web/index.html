@@ -8,7 +8,7 @@
     <style>
       /*
         One spacing unit, everything a multiple of it; one corner radius.
-        Three surface levels — ground, panel, raised — rather than borders
+        Three surface levels — ground, surface, raised — rather than borders
         doing work a background step should do. Monospace is for machine text
         only: shas, paths, modes, object contents.
       */
@@ -16,7 +16,7 @@
         --u: 8px;
         --r: 4px;
         --ground: #0d0f13;
-        --panel: #171a21;
+        --surface: #171a21;
         --raised: #20242e;
         --line: #2c313d;
         --ink: #dfe4ee;
@@ -26,6 +26,9 @@
         --tree: #54bf85;
         --blob: #5aa7ea;
         --staged: #8f86e6;
+        /* No hue, and it stays put on a light ground: see web/theme.ts. */
+        --submodule: #e9ecf3;
+        --conflict: #e0c74f;
         --accent: #ff5ea8;
         --hover: #2b3140;
         --danger: #f2685e;
@@ -37,19 +40,20 @@
          and a kind you recognise by hue must not change with the ground. */
       :root[data-theme='light'] {
         --ground: #fbfbfd;
-        --panel: #f1f2f6;
+        --surface: #f1f2f6;
         --raised: #e5e7ee;
         --line: #d2d6e0;
         --ink: #1a1d24;
         --muted: #5c6472;
         --faint: #8b93a3;
+        --conflict: #a16207;
         --accent: #d81b7c;
         --hover: #d5d9e4;
         --danger: #c0392f;
       }
       :root[data-theme='matrix'] {
         --ground: #000600;
-        --panel: #01120a;
+        --surface: #01120a;
         --raised: #04240f;
         --line: #0d4a1e;
         --ink: #4dff7c;
@@ -59,6 +63,8 @@
         --tree: #54f07a;
         --blob: #54f07a;
         --staged: #9dffb8;
+        --submodule: #c6ffd4;
+        --conflict: #c9ff2e;
         --accent: #c9ff2e;
         --hover: #0a3317;
         --danger: #b6ff2e;
@@ -71,19 +77,19 @@
         color: var(--ink);
         font: 13px/1.5 var(--sans);
         display: grid;
-        /* header, recording toolbar, notes, then the canvas takes the rest. One
+        /* view toolbar, recording toolbar, notes toolbar, then the canvas takes the rest. One
            `auto` per toolbar: add or drop a row here and this must follow. */
         grid-template-rows: auto auto auto 1fr;
         overflow: hidden;
       }
       kbd, code, .mono { font-family: var(--mono); }
 
-      /* Chrome: grouped, separated controls — what repo, what you're looking
+      /* The toolbars: grouped, separated controls — what repo, what you're looking
          at, what state it's in. Not a flat run of unrelated buttons. */
-      header {
+      #view-toolbar {
         display: flex; align-items: center; gap: calc(var(--u) * 2);
         padding: var(--u) calc(var(--u) * 1.5);
-        background: var(--panel);
+        background: var(--surface);
         border-bottom: 1px solid var(--line);
       }
       .group { display: flex; align-items: center; gap: var(--u); }
@@ -94,7 +100,7 @@
          and a click copies it the way a click on a shape copies a sha. */
       .recording-id { color: var(--faint); font-family: var(--mono); font-size: 11px; cursor: pointer; }
       .recording-id:hover { color: var(--muted); }
-      /* Chrome, not canvas: red here is a warning about a button, and joins
+      /* Toolbars, not canvas: red here is a warning about a button, and joins
          neither the three object hues nor the one accent. */
       .danger { color: var(--danger); }
 
@@ -122,36 +128,36 @@
       .tally { color: var(--muted); font-family: var(--mono); font-size: 11px; }
       /* Reserve the widest label: the buttons must not move when the words change. */
       #play { min-width: 5.5em; }
-      #tape-pos { min-width: 5ch; }
+      #recording-pos { min-width: 5ch; }
       .change { color: var(--muted); font-family: var(--mono); font-size: 11px; min-width: 8ch; }
 
       /* The recording rides on its own row: the toolbar above it resizes as the
          state changes, and a button that moves is a button you miss. `reset view`
          sits at its left rather than on a row of its own — one button did not
          earn a whole row, and it is still the leftmost thing on the row. */
-      #transport {
+      #recording-toolbar {
         display: flex; align-items: center; gap: calc(var(--u) * 2);
         padding: 6px calc(var(--u) * 1.5);
-        background: var(--panel);
+        background: var(--surface);
         border-bottom: 1px solid var(--line);
       }
 
-      #notes {
+      #notes-toolbar {
         padding: 6px calc(var(--u) * 1.5);
         background: var(--ground);
         border-bottom: 1px solid var(--line);
         color: var(--muted); font-size: 12px;
         display: flex; flex-wrap: wrap; gap: calc(var(--u) * 2);
       }
-      #notes li { list-style: none; }
-      #notes ul { display: contents; margin: 0; padding: 0; }
+      #notes-toolbar li { list-style: none; }
+      #notes-toolbar ul { display: contents; margin: 0; padding: 0; }
 
       main { display: grid; grid-template-columns: 1fr auto auto; min-height: 0; }
-      #graph { display: block; width: 100%; height: 100%; cursor: grab; }
+      #canvas { display: block; width: 100%; height: 100%; cursor: grab; }
       /* Behind the object graph, in the same cell: on that one ground the
-         graph's own ground is painted translucent, so this shows through it
+         canvas's own ground is painted translucent, so this shows through it
          and never over a shape. Nothing on it is information. */
-      #graph, #rain { grid-column: 1; grid-row: 1; }
+      #canvas, #rain { grid-column: 1; grid-row: 1; }
       #rain { display: none; width: 100%; height: 100%; pointer-events: none; }
       :root[data-theme='matrix'] #rain { display: block; }
       #copied {
@@ -161,13 +167,13 @@
         color: var(--muted); opacity: 0; transition: opacity .15s; pointer-events: none;
       }
       #copied.show { opacity: 1; }
-      #graph.dragging { cursor: grabbing; }
+      #canvas.dragging { cursor: grabbing; }
 
-      /* The details panel is where the teaching lives, so it earns width —
-         and how much is yours to drag, the way a canvas band's width is. */
-      #panel-seam { width: 5px; cursor: col-resize; background: var(--line); }
+      /* The details inspector is where the teaching lives, so it earns width —
+         and how much is yours to drag, the way a canvas column's width is. */
+      #inspector-edge { width: 5px; cursor: col-resize; background: var(--line); }
       aside {
-        width: 430px; background: var(--panel);
+        width: 430px; background: var(--surface);
         overflow-y: auto; scroll-behavior: smooth; padding: calc(var(--u) * 2);
         display: flex; flex-direction: column; gap: calc(var(--u) * 1.5);
       }
@@ -201,7 +207,7 @@
       dialog {
         position: fixed; inset: 0; margin: auto;
         width: fit-content; height: fit-content; max-width: 560px;
-        background: var(--panel); color: var(--ink);
+        background: var(--surface); color: var(--ink);
         border: 1px solid var(--line); border-radius: var(--r);
         padding: calc(var(--u) * 2);
       }
@@ -224,9 +230,11 @@
       .swatch.tree { background: var(--tree); clip-path: polygon(30% 0, 100% 0, 100% 100%, 30% 100%, 0 70%, 0 30%); }
       .swatch.blob { border-radius: 8px; background: var(--blob); }
       .swatch.staged { border-radius: 8px; background: var(--staged); }
+      .swatch.submodule { background: var(--submodule); border: 1px solid var(--muted); border-radius: var(--r); }
       .swatch.ref { border: 1px solid var(--muted); border-radius: var(--r); }
       .swatch.tag { border: 1px solid var(--muted); clip-path: polygon(0 50%, 35% 0, 100% 0, 100% 100%, 35% 100%); }
-      .swatch.index { border: 1px dashed var(--muted); border-radius: var(--r); }
+      .swatch.index { border: 1px solid var(--muted); border-radius: var(--r); }
+      .swatch.conflict { border: 2px dashed var(--conflict); border-radius: var(--r); }
       .swatch.ghost { border: 1px dashed var(--faint); border-radius: 8px; }
       .swatch.changed { box-shadow: 0 0 0 2px var(--accent); border-radius: var(--r); }
     </style>
@@ -236,41 +244,30 @@
       Not a word of copy lives in here. Every visible string is keyed:
       `data-t` sets the text, `data-t-title` the tooltip, `data-t-placeholder`
       the placeholder, and `data-t-html` the text of the handful that carry a
-      <kbd> inside them. The words themselves are in `src/strings-en.ts`, and
+      <kbd> inside them. The words themselves are in `web/localization/languages/en.ts`, and
       `app.ts` fills them in on load.
     -->
-    <header>
+    <div id="view-toolbar">
       <div class="group">
         <span class="repo-name" id="repo-name">…</span>
         <span class="recording-id" id="recording-id" data-t-title="recording-id.title"></span>
       </div>
 
       <div class="group">
-        <select id="question" data-t-title="question.title">
-          <option value="all" data-t="question.all"></option>
-          <option value="branches" data-t="question.branches"></option>
-          <option value="message" data-t="question.message"></option>
-          <option value="author" data-t="question.author"></option>
-          <option value="path" data-t="question.path"></option>
-          <option value="content" data-t="question.content"></option>
-        </select>
-        <input id="search" data-t-placeholder="search.placeholder" size="14" hidden />
-        <select id="branches" multiple size="1" hidden></select>
-        <button id="load-all" data-t="load-all" data-t-title="load-all.title" hidden></button>
-        <button id="unfold" data-t="expand-all" data-t-title="expand-all.title"></button>
-        <button id="fold" data-t="collapse-all" data-t-title="collapse-all.title"></button>
+        <button id="expand-all" data-t="expand-all" data-t-title="expand-all.title"></button>
+        <button id="collapse-all" data-t="collapse-all" data-t-title="collapse-all.title"></button>
         <button id="toggle-index" aria-pressed="true" data-t="index" data-t-title="index.title"></button>
         <button
-          id="toggle-orphans"
+          id="toggle-unreachable"
           aria-pressed="true"
           data-t="unreachable"
           data-t-title="unreachable.title"
         ></button>
         <button
-          id="toggle-cross"
+          id="toggle-links-from-unreachable"
           aria-pressed="false"
-          data-t="cross-links"
-          data-t-title="cross-links.title"
+          data-t="links-from-unreachable"
+          data-t-title="links-from-unreachable.title"
         ></button>
         <button
           id="toggle-names"
@@ -284,16 +281,16 @@
         <!-- The glyph is the state: what you are in now, the way ◀ and ▶ are
              glyphs rather than copy. Only its tooltip is a string. -->
         <button id="theme-btn" data-t-title="theme.title"></button>
-        <button id="legend-btn" data-t="help"></button>
+        <button id="help-btn" data-t="help"></button>
         <button id="settings-btn" data-t="settings"></button>
       </div>
 
       <!-- One button per language on offer, rendered from the registry in
-           src/strings.ts: a language names itself, so no copy in here. -->
+           web/localization/index.ts: a language names itself, so no copy in here. -->
       <div class="group" id="languages"></div>
-    </header>
+    </div>
 
-    <div id="transport">
+    <div id="recording-toolbar">
       <div class="group">
         <button id="unpin" data-t="reset-view" data-t-title="reset-view.title"></button>
       </div>
@@ -302,7 +299,7 @@
         <button id="play" aria-pressed="false" data-t-title="pause.title"></button>
         <button id="step-fwd" data-t-title="step-forward.title">▶</button>
         <input type="range" id="scrub" min="0" max="0" value="0" />
-        <span class="tally" id="tape-pos"></span>
+        <span class="tally" id="recording-pos"></span>
       </div>
       <div class="group right">
         <span class="live"><span class="dot" id="live-dot"></span><span id="live-text"></span></span>
@@ -311,18 +308,18 @@
       </div>
     </div>
 
-    <div id="notes"><ul id="notes-list"></ul></div>
+    <div id="notes-toolbar"><ul id="notes-list"></ul></div>
 
     <main>
       <canvas id="rain" aria-hidden="true"></canvas>
-      <canvas id="graph"></canvas>
+      <canvas id="canvas"></canvas>
       <div id="copied" aria-live="polite"></div>
-      <div id="panel-seam"></div>
+      <div id="inspector-edge"></div>
       <!-- The empty state is the inspector's own words; app.ts renders it on load. -->
-      <aside id="panel"></aside>
+      <aside id="inspector"></aside>
     </main>
 
-    <dialog id="legend">
+    <dialog id="help">
       <h2 data-t="help.title"></h2>
       <p class="lede" data-t="help.lede"></p>
       <div class="legend">
@@ -330,9 +327,11 @@
         <span><span class="swatch tree"></span><span data-t="help.legend.tree"></span></span>
         <span><span class="swatch blob"></span><span data-t="help.legend.blob"></span></span>
         <span><span class="swatch staged"></span><span data-t="help.legend.staged"></span></span>
+        <span><span class="swatch submodule"></span><span data-t="help.legend.submodule"></span></span>
         <span><span class="swatch ref"></span><span data-t="help.legend.ref"></span></span>
         <span><span class="swatch tag"></span><span data-t="help.legend.tag"></span></span>
         <span><span class="swatch index"></span><span data-t="help.legend.index"></span></span>
+        <span><span class="swatch conflict"></span><span data-t="help.legend.conflict"></span></span>
         <span><span class="swatch ghost"></span><span data-t="help.legend.unreachable"></span></span>
         <span><span class="swatch changed"></span><span data-t="help.legend.changed"></span></span>
       </div>
@@ -347,7 +346,7 @@
         <span data-t="help.keys.doubleTree"></span><span data-t="help.keys.doubleTree.does"></span>
         <span data-t="help.keys.drag"></span><span data-t="help.keys.drag.does"></span>
         <span data-t="help.keys.shiftClick"></span><span data-t="help.keys.shiftClick.does"></span>
-        <span data-t="help.keys.seam"></span><span data-t="help.keys.seam.does"></span>
+        <span data-t="help.keys.columnEdge"></span><span data-t="help.keys.columnEdge.does"></span>
         <span><kbd>f</kbd></span><span data-t="help.keys.fit.does"></span>
         <span><kbd>i</kbd></span><span data-t="help.keys.index.does"></span>
         <span><kbd>&larr;</kbd> or <kbd>[</kbd></span><span data-t="help.keys.back.does"></span>
@@ -366,7 +365,7 @@
       <label><input type="checkbox" id="centre-on-click" /> <span data-t="settings.centreOnClick"></span></label>
       <label><input type="checkbox" id="refit-on-change" /> <span data-t="settings.refitOnChange"></span></label>
       <label><input type="checkbox" id="show-pins" /> <span data-t="settings.showPins"></span></label>
-      <label><input type="checkbox" id="open-new-commits" /> <span data-t="settings.openNewCommits"></span></label>
+      <label><input type="checkbox" id="expand-new-commits" /> <span data-t="settings.expandNewCommits"></span></label>
       <footer><button data-t="close" onclick="this.closest('dialog').close()"></button></footer>
     </dialog>
 

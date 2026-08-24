@@ -18,21 +18,41 @@ import { dirname, join } from 'node:path';
  *  they were built at, so a restart onto an untouched repository does not
  *  record a step for nothing having happened. */
 export interface Kept {
-  signal: string;
-  steps: string[];
+    signal: string;
+    steps: string[];
 }
+
+/**
+ * What a step means. Bumped whenever an old step would be drawn wrongly rather
+ * than merely differently, and a recording written under another number is
+ * dropped instead of half-drawn.
+ *
+ * 2: a step carries everything any view could draw. Under 1 it carried only the
+ * trees the one shared view happened to have expanded, so on a repository too
+ * big to hold whole, expanding a commit in a kept step would silently draw
+ * nothing — there is no longer a route for the browser to ask for the rest.
+ *
+ * 3: a step says `capabilities`, not `caps`. The same facts under the domain's
+ * own word — but a step read under the old name loses its limits, and a canvas
+ * that cannot tell whether unreachable detection was on would draw a repository
+ * as having nothing unreachable in it.
+ */
+export const FORMAT = 5;
 
 /** Where the system keeps state a program owns. `GITVA_STATE_DIR` overrides,
  *  which is also how the tests keep out of the real one. */
-export function stateDir(env: NodeJS.ProcessEnv = process.env, platform: string = process.platform): string {
-  if (env.GITVA_STATE_DIR) return env.GITVA_STATE_DIR;
-  if (platform === 'win32')
-    return join(env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'gitva');
-  if (platform === 'darwin') return join(homedir(), 'Library', 'Application Support', 'gitva');
-  return join(env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'gitva');
+export function stateDir(
+    env: NodeJS.ProcessEnv = process.env,
+    platform: string = process.platform,
+): string {
+    if (env.GITVA_STATE_DIR) return env.GITVA_STATE_DIR;
+    if (platform === 'win32')
+        return join(env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'gitva');
+    if (platform === 'darwin') return join(homedir(), 'Library', 'Application Support', 'gitva');
+    return join(env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'gitva');
 }
 
-/** Long enough that two of a person's repositories will not land on the same
+/** Long enough that two of your repositories will not land on the same
  *  one, short enough to read out, copy, and type after `--id`. */
 const KEY_CHARS = 10;
 const KEY = new RegExp(`^[0-9a-f]{${KEY_CHARS}}$`);
@@ -46,47 +66,60 @@ const KEY = new RegExp(`^[0-9a-f]{${KEY_CHARS}}$`);
  * A key is an identifier too. That is what makes the one the interface shows
  * you worth copying: `--id` takes it back verbatim, so the same recording is
  * resumable from a folder that has moved, or from a second clone — while
- * `--id teaching` is still a name a person can choose and remember.
+ * `--id teaching` is still a name you can choose and remember.
  */
 export function recordingKey(id: string): string {
-  return KEY.test(id) ? id : createHash('sha1').update(id).digest('hex').slice(0, KEY_CHARS);
+    return KEY.test(id) ? id : createHash('sha1').update(id).digest('hex').slice(0, KEY_CHARS);
 }
 
 export function recordingFile(key: string, dir: string = stateDir()): string {
-  return join(dir, `${key}.json`);
+    return join(dir, `${key}.json`);
 }
 
 export async function loadRecording(file: string): Promise<Kept> {
-  try {
-    const kept = JSON.parse(await readFile(file, 'utf8')) as { signal?: string; steps: unknown[] };
-    // Back to text, because text is how the server holds a step and how it
-    // sends one.
-    return { signal: String(kept.signal ?? ''), steps: kept.steps.map((s) => JSON.stringify(s)) };
-  } catch {
-    // Nothing kept yet, half-written, or written by a version that wrote
-    // something else: a fresh recording always works.
-    return { signal: '', steps: [] };
-  }
+    try {
+        const kept = JSON.parse(await readFile(file, 'utf8')) as {
+            format?: number;
+            signal?: string;
+            steps: unknown[];
+        };
+        // Steps that mean something else are steps this version cannot draw. Better
+        // to start the recording over — which is what a viewer would see anyway —
+        // than to hand over a step with holes in it and let the canvas lie.
+        if (kept.format !== FORMAT) return { signal: '', steps: [] };
+        // Back to text, because text is how the server holds a step and how it
+        // sends one.
+        return {
+            signal: String(kept.signal ?? ''),
+            steps: kept.steps.map((s) => JSON.stringify(s)),
+        };
+    } catch {
+        // Nothing kept yet, or half-written: a fresh recording always works.
+        return { signal: '', steps: [] };
+    }
 }
 
 export async function saveRecording(file: string, kept: Kept): Promise<void> {
-  try {
-    await mkdir(dirname(file), { recursive: true });
-    // ponytail: the whole recording is rewritten per step. It is bounded by the
-    // server's own cap on it and only happens when git did something, so a few
-    // megabytes at worst, a few times a minute. Append instead if it ever shows
-    // up in a profile.
-    await writeFile(`${file}.tmp`, `{"signal":${JSON.stringify(kept.signal)},"steps":[${kept.steps.join(',')}]}`);
-    // Renamed into place so a kill mid-write costs the newest step, not the
-    // whole session.
-    await rename(`${file}.tmp`, file);
-  } catch {
-    // A recording that cannot be written down is not a reason to stop drawing.
-  }
+    try {
+        await mkdir(dirname(file), { recursive: true });
+        // ponytail: the whole recording is rewritten per step. It is bounded by the
+        // server's own cap on it and only happens when git did something, so a few
+        // megabytes at worst, a few times a minute. Append instead if it ever shows
+        // up in a profile.
+        await writeFile(
+            `${file}.tmp`,
+            `{"format":${FORMAT},"signal":${JSON.stringify(kept.signal)},"steps":[${kept.steps.join(',')}]}`,
+        );
+        // Renamed into place so a kill mid-write costs the newest step, not the
+        // whole session.
+        await rename(`${file}.tmp`, file);
+    } catch {
+        // A recording that cannot be written down is not a reason to stop drawing.
+    }
 }
 
 /** Where the kept recording left off. A restart carries on numbering steps of
  *  the repository rather than renumbering over ones the browser already has. */
 export function lastSeq(steps: string[]): number {
-  return steps.length ? ((JSON.parse(steps[steps.length - 1]) as { seq: number }).seq ?? 0) : 0;
+    return steps.length ? ((JSON.parse(steps[steps.length - 1]) as { seq: number }).seq ?? 0) : 0;
 }

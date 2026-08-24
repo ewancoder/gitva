@@ -1,8 +1,9 @@
 /**
  * Colour: three hues, and no more.
  *
- * A node-link graph is an all-pairs problem — any kind can end up next to any
- * other — so every pair has to separate. On this dark ground exactly three hues
+ * A canvas of shapes and links is an all-pairs problem — any kind can end up
+ * next to any other — so every pair has to separate. On this dark ground
+ * exactly three hues
  * clear the contrast and colour-vision floors; four does not. So the three go
  * to the three things you look at constantly, and everything else is separated
  * by silhouette and by the name it already carries.
@@ -19,51 +20,62 @@
  */
 
 export const theme = {
-  ground: '#0d0f13',
-  panel: '#171a21',
-  raised: '#20242e',
-  line: '#2c313d',
+    ground: '#0d0f13',
+    surface: '#171a21',
+    raised: '#20242e',
+    line: '#2c313d',
 
-  ink: '#dfe4ee',
-  muted: '#8d96a8',
-  faint: '#59616f',
+    ink: '#dfe4ee',
+    muted: '#8d96a8',
+    faint: '#59616f',
 
-  commit: '#e8a33c',
-  tree: '#54bf85',
-  blob: '#5aa7ea',
-  // Not a fourth hue: the blob blue tilted towards violet, for an object only
-  // the index holds. Same family, so it still reads as a blob at a glance —
-  // staged is a state, like unreachable, and states never get a hue of their
-  // own. Far from the accent, which stays reserved for "this just changed".
-  staged: '#8f86e6',
+    commit: '#e8a33c',
+    tree: '#54bf85',
+    blob: '#5aa7ea',
+    // Not a fourth hue: the blob blue tilted towards violet, for an object only
+    // the index holds. Same family, so it still reads as a blob at a glance —
+    // staged is a state, like unreachable, and states never get a hue of their
+    // own. Far from the accent, which stays reserved for "this just changed".
+    staged: '#8f86e6',
+    // Not a fourth hue either: no hue at all, but the paper the other objects are
+    // printed on. A submodule is a commit this repository does not have, so it is
+    // drawn as an empty card — outlined, because a pale fill needs an edge to be
+    // a shape on a light ground. Like the three hues it does not move with the
+    // ground: what you recognise a kind by must not change under you.
+    submodule: '#e9ecf3',
 
-  accent: '#ff5ea8',
+    accent: '#ff5ea8',
 
-  // Pointer chips are outlines, not fills, so they can carry their own hues
-  // without competing with the three object hues above: what a chip is
-  // (HEAD, local, remote, tag, tag object) is the thing you scan for first.
-  head: '#b98cff',
-  refLocal: '#4fd1c5',
-  refRemote: '#f08c5a',
-  refTag: '#e0c74f',
-  tagObject: '#8fb0ff',
+    // Pointer chips are outlines, not fills, so they can carry their own hues
+    // without competing with the three object hues above: what a chip is
+    // (HEAD, local, remote, tag, tag object) is the thing you scan for first.
+    head: '#b98cff',
+    refLocal: '#4fd1c5',
+    refRemote: '#f08c5a',
+    refTag: '#e0c74f',
+    tagObject: '#8fb0ff',
 
-  // A mark the reader put there by hand, to follow one object as the graph
-  // moves. Not a hue on a node and not the accent: an outline outside the
-  // silhouette, in the one colour nothing else on this surface uses.
-  mark: '#e5484d',
+    // The three stages of one path, and the only thing in the index column worth
+    // picking out of a row of identical chips: which files the merge is actually
+    // about. An outline, like the chips and the mark, so it joins no hue count.
+    conflict: '#e0c74f',
 
-  ghost: '#6b7488',
+    // A mark you put there by hand, to follow one object as the object graph
+    // moves. Not a hue on a shape and not the accent: an outline outside the
+    // silhouette, in the one colour nothing else on this surface uses.
+    mark: '#e5484d',
 
-  /** The tint a band carries over the ground. Barely there on purpose. */
-  bandTint: 'rgba(255,255,255,0.014)',
+    ghost: '#6b7488',
 
-  sans: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
-  mono: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+    /** The tint a column carries over the ground. Barely there on purpose. */
+    columnTint: 'rgba(255,255,255,0.014)',
 
-  radius: 4,
-  /** One duration, one curve, nothing slow. */
-  duration: 220,
+    sans: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
+    mono: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+
+    radius: 4,
+    /** One duration, one curve, nothing slow. */
+    duration: 220,
 };
 
 export type Theme = typeof theme;
@@ -74,28 +86,29 @@ export type Theme = typeof theme;
  * separation they had against black. Everything absent here is shared.
  */
 const light: Partial<Theme> = {
-  ground: '#fbfbfd',
-  panel: '#f1f2f6',
-  raised: '#e5e7ee',
-  line: '#d2d6e0',
+    ground: '#fbfbfd',
+    surface: '#f1f2f6',
+    raised: '#e5e7ee',
+    line: '#d2d6e0',
 
-  ink: '#1a1d24',
-  muted: '#5c6472',
-  faint: '#8b93a3',
+    ink: '#1a1d24',
+    muted: '#5c6472',
+    faint: '#8b93a3',
 
-  accent: '#d81b7c',
+    accent: '#d81b7c',
 
-  head: '#7c3aed',
-  refLocal: '#0d9488',
-  refRemote: '#c2410c',
-  refTag: '#a16207',
-  tagObject: '#3b5bdb',
+    head: '#7c3aed',
+    refLocal: '#0d9488',
+    refRemote: '#c2410c',
+    refTag: '#a16207',
+    tagObject: '#3b5bdb',
 
-  mark: '#c62a2f',
+    conflict: '#a16207',
+    mark: '#c62a2f',
 
-  ghost: '#9aa2b1',
+    ghost: '#9aa2b1',
 
-  bandTint: 'rgba(0,0,0,0.022)',
+    columnTint: 'rgba(0,0,0,0.022)',
 };
 
 const dark: Partial<Theme> = { ...theme };
@@ -107,37 +120,41 @@ const dark: Partial<Theme> = { ...theme };
  * it carries, and everything is machine text.
  */
 const matrix: Partial<Theme> = {
-  // The only translucent ground: the rain canvas is behind this one, and this
-  // is the veil that keeps it faint enough to read shapes over.
-  ground: 'rgba(0,6,0,0.45)',
-  panel: '#01120a',
-  raised: '#04240f',
-  line: '#0d4a1e',
+    // The only translucent ground: the rain canvas is behind this one, and this
+    // is the veil that keeps it faint enough to read shapes over.
+    ground: 'rgba(0,6,0,0.45)',
+    surface: '#01120a',
+    raised: '#04240f',
+    line: '#0d4a1e',
 
-  ink: '#4dff7c',
-  muted: '#22a343',
-  faint: '#14682c',
+    ink: '#4dff7c',
+    muted: '#22a343',
+    faint: '#14682c',
 
-  commit: '#54f07a',
-  tree: '#54f07a',
-  blob: '#54f07a',
-  staged: '#9dffb8',
+    commit: '#54f07a',
+    tree: '#54f07a',
+    blob: '#54f07a',
+    staged: '#9dffb8',
+    // Pale, like everywhere else: the label on an object is dark ink, so a fill
+    // it cannot be read on is not an option on any ground.
+    submodule: '#c6ffd4',
 
-  accent: '#c9ff2e',
+    accent: '#c9ff2e',
 
-  head: '#8dff9f',
-  refLocal: '#3ee06a',
-  refRemote: '#3ee06a',
-  refTag: '#3ee06a',
-  tagObject: '#3ee06a',
+    head: '#8dff9f',
+    refLocal: '#3ee06a',
+    refRemote: '#3ee06a',
+    refTag: '#3ee06a',
+    tagObject: '#3ee06a',
 
-  mark: '#e8ffe8',
+    conflict: '#c9ff2e',
+    mark: '#e8ffe8',
 
-  ghost: '#1b7a33',
+    ghost: '#1b7a33',
 
-  bandTint: 'rgba(0,255,90,0.025)',
+    columnTint: 'rgba(0,255,90,0.025)',
 
-  sans: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+    sans: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
 };
 
 export type Mode = 'dark' | 'light' | 'matrix';
@@ -148,22 +165,30 @@ export type Mode = 'dark' | 'light' | 'matrix';
  * page's own colours are CSS variables, so switching those is app.ts's job.
  */
 export const setTheme = (mode: Mode): void => {
-  Object.assign(theme, dark, mode === 'light' ? light : mode === 'matrix' ? matrix : {});
+    Object.assign(theme, dark, mode === 'light' ? light : mode === 'matrix' ? matrix : {});
 };
 
 export const hueFor = (kind: string): string =>
-  kind === 'commit' ? theme.commit : kind === 'tree' ? theme.tree : kind === 'blob' ? theme.blob : theme.ink;
+    kind === 'commit'
+        ? theme.commit
+        : kind === 'tree'
+          ? theme.tree
+          : kind === 'blob'
+            ? theme.blob
+            : kind === 'submodule'
+              ? theme.submodule
+              : theme.ink;
 
 /** Chip hue by what the pointer is. Ids are `ref:<full ref name>`. */
 export const chipHue = (kind: string, id: string): string =>
-  kind === 'head'
-    ? theme.head
-    : kind === 'tag'
-      ? theme.tagObject
-      : kind !== 'ref'
-        ? theme.muted
-        : id.startsWith('ref:refs/remotes/')
-          ? theme.refRemote
-          : id.startsWith('ref:refs/tags/')
-            ? theme.refTag
-            : theme.refLocal;
+    kind === 'head'
+        ? theme.head
+        : kind === 'tag'
+          ? theme.tagObject
+          : kind !== 'ref'
+            ? theme.muted
+            : id.startsWith('ref:refs/remotes/')
+              ? theme.refRemote
+              : id.startsWith('ref:refs/tags/')
+                ? theme.refTag
+                : theme.refLocal;
