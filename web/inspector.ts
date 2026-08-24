@@ -56,13 +56,18 @@ const headingFor = (kind: string) =>
           ? S.inspector.heading.object
           : S.inspector.heading.contents;
 
-/** What `/object` answered, as the lines to show. */
-export function bodyText(body: {
+/** What `/object` answers. The server is the only writer, so the shape is known. */
+export interface Body {
     entries?: { mode: string; type: string; oid: string; name: string }[];
     text?: string | null;
     size?: number;
     truncated?: boolean;
-}): string {
+    /** Where the bytes are kept — `null` once they are packed. */
+    path?: string | null;
+}
+
+/** What `/object` answered, as the lines to show. */
+export function bodyText(body: Body): string {
     if (body.entries) {
         return body.entries
             .map((x) => `${x.mode} ${x.type} ${x.oid.slice(0, 7)}\t${x.name}`)
@@ -121,7 +126,7 @@ export function renderInspector(el: HTMLElement, step: Step | null, shape: Shape
     const pre = el2('pre', '', S.inspector.reading);
     el.append(el2('dt', '', m.body.heading), pre);
     void fetch(`/object?oid=${m.body.oid}`)
-        .then((r) => r.json())
+        .then((r) => r.json() as Promise<Body>)
         .then((body) => {
             if (mine !== token) return;
             pre.textContent = bodyText(body);

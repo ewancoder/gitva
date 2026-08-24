@@ -147,7 +147,7 @@ export async function serve(
     // reconstructed later —
     // the repository has moved on. Typing ten plumbing commands and *then*
     // opening the browser has to show ten steps.
-    const timer = setInterval(async () => {
+    async function poll() {
         try {
             const { handle } = await repository();
             const next = await changeSignal(handle.repo, handle.gitDir);
@@ -157,10 +157,11 @@ export async function serve(
         } catch {
             /* no repository yet, or one mid-rewrite: try again on the next tick */
         }
-    }, POLL_MS);
+    }
+    const timer = setInterval(() => void poll(), POLL_MS);
     timer.unref?.();
 
-    const server = createServer(async (req, res) => {
+    async function route(req: IncomingMessage, res: ServerResponse) {
         const url = new URL(req.url ?? '/', 'http://localhost');
         try {
             if (url.pathname === '/events') return sse(req, res);
@@ -169,7 +170,8 @@ export async function serve(
         } catch (err) {
             res.writeHead(500, { 'content-type': 'text/plain' }).end(String(err));
         }
-    });
+    }
+    const server = createServer((req, res) => void route(req, res));
 
     function sse(req: IncomingMessage, res: ServerResponse) {
         res.writeHead(200, {

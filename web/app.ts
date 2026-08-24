@@ -57,6 +57,11 @@ function copied(oid: string, said = oid.slice(0, 7)) {
     );
 }
 
+/** What was kept in `localStorage`, or the empty JSON to stand in for it. The
+ *  browser is the only writer of these keys, so the shape is known. */
+const kept = <T>(key: string, empty: string): T =>
+    JSON.parse(localStorage.getItem(key) ?? empty) as T;
+
 // --- settings: about how you like to work, not about this session
 interface Settings {
     language: string;
@@ -85,7 +90,7 @@ const settings: Settings = {
     showNames: true,
     theme: 'dark',
     inspectorWidth: 430,
-    ...JSON.parse(localStorage.getItem('gitva.settings') ?? '{}'),
+    ...kept<Partial<Settings>>('gitva.settings', '{}'),
 };
 const saveSettings = () => localStorage.setItem('gitva.settings', JSON.stringify(settings));
 
@@ -221,14 +226,14 @@ const recording = new Recording();
 // same answer about a different kind of shape.
 // ponytail: one key for the origin, so two repositories served on the same
 // port share it — harmless, the shas of one are never the shas of the other.
-recording.answers = JSON.parse(localStorage.getItem('gitva.answers') ?? '{}');
+recording.answers = kept('gitva.answers', '{}');
 recording.view = {
     ...recording.view,
     showIndex: settings.showIndex,
     showUnreachable: settings.showUnreachable,
     showLinksFromUnreachable:
         settings.showLinksFromUnreachable ?? recording.view.showLinksFromUnreachable,
-    collapsed: JSON.parse(localStorage.getItem('gitva.collapsed') ?? '[]'),
+    collapsed: kept('gitva.collapsed', '[]'),
 };
 const saveAnswers = () => {
     localStorage.setItem('gitva.answers', JSON.stringify(recording.answers));
@@ -237,13 +242,11 @@ const saveAnswers = () => {
 const pins = new Pins();
 // Where you dragged something is the same kind of answer as a collapse: yours, and
 // no reason for a reload to undo it. Same one key per origin.
-pins.restore(JSON.parse(localStorage.getItem('gitva.pins') ?? '[]'));
+pins.restore(kept('gitva.pins', '[]'));
 const savePins = () => localStorage.setItem('gitva.pins', JSON.stringify(pins.all));
 // How wide you have dragged each column. A hand-set width, like a pin, so
 // it outlives the page — and like the collapses, one key for the origin.
-const columnWidths: Record<string, number> = JSON.parse(
-    localStorage.getItem('gitva.columns') ?? '{}',
-);
+const columnWidths = kept<Record<string, number>>('gitva.columns', '{}');
 const saveColumns = () => localStorage.setItem('gitva.columns', JSON.stringify(columnWidths));
 
 // --- what is on screen
@@ -266,7 +269,7 @@ let lastClick: Click | null = null;
 
 /** Objects marked by right-click, kept by sha until right-clicked again — and
  *  across a reload, because a mark is an answer you gave, like a pin. */
-const marked = new Set<string>(JSON.parse(localStorage.getItem('gitva.marks') ?? '[]'));
+const marked = new Set<string>(kept<string[]>('gitva.marks', '[]'));
 const saveMarks = () => localStorage.setItem('gitva.marks', JSON.stringify([...marked]));
 
 // ---------------------------------------------------------------------------
@@ -400,7 +403,7 @@ const source = new EventSource('/events');
  *  first step is. */
 source.addEventListener('steps', (e) => {
     showConnection(true);
-    const steps: Step[] = JSON.parse((e as MessageEvent).data);
+    const steps = JSON.parse(e.data as string) as Step[];
     for (const s of steps) recording.arrive(s, settings, true);
     showStep(null);
     if (scene) {
@@ -412,7 +415,7 @@ source.addEventListener('steps', (e) => {
 
 source.addEventListener('step', (e) => {
     showConnection(true);
-    const s: Step = JSON.parse((e as MessageEvent).data);
+    const s = JSON.parse(e.data as string) as Step;
     const a = recording.arrive(s, settings);
     if (a.kind === 'shown') {
         showStep(a.prev);
@@ -430,7 +433,7 @@ source.addEventListener('step', (e) => {
  *  the identifier over, so a repository about to move can be picked up again
  *  with `gitva --id <it>`. */
 source.addEventListener('recording', (e) => {
-    const { id, learning } = JSON.parse((e as MessageEvent).data) as {
+    const { id, learning } = JSON.parse(e.data as string) as {
         id: string;
         learning: boolean;
     };
@@ -441,7 +444,7 @@ source.addEventListener('recording', (e) => {
 });
 
 source.addEventListener('trouble', (e) => {
-    showChange(JSON.parse((e as MessageEvent).data).message);
+    showChange((JSON.parse(e.data as string) as { message: string }).message);
 });
 source.onerror = () => showConnection(false);
 source.onopen = () => showConnection(true);

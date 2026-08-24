@@ -438,7 +438,7 @@ export function layout(
     for (const row of rows) {
         const g = graphs.get(row.oid);
         if (!g) continue;
-        const c = step.commits[row.oid]!;
+        const c = step.commits[row.oid];
         g.levels.forEach((col, d) => {
             col.forEach((oid, i) => {
                 if (at.has(oid)) return; // placed once, near the things that point at it

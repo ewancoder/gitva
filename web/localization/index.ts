@@ -15,7 +15,7 @@ export const LANGUAGES: { code: string; label: string; name: string }[] = [
 
 /** One module per language, loaded when it is chosen. */
 const LOADERS: Record<string, () => Promise<Strings>> = {
-    en: async () => en,
+    en: () => Promise.resolve(en),
     ru: async () => (await import('./languages/ru.js')).ru,
 };
 
@@ -31,6 +31,6 @@ export let language = 'en';
  */
 export async function setLanguage(code: string): Promise<void> {
     const wantCode = code in LOADERS ? code : 'en';
-    S = await LOADERS[wantCode]!();
+    S = await LOADERS[wantCode]();
     language = wantCode;
 }

@@ -63,7 +63,11 @@ function run(repo: string, args: string[], stdin?: string | Buffer): Promise<Buf
         child.on('close', (code) => {
             if (code === 0) resolve(Buffer.concat(out));
             else
-                reject(new GitError(`git ${args.join(' ')} exited ${code}: ${Buffer.concat(err)}`));
+                reject(
+                    new GitError(
+                        `git ${args.join(' ')} exited ${code}: ${Buffer.concat(err).toString()}`,
+                    ),
+                );
         });
         // A command that does not read stdin may be gone before we finish writing.
         child.stdin.on('error', () => {});
