@@ -3,13 +3,12 @@
 *the **v**isual **a**natomy of git*
 
 ```
-git add a.txt b.txt   → two blobs appear, two index entries point at them,
-                        and nothing else in the repository changes
+git add a.txt b.txt   → two blobs appear, two index entries point at them
 git reset b.txt       → the index entry goes; the blob survives, now unreachable
 ```
 
-gitva draws a repository's `.git` as a live object graph in your browser, to make one sentence
-obvious:
+Gitva draws a repository's live object graph in your browser,
+to make one sentence obvious:
 
 > **git is just a key-value store plus a few pointers**
 
@@ -18,10 +17,26 @@ commit, reset, tag — the canvas updates on its own within a second and flashes
 
 ![gitva](docs/small-demo.png)
 
-HEAD attached to `develop`, two index entries linked to the blobs they stage, a blob you
-right-clicked wearing its mark, and one unreachable blob drawn as a ghost.
+- HEAD attached to `develop`
+- A blob you right-clicked wears a red outline
+- One unreachable blob drawn as a ghost
+- Links from the trees to blobs show file names
+- Links from the trees to sub-trees show folder names
+- Everything is movable and collapsible: your own learning tool
+
+## Two promises
+
+**It never writes to the repository it watches.** Not the index, not a cache, not a config
+value. `src/git.ts` will only spawn git subcommands from a read-only allowlist, and sets
+`GIT_OPTIONAL_LOCKS=0` so git will not take a lock to be helpful either. It will not run `git
+gc` or write a commit-graph for you, and does not nag you to either.
+
+**Everything it knows, it learns from git's own plumbing.** No git library, no reimplemented
+format. It runs the commands it is teaching, so you can read what it does and then type it yourself.
 
 ## Run
+
+> The tool has zero runtime dependencies; requires Node ≥20.
 
 ```
 npm install -g gitva
@@ -33,190 +48,129 @@ From a clone instead:
 
 ```
 npm install && npm run build
-npm install -g          # puts gitva on your PATH
+npm install -g
 ```
 
-To see what it draws without a repository of your own, run `./demo.sh` from the source folder: it
-starts gitva on a throwaway repo in `./example`, opens the browser, and walks through 22 steps —
-staging, committing, branching, a conflict, a reset, tags, `pack-refs`, `gc` — one per second.
-`./demo.sh 3` slows it down, `./demo.sh 0` waits for a keypress at each step, and enter at the
-end stops gitva.
+Try it out without a repo:
 
-`gitva [repo] [--port N] [--no-open] [--serve [HOST:PORT]] [--learning] [--id NAME] [--fresh]` — repo defaults to `.`,
-port to a free one, and the browser opens itself. `gitva --help` says the same in the terminal,
-and `gitva --version` says which one you have. Node ≥20, no runtime dependencies.
+```
+./demo.sh
+```
 
-The directory need not be a repository yet: start in an empty one and gitva waits, then draws
-the repository the moment you run `git init`.
+It will run gitva on a demo repo inside the project folder, and run some git commands each second.
+You'll see the updated live view of the repository.
 
-`--serve` binds every interface instead of loopback, so viewers can watch one repository from
-their own browsers. Bare it takes `0.0.0.0:4200`; give it `HOST:PORT` to choose, or either half on
-its own — `--serve=10.0.0.2` and `--serve :9000` fill the other in, and `--port` overrides whichever
-port it ended up with. There is no authentication — anyone who reaches the port reads the whole
-repository, and nothing more: no browser can change what gitva records.
+- `./demo.sh 3` - slows it down to 3 seconds per step
+- `./demo.sh 0` - turns off automatic steps: you'll need to press Enter to run each step
 
-`--id NAME` files the recording under a name of your own instead of the folder's full path, so a
-repository that moved, or a second clone of one, keeps its steps. Any string will do. See below.
-
-`--fresh` starts the recording over, at the repository as it is now. Nothing in the repository
-changes — gitva does not write to it.
-
-`--learning` starts with every commit in the window expanded, in every browser including one
-that joins late, and with links from unreachable showing, so a small repository being
-demonstrated needs nobody to expand anything first.
+Gitva also records your sessions as independent **steps** and allows you (or any viewer) to walk through them at any time.
+The recording lives on the server side, and is persisted on disk (outside of the repo),
+so you can restart `gitva` without losing the recording.
 
 **A step is what git did. A view is how you look at it.** The server records the steps and is
 the only thing that writes one; a browser only ever reads them. Everything you do to what is on
-screen — expanding, collapsing, the toggles, pins, marks, the camera, the language, the ground —
+screen — expanding, collapsing, the toggles, pins, marks, the camera, the language, the theme —
 happens in your browser and reaches nobody else, and there is nothing a browser can ask the
 server to do. *The repository is shared, the view is yours.*
 
 Because a step carries everything any view could draw, the recording is also all a browser needs:
 once it has arrived, losing the connection costs you nothing but the next step.
 
+## Usage
+
+To get the up-to-date help page for the tool usage, run `gitva --help`.
+
+If the repository is not specified - it defaults to the current folder. You can also run `gitva` before initializing
+the git repository (no `.git` folder) - `gitva` will start and wait until you initialize the repo.
+
+`--serve` binds every interface instead of loopback, so viewers can watch one repository from
+their own browsers. Default is `0.0.0.0:4200` when passed without arguments.
+Specifying host/port separately also works: `--serve=10.0.0.2` or `--serve :9000`.
+
+`--port` option overrides any port specified by the `--serve`.
+
+`--id NAME` records all steps to the recording with this ID, instead of the folder path (default).
+You can also copy the ID of current recording by clicking on it, on the top left of the page.
+
+`--fresh` starts the recording over.
+
+`--learning` starts with every commit in the view expanded, so viewers don't need to open commits manually.
+
 ## What you see
 
-![gitva: HEAD and main pointing at a commit, its tree opening into blobs, the index beside them](docs/large-repo.png)
+![large-repo](docs/large-repo.png)
 
 Four columns, left to right: **pointers and tags | commits | trees and blobs | index**.
 
-- **Objects** — blobs, trees, commits, annotated tags, submodule gitlinks; loose and packed
-  alike, because to git there is no difference. Commit warm, tree green, blob blue.
-- **Pointers** — branches, remotes, tags, packed refs, HEAD attached or detached, each chip
-  coloured by kind. A branch is drawn as what it is: a file with a sha in it.
-- **The index**, apart in its own column, each entry linked to the blob it stages. Entries no
-  commit names yet are drawn violet at the top: written by `git add`, held by the index alone,
-  unreachable the moment you unstage them. Conflict stages are dashed.
-- **Unreachable objects** as ghosts, found by walking out from the roots. A discarded commit
-  keeps its tree and its parents, so the whole abandoned state sits there waiting for `gc`.
-- **What just changed**, in one accent spent on nothing else — the flash. An object that changes
-  what it belongs to travels there: a blob rising into the commit that just named it, a tree
-  falling in among the unreachable after a reset.
-- **What is not on screen and why**, always, in the notes toolbar.
+- **Pointers and tags** - branches, remotes, tags - everything that points somewhere
+- **Commits** - all commits, each one can be expanded or collapsed
+- **Trees and blobs** - tree and blob objects, including submodule gitlinks
+- **Index** - whatever is currently in the Index, connected to the respective blobs
 
-Click anything to read what that file in `.git` actually does, which command creates it, and its
-raw bytes — the contents of a blob, the entries of a tree, the text of a commit object, the one
-line inside a ref.
+Unreachable objects are drawn as ghosts.
+Recently changed (added/modified) things are highlighted momentarily.
+Click anything to read what it is or inspect its content.
 
 ## Controls
 
 | | |
 |---|---|
-| wheel | pan; hold <kbd>ctrl</kbd> to zoom |
-| drag background | pan |
-| double-click background | fit to width, keeping the point you clicked in view |
-| click | select: read it, light the path through it, copy its sha |
-| hover | light what it links to |
-| right-click | mark with a red outline, to follow something as the object graph moves |
+| ctrl+wheel | zoom the canvas |
+| drag background | move around |
+| double-click background | fit to width, centered on the point you clicked |
+| click | select: inspect it, highlight the path through it, copy its SHA |
+| hover | highlight what it links to |
+| right-click | mark with a red outline for tracking |
 | double-click a commit | expand or collapse what it links to |
-| double-click a tree | expand or collapse that subtree; collapsed it says how many entries it holds back (`tree +3`) |
-| drag anything | pin it where you put it, across a reload too; shift+click unpins |
-| drag a column edge | widen the left column, for room to arrange pins |
-| drag the inspector's edge | widen or narrow the inspector; the width is kept |
-| click a sha in the inspector | copies it |
-| click the file in the inspector | where the object's bytes are kept — its loose file, or the pack holding it — shown inside `.git`; the click copies the whole path |
-| *reset view* | drops every pin and puts the columns back |
-| click the identifier | copies what the recording is filed under, for `--id` |
+| double-click a tree | expand or collapse that subtree |
+| drag anything | pin it where you put it; shift+click unpins |
+| shift+click | unpin an object from a specific location back to the default one |
+| drag a column edge | change the size of the column |
+| click on SHA in the inspector | copy the SHA |
+| click on file path in the inspector | copy absolute file path |
+| *reset view* | drops every pin (reset to default object positions) and puts the columns width back |
 | <kbd>f</kbd> <kbd>←</kbd>/<kbd>[</kbd> <kbd>→</kbd>/<kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |
 
-The view toolbar expands or collapses every commit at once, hides the index, hides the
-unreachable, and shows **links from unreachable** — what a discarded object still points at, off
-by default because those links cross the canvas. Nothing points at an unreachable object; it
-still points at plenty. Every one of those is the same mechanism, a change to the *view* your
-browser holds, which is why none of them care how big the repository is, and why none of them
-change anyone else's screen.
+The view toolbar has additional controls:
 
-A step holds the newest 120 commits, and there is no button to load more: the window is the
-run's, so the same steps say the same thing to every viewer. Older history is not drawn, and the
-notes toolbar says so.
+- **Expand all** - expands all commits and trees
+- **Collapse all** - collapses all commits (excluding trees)
+- **Index** - show/hide Index column
+- **Unreachable** - show unreachable git objects
+- **Links from unreachable** - show links from unreachable objects to reachable ones
+- **Names** - show names of files/folders over the links
+- **☾ / ☀ Theme** - switches the theme between dark and light (click 5 times for an easter egg theme)
+- **help/settings** - show help window, edit user view-scoped settings
+- **Languages section** - on the very top right, allows selecting the language
 
-The recording is the server's, and it runs whether anyone is watching or not, so a browser
-opening ten commands in is handed everything that happened before it arrived. Only git causes a
-step — expanding, collapsing and the toggles redraw in place and add nothing. Pause and the recording keeps going
-behind you, so a demo can be **replayed instead of redone**; stepping backwards highlights the
-change in reverse, which is how you show a reset twice without doing it twice. Expansions are
-the exception to stepping: what you expanded stays expanded wherever you stand, and across a
-reload — and so does a tree you collapsed shut, which is the same answer about a different shape.
+The recording toolbar has the following controls:
 
-☾ / ☀ turns the ground light or dark, and the glyph is the one you are in. The three object
-hues do not move with it — a commit is warm, a tree green, a blob blue on either ground, because
-that is what you recognise a kind by. Beside it, the help dialog holds the legend and the keys,
-then settings, which survive a reload: whether clicking centres the view, whether a new
-commit arrives expanded, whether pins wear a pushpin, and whether the canvas refits the width when the repository changes. In the same
-corner, **EN** and **RU** switch the language: the words are yours, like the view — nobody
-else's canvas changes, and a recorded step reads in whichever language you are set to.
-
-## The recording survives a restart
-
-The recording is kept outside the repository, so stopping gitva and starting it again on the
-same folder walks back into the same steps instead of starting the tutorial over. A restart is
-not a step: if git did nothing while gitva was off, nothing is added.
-
-It is filed under the folder's full path, one file per repository, in the directory your system
-keeps a program's own state in — `~/.local/state/gitva` (or `$XDG_STATE_HOME`),
-`~/Library/Application Support/gitva` on macOS, `%LOCALAPPDATA%\gitva` on Windows. The identifier
-is hashed to ten characters, the way git names an object after its content, and that is the
-filename. `GITVA_STATE_DIR` moves the lot somewhere else.
-
-**The identifier is in the top-left corner, beside the repository name, and a click copies it.**
-Hand it back with `--id` and the same recording comes up from anywhere: copy it before you move
-the folder, or before you clone it onto another machine. `--id` takes any string, so
-`--id teaching` is a name you can choose and remember instead — it is hashed the same way, and a
-key you copied out of the view toolbar is taken as itself.
-
-A step no longer carries a view at all. `--learning` is a fact about the run, and the toggles are
-facts about your browser, so stopping gitva and starting it again the other way changes the
-canvas and not one recorded step. What is kept is what git did.
-
-**Recordings made before this change are not resumed.** A step used to hold only the trees that
-whoever was driving had expanded, and there is no longer any way for a browser to ask for the
-rest — so rather than draw a commit that expands into nothing, gitva starts the recording over
-once. Nothing in the repository is affected either way.
-
-**Recordings and saved views from before this rename are dropped once, too.** A step now names its own
-fields in gitva's own words, and so do the keys your browser keeps its view under — so the first
-run starts the recording over, and your pins, marks, collapses, column widths and settings come
-back at their defaults. Once, and again nothing in the repository is affected.
-
-To start it over, restart gitva with `--fresh`. There is no button for it: the recording is
-everyone's, and no viewer's browser should be able to end everyone's session.
-
-## Two promises
-
-**It never writes to the repository it watches.** Not the index, not a cache, not a config
-value. `src/git.ts` will only spawn git subcommands from a read-only allowlist, and sets
-`GIT_OPTIONAL_LOCKS=0` so git will not take a lock to be helpful either. It will not run `git
-gc` or write a commit-graph for you, and does not nag you to either.
-
-**Everything it knows, it learns from git's own plumbing.** No git library, no reimplemented
-format. It runs the commands it is teaching, so you can read what it does and then type it
-yourself.
+- **Reset view** - resets all your moved objects into their original positions
+- **Recording controls** - allows going back and forth between the steps of the recording: does not pause anything server-wise, scoped for your own view only
 
 ## Big repositories
 
-There is no big-project flag. The repository is measured once at startup and the interface
-follows from that — and says so, in the notes toolbar, when something is off:
-
-| Above the limit | What you get instead |
-|---|---|
-| 12,000 objects | No unreachable detection — finding one means reading every object. Everything drawn is reachable by construction. The trees of the commits in the window still come with every step, so expanding one asks nothing of the server. |
-| 400 staged paths | The index entries that **differ from HEAD**, plus a count for the rest. |
-
-Listing every object is nearly free; reading every tree, which is what unreachable detection
-needs, is the step that binds, and that is where both limits come from.
-
-Sitting still costs no CPU: the render loop stops when nothing is animating, and the server's
-change signal costs O(refs), not O(objects). The recording a browser is handed on connect stops
-at 400 steps or 16 MB, whichever comes first.
+Gitva loads the last 1000 commits. If your repository has more commits - the oldest ones will not show up.
+If the repository has more than 12,000 objects, or more than 400 staged paths - some features might be disabled
+due to performance reasons, like tracking unreachable objects, or showing only part of the Index.
 
 ## Building it
 
 ```
 npm install
-npm test                        # node:test, over real fixture repos built with real plumbing
+npm test
 npm start -- /path/to/repo
 ```
 
-TypeScript on both sides, so the pure parts — layout, diffing, the recording, the explanations —
-are written once and tested in one runner. Canvas 2D, hand-written, for the object graph.
-`CLAUDE.md` is the map of the code; `INITIAL_DESIGN.md` is the why.
+## References and stack
+
+References:
+
+- `CLAUDE.md` - instructions for agents maintaining this project
+- `docs/INITIAL_DESIGN.md` - initial vision & the prompt that was used to create the first version
+
+Stack:
+
+- TypeScript
+- Canvas 2D
+- ESLint / Prettier
