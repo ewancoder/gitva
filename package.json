@@ -35,7 +35,8 @@
   "scripts": {
     "build": "tsc && chmod +x dist/src/cli.js",
     "start": "node dist/src/cli.js",
-    "pretest": "eslint .",
+    "check": "tsc -p tsconfig.src.json && tsc -p tsconfig.web.json",
+    "pretest": "eslint . && npm run check",
     "test": "npm run build && node --test --experimental-test-coverage dist/test/*.test.js",
     "prepublishOnly": "npm run build",
     "lint": "eslint ."
