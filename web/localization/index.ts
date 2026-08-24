@@ -9,14 +9,14 @@ import { en } from './languages/en.js';
 
 /** The list of languages, in the order their buttons appear. */
 export const LANGUAGES: { code: string; label: string; name: string }[] = [
-  { code: 'en', label: 'EN', name: 'English' },
-  { code: 'ru', label: 'RU', name: 'Русский' },
+    { code: 'en', label: 'EN', name: 'English' },
+    { code: 'ru', label: 'RU', name: 'Русский' },
 ];
 
 /** One module per language, loaded when it is chosen. */
 const LOADERS: Record<string, () => Promise<Strings>> = {
-  en: async () => en,
-  ru: async () => (await import('./languages/ru.js')).ru,
+    en: () => Promise.resolve(en),
+    ru: async () => (await import('./languages/ru.js')).ru,
 };
 
 /** Currently loaded language (Strings). */
@@ -30,7 +30,7 @@ export let language = 'en';
  * Non-existent codes fall back to English.
  */
 export async function setLanguage(code: string): Promise<void> {
-  const wantCode = code in LOADERS ? code : 'en';
-  S = await LOADERS[wantCode]!();
-  language = wantCode;
+    const wantCode = code in LOADERS ? code : 'en';
+    S = await LOADERS[wantCode]();
+    language = wantCode;
 }

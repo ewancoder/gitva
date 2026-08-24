@@ -17,71 +17,76 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { COMMIT_WINDOW } from './types.js';
 import type {
-  Capabilities,
-  Commit,
-  GitObject,
-  Head,
-  IndexEntry,
-  NoteId,
-  ObjectType,
-  Oid,
-  Ref,
-  Step,
-  TagObject,
-  TreeEntry,
+    Capabilities,
+    Commit,
+    GitObject,
+    Head,
+    IndexEntry,
+    NoteId,
+    ObjectType,
+    Oid,
+    Ref,
+    Step,
+    TagObject,
+    TreeEntry,
 } from './types.js';
 
 /** Read-only by construction: nothing else may be spawned. Third mention, deliberately. */
 const READ_ONLY = new Set([
-  'rev-parse',
-  'symbolic-ref',
-  'for-each-ref',
-  'cat-file',
-  'rev-list',
-  'log',
-  'ls-files',
-  'count-objects',
-  'diff-index',
-  'show-index',
+    'rev-parse',
+    'symbolic-ref',
+    'for-each-ref',
+    'cat-file',
+    'rev-list',
+    'log',
+    'ls-files',
+    'count-objects',
+    'diff-index',
+    'show-index',
 ]);
 
 export class GitError extends Error {}
 
 function run(repo: string, args: string[], stdin?: string | Buffer): Promise<Buffer> {
-  const cmd = args[0];
-  if (!READ_ONLY.has(cmd)) throw new GitError(`refusing to run non-read-only git ${cmd}`);
-  return new Promise((resolve, reject) => {
-    const child = spawn('git', ['-C', repo, ...args], {
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', LC_ALL: 'C' },
-      stdio: ['pipe', 'pipe', 'pipe'],
+    const cmd = args[0];
+    if (!READ_ONLY.has(cmd)) throw new GitError(`refusing to run non-read-only git ${cmd}`);
+    return new Promise((resolve, reject) => {
+        const child = spawn('git', ['-C', repo, ...args], {
+            env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', LC_ALL: 'C' },
+            stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        const out: Buffer[] = [];
+        const err: Buffer[] = [];
+        child.stdout.on('data', (d: Buffer) => out.push(d));
+        child.stderr.on('data', (d: Buffer) => err.push(d));
+        child.on('error', reject);
+        child.on('close', (code) => {
+            if (code === 0) resolve(Buffer.concat(out));
+            else
+                reject(
+                    new GitError(
+                        `git ${args.join(' ')} exited ${code}: ${Buffer.concat(err).toString()}`,
+                    ),
+                );
+        });
+        // A command that does not read stdin may be gone before we finish writing.
+        child.stdin.on('error', () => {});
+        if (stdin === undefined) child.stdin.end();
+        else child.stdin.end(stdin);
     });
-    const out: Buffer[] = [];
-    const err: Buffer[] = [];
-    child.stdout.on('data', (d: Buffer) => out.push(d));
-    child.stderr.on('data', (d: Buffer) => err.push(d));
-    child.on('error', reject);
-    child.on('close', (code) => {
-      if (code === 0) resolve(Buffer.concat(out));
-      else reject(new GitError(`git ${args.join(' ')} exited ${code}: ${Buffer.concat(err)}`));
-    });
-    // A command that does not read stdin may be gone before we finish writing.
-    child.stdin.on('error', () => {});
-    if (stdin === undefined) child.stdin.end();
-    else child.stdin.end(stdin);
-  });
 }
 
 async function text(repo: string, args: string[], stdin?: string): Promise<string> {
-  return (await run(repo, args, stdin)).toString('utf8');
+    return (await run(repo, args, stdin)).toString('utf8');
 }
 
 /** Same, but a non-zero exit is an answer ("no such ref") rather than a failure. */
 async function maybe(repo: string, args: string[]): Promise<string | null> {
-  try {
-    return (await text(repo, args)).trim();
-  } catch {
-    return null;
-  }
+    try {
+        return (await text(repo, args)).trim();
+    } catch {
+        return null;
+    }
 }
 
 const lines = (s: string) => s.split('\n').filter((l) => l.length > 0);
@@ -97,20 +102,20 @@ const zsplit = (s: string) => s.split('\0').filter((l) => l.length > 0);
  * for each. One process, one pipe, however many objects.
  */
 export function parseBatch(buf: Buffer): Map<Oid, { type: ObjectType; body: Buffer }> {
-  const out = new Map<Oid, { type: ObjectType; body: Buffer }>();
-  let p = 0;
-  while (p < buf.length) {
-    const nl = buf.indexOf(10, p);
-    if (nl < 0) break;
-    const header = buf.toString('utf8', p, nl);
-    p = nl + 1;
-    const [oid, type, size] = header.split(' ');
-    if (type === undefined || type === 'missing') continue;
-    const n = Number(size);
-    out.set(oid, { type: type as ObjectType, body: buf.subarray(p, p + n) });
-    p += n + 1;
-  }
-  return out;
+    const out = new Map<Oid, { type: ObjectType; body: Buffer }>();
+    let p = 0;
+    while (p < buf.length) {
+        const nl = buf.indexOf(10, p);
+        if (nl < 0) break;
+        const header = buf.toString('utf8', p, nl);
+        p = nl + 1;
+        const [oid, type, size] = header.split(' ');
+        if (type === undefined || type === 'missing') continue;
+        const n = Number(size);
+        out.set(oid, { type: type as ObjectType, body: buf.subarray(p, p + n) });
+        p += n + 1;
+    }
+    return out;
 }
 
 /**
@@ -119,89 +124,89 @@ export function parseBatch(buf: Buffer): Map<Oid, { type: ObjectType; body: Buff
  * `ls-tree` process per tree and that is the cost that kills the tool.
  */
 export function parseTree(body: Buffer, hashLen: number): TreeEntry[] {
-  const entries: TreeEntry[] = [];
-  let p = 0;
-  while (p < body.length) {
-    const sp = body.indexOf(32, p);
-    const nul = body.indexOf(0, sp);
-    if (sp < 0 || nul < 0) break;
-    const mode = body.toString('utf8', p, sp);
-    const name = body.toString('utf8', sp + 1, nul);
-    const oid = body.toString('hex', nul + 1, nul + 1 + hashLen);
-    entries.push({ mode, name, oid, type: modeType(mode) });
-    p = nul + 1 + hashLen;
-  }
-  return entries;
+    const entries: TreeEntry[] = [];
+    let p = 0;
+    while (p < body.length) {
+        const sp = body.indexOf(32, p);
+        const nul = body.indexOf(0, sp);
+        if (sp < 0 || nul < 0) break;
+        const mode = body.toString('utf8', p, sp);
+        const name = body.toString('utf8', sp + 1, nul);
+        const oid = body.toString('hex', nul + 1, nul + 1 + hashLen);
+        entries.push({ mode, name, oid, type: modeType(mode) });
+        p = nul + 1 + hashLen;
+    }
+    return entries;
 }
 
 function modeType(mode: string): ObjectType {
-  if (mode === '40000' || mode === '040000') return 'tree';
-  if (mode === '160000') return 'commit'; // a submodule: a sha with no object here
-  return 'blob';
+    if (mode === '40000' || mode === '040000') return 'tree';
+    if (mode === '160000') return 'commit'; // a submodule: a sha with no object here
+    return 'blob';
 }
 
 /** A commit body: headers, a blank line, then the message the human wrote. */
 export function parseCommit(oid: Oid, body: string): Commit {
-  const split = body.indexOf('\n\n');
-  const head = split < 0 ? body : body.slice(0, split);
-  const message = split < 0 ? '' : body.slice(split + 2);
-  const c: Commit = {
-    oid,
-    tree: '',
-    parents: [],
-    author: '',
-    authorDate: 0,
-    committer: '',
-    subject: message.split('\n')[0] ?? '',
-    message,
-  };
-  for (const line of head.split('\n')) {
-    if (line.startsWith(' ')) continue; // a folded header, e.g. a signature
-    const sp = line.indexOf(' ');
-    const key = line.slice(0, sp);
-    const value = line.slice(sp + 1);
-    if (key === 'tree') c.tree = value;
-    else if (key === 'parent') c.parents.push(value);
-    else if (key === 'author') {
-      c.author = identName(value);
-      c.authorDate = identDate(value);
-    } else if (key === 'committer') c.committer = identName(value);
-  }
-  return c;
+    const split = body.indexOf('\n\n');
+    const head = split < 0 ? body : body.slice(0, split);
+    const message = split < 0 ? '' : body.slice(split + 2);
+    const c: Commit = {
+        oid,
+        tree: '',
+        parents: [],
+        author: '',
+        authorDate: 0,
+        committer: '',
+        subject: message.split('\n')[0] ?? '',
+        message,
+    };
+    for (const line of head.split('\n')) {
+        if (line.startsWith(' ')) continue; // a folded header, e.g. a signature
+        const sp = line.indexOf(' ');
+        const key = line.slice(0, sp);
+        const value = line.slice(sp + 1);
+        if (key === 'tree') c.tree = value;
+        else if (key === 'parent') c.parents.push(value);
+        else if (key === 'author') {
+            c.author = identName(value);
+            c.authorDate = identDate(value);
+        } else if (key === 'committer') c.committer = identName(value);
+    }
+    return c;
 }
 
 export function parseTag(oid: Oid, body: string): TagObject {
-  const split = body.indexOf('\n\n');
-  const head = split < 0 ? body : body.slice(0, split);
-  const message = split < 0 ? '' : body.slice(split + 2);
-  const t: TagObject = {
-    oid,
-    target: '',
-    targetType: 'commit',
-    name: '',
-    tagger: '',
-    message,
-  };
-  for (const line of head.split('\n')) {
-    const sp = line.indexOf(' ');
-    const key = line.slice(0, sp);
-    const value = line.slice(sp + 1);
-    if (key === 'object') t.target = value;
-    else if (key === 'type') t.targetType = value as ObjectType;
-    else if (key === 'tag') t.name = value;
-    else if (key === 'tagger') t.tagger = identName(value);
-  }
-  return t;
+    const split = body.indexOf('\n\n');
+    const head = split < 0 ? body : body.slice(0, split);
+    const message = split < 0 ? '' : body.slice(split + 2);
+    const t: TagObject = {
+        oid,
+        target: '',
+        targetType: 'commit',
+        name: '',
+        tagger: '',
+        message,
+    };
+    for (const line of head.split('\n')) {
+        const sp = line.indexOf(' ');
+        const key = line.slice(0, sp);
+        const value = line.slice(sp + 1);
+        if (key === 'object') t.target = value;
+        else if (key === 'type') t.targetType = value as ObjectType;
+        else if (key === 'tag') t.name = value;
+        else if (key === 'tagger') t.tagger = identName(value);
+    }
+    return t;
 }
 
 /** "A U Thor <a@b.c> 1700000000 +0100" -> the human part, and the timestamp. */
 function identName(ident: string): string {
-  const gt = ident.lastIndexOf('>');
-  return gt < 0 ? ident : ident.slice(0, gt + 1);
+    const gt = ident.lastIndexOf('>');
+    return gt < 0 ? ident : ident.slice(0, gt + 1);
 }
 function identDate(ident: string): number {
-  const m = / (\d+) [+-]\d{4}\s*$/.exec(ident);
-  return m ? Number(m[1]) * 1000 : 0;
+    const m = / (\d+) [+-]\d{4}\s*$/.exec(ident);
+    return m ? Number(m[1]) * 1000 : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -225,29 +230,29 @@ function identDate(ident: string): number {
 export const LIMITS = { fullLoad: 12_000, indexShapes: 400 };
 
 export async function measure(repo: string, gitDir?: string): Promise<Capabilities> {
-  const counts = await text(repo, ['count-objects', '-v']);
-  const field = (k: string) => {
-    const m = new RegExp(`^${k}: (\\d+)$`, 'm').exec(counts);
-    return m ? Number(m[1]) : 0;
-  };
-  const looseCount = field('count');
-  const objectCount = looseCount + field('in-pack');
-  const refCount = lines(await text(repo, ['for-each-ref', '--format=%(refname)'])).length;
-  const indexCount = zsplit(await text(repo, ['ls-files', '-z'])).length;
-  const dir = gitDir ?? (await text(repo, ['rev-parse', '--absolute-git-dir'])).trim();
-  const commitGraph = await stat(join(dir, 'objects/info/commit-graph')).then(
-    () => true,
-    () => false,
-  );
-  return {
-    objectCount,
-    looseCount,
-    refCount,
-    fullLoad: objectCount <= LIMITS.fullLoad,
-    indexShapes: indexCount <= LIMITS.indexShapes,
-    commitGraph,
-    limits: { ...LIMITS },
-  };
+    const counts = await text(repo, ['count-objects', '-v']);
+    const field = (k: string) => {
+        const m = new RegExp(`^${k}: (\\d+)$`, 'm').exec(counts);
+        return m ? Number(m[1]) : 0;
+    };
+    const looseCount = field('count');
+    const objectCount = looseCount + field('in-pack');
+    const refCount = lines(await text(repo, ['for-each-ref', '--format=%(refname)'])).length;
+    const indexCount = zsplit(await text(repo, ['ls-files', '-z'])).length;
+    const dir = gitDir ?? (await text(repo, ['rev-parse', '--absolute-git-dir'])).trim();
+    const commitGraph = await stat(join(dir, 'objects/info/commit-graph')).then(
+        () => true,
+        () => false,
+    );
+    return {
+        objectCount,
+        looseCount,
+        refCount,
+        fullLoad: objectCount <= LIMITS.fullLoad,
+        indexShapes: indexCount <= LIMITS.indexShapes,
+        commitGraph,
+        limits: { ...LIMITS },
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -264,18 +269,18 @@ export async function measure(repo: string, gitDir?: string): Promise<Capabiliti
  *   - an index rewrite, which is how staging shows up (stat, not a read).
  */
 export async function changeSignal(repo: string, gitDir: string): Promise<string> {
-  const [refs, head, counts, index] = await Promise.all([
-    text(repo, ['for-each-ref', '--format=%(objectname) %(refname)']),
-    maybe(repo, ['rev-parse', '--symbolic-full-name', 'HEAD']).then(
-      async (r) => `${r} ${await maybe(repo, ['rev-parse', 'HEAD'])}`,
-    ),
-    text(repo, ['count-objects', '-v']),
-    stat(join(gitDir, 'index')).then(
-      (s) => `${s.mtimeMs}:${s.size}`,
-      () => 'none',
-    ),
-  ]);
-  return createHash('sha1').update(refs).update(head).update(counts).update(index).digest('hex');
+    const [refs, head, counts, index] = await Promise.all([
+        text(repo, ['for-each-ref', '--format=%(objectname) %(refname)']),
+        maybe(repo, ['rev-parse', '--symbolic-full-name', 'HEAD']).then(
+            async (r) => `${r} ${await maybe(repo, ['rev-parse', 'HEAD'])}`,
+        ),
+        text(repo, ['count-objects', '-v']),
+        stat(join(gitDir, 'index')).then(
+            (s) => `${s.mtimeMs}:${s.size}`,
+            () => 'none',
+        ),
+    ]);
+    return createHash('sha1').update(refs).update(head).update(counts).update(index).digest('hex');
 }
 
 // ---------------------------------------------------------------------------
@@ -283,235 +288,241 @@ export async function changeSignal(repo: string, gitDir: string): Promise<string
 // ---------------------------------------------------------------------------
 
 export interface Repository {
-  repo: string;
-  gitDir: string;
-  name: string;
-  hashLen: number;
+    repo: string;
+    gitDir: string;
+    name: string;
+    hashLen: number;
 }
 
 export async function open(cwd: string): Promise<Repository> {
-  const gitDir = (await text(cwd, ['rev-parse', '--absolute-git-dir'])).trim();
-  const top = (await maybe(cwd, ['rev-parse', '--show-toplevel'])) || gitDir;
-  const format = (await maybe(cwd, ['rev-parse', '--show-object-format'])) || 'sha1';
-  return { repo: cwd, gitDir, name: basename(top), hashLen: format === 'sha256' ? 32 : 20 };
+    const gitDir = (await text(cwd, ['rev-parse', '--absolute-git-dir'])).trim();
+    const top = (await maybe(cwd, ['rev-parse', '--show-toplevel'])) || gitDir;
+    const format = (await maybe(cwd, ['rev-parse', '--show-object-format'])) || 'sha1';
+    return { repo: cwd, gitDir, name: basename(top), hashLen: format === 'sha256' ? 32 : 20 };
 }
 
 async function readHead(repo: string): Promise<Head> {
-  const ref = await maybe(repo, ['symbolic-ref', '-q', 'HEAD']);
-  const oid = await maybe(repo, ['rev-parse', '-q', '--verify', 'HEAD']);
-  return {
-    ref: ref ?? undefined,
-    oid: oid ?? undefined,
-    detached: ref === null && oid !== null,
-    unborn: ref !== null && oid === null,
-  };
+    const ref = await maybe(repo, ['symbolic-ref', '-q', 'HEAD']);
+    const oid = await maybe(repo, ['rev-parse', '-q', '--verify', 'HEAD']);
+    return {
+        ref: ref ?? undefined,
+        oid: oid ?? undefined,
+        detached: ref === null && oid !== null,
+        unborn: ref !== null && oid === null,
+    };
 }
 
 async function readRefs(repo: string, gitDir: string): Promise<Ref[]> {
-  const raw = await text(repo, [
-    'for-each-ref',
-    '--format=%(refname)%09%(objecttype)%09%(objectname)%09%(*objectname)',
-  ]);
-  return Promise.all(
-    lines(raw).map(async (l) => {
-      const [name, objectType, oid, target] = l.split('\t');
-      // A branch is a file with a sha in it — unless it has been folded away
-      // into packed-refs, in which case the file is simply not there.
-      const loose = await stat(join(gitDir, name)).then(
-        () => true,
-        () => false,
-      );
-      return {
-        name,
-        objectType: objectType as ObjectType,
-        oid,
-        target: target || undefined,
-        packed: !loose,
-      };
-    }),
-  );
+    const raw = await text(repo, [
+        'for-each-ref',
+        '--format=%(refname)%09%(objecttype)%09%(objectname)%09%(*objectname)',
+    ]);
+    return Promise.all(
+        lines(raw).map(async (l) => {
+            const [name, objectType, oid, target] = l.split('\t');
+            // A branch is a file with a sha in it — unless it has been folded away
+            // into packed-refs, in which case the file is simply not there.
+            const loose = await stat(join(gitDir, name)).then(
+                () => true,
+                () => false,
+            );
+            return {
+                name,
+                objectType: objectType as ObjectType,
+                oid,
+                target: target || undefined,
+                packed: !loose,
+            };
+        }),
+    );
 }
 
 /** The window: the newest commits, wherever they hang from. One question, the
  *  same one every run — there is no browser on the other end of this asking a
  *  different one. */
 export function revListArgs(limit: number, hasHead: boolean): string[] {
-  // `--all` misses a detached HEAD, so name it too — when it resolves at all.
-  return ['rev-list', '--topo-order', `-n${limit}`, ...(hasHead ? ['--all', 'HEAD'] : ['--all'])];
+    // `--all` misses a detached HEAD, so name it too — when it resolves at all.
+    return ['rev-list', '--topo-order', `-n${limit}`, ...(hasHead ? ['--all', 'HEAD'] : ['--all'])];
 }
 
 async function readIndex(repo: string, capabilities: Capabilities) {
-  const raw = zsplit(await text(repo, ['ls-files', '--stage', '-z']));
-  const all: IndexEntry[] = raw.map((l) => {
-    const tab = l.indexOf('\t');
-    const [mode, oid, stage] = l.slice(0, tab).split(' ');
-    return { mode, oid, stage: Number(stage), path: l.slice(tab + 1) };
-  });
-  if (capabilities.indexShapes || all.length === 0) return { index: all };
+    const raw = zsplit(await text(repo, ['ls-files', '--stage', '-z']));
+    const all: IndexEntry[] = raw.map((l) => {
+        const tab = l.indexOf('\t');
+        const [mode, oid, stage] = l.slice(0, tab).split(' ');
+        return { mode, oid, stage: Number(stage), path: l.slice(tab + 1) };
+    });
+    if (capabilities.indexShapes || all.length === 0) return { index: all };
 
-  // Above the limit the interesting part of the index is the delta, not the
-  // inventory: draw what differs from HEAD and count the rest.
-  const changed = new Set(
-    zsplit((await maybe(repo, ['diff-index', '--cached', '--name-only', '-z', 'HEAD'])) ?? ''),
-  );
-  const shown = all.filter((e) => changed.has(e.path) || e.stage !== 0);
-  return { index: shown, indexElided: { shown: shown.length, total: all.length } };
+    // Above the limit the interesting part of the index is the delta, not the
+    // inventory: draw what differs from HEAD and count the rest.
+    const changed = new Set(
+        zsplit((await maybe(repo, ['diff-index', '--cached', '--name-only', '-z', 'HEAD'])) ?? ''),
+    );
+    const shown = all.filter((e) => changed.has(e.path) || e.stage !== 0);
+    return { index: shown, indexElided: { shown: shown.length, total: all.length } };
 }
 
 /** Read the bodies of a set of oids in one conversation, following trees down. */
 async function readObjects(
-  h: Repository,
-  seed: Oid[],
-  commits: Record<Oid, Commit>,
-  trees: Record<Oid, TreeEntry[]>,
-  tags: Record<Oid, TagObject>,
+    h: Repository,
+    seed: Oid[],
+    commits: Record<Oid, Commit>,
+    trees: Record<Oid, TreeEntry[]>,
+    tags: Record<Oid, TagObject>,
 ) {
-  let wanted = seed.filter((o) => o && !(o in commits) && !(o in trees) && !(o in tags));
-  while (wanted.length > 0) {
-    const batch = parseBatch(await run(h.repo, ['cat-file', '--batch'], wanted.join('\n') + '\n'));
-    const next: Oid[] = [];
-    for (const [oid, { type, body }] of batch) {
-      if (type === 'commit') {
-        commits[oid] = parseCommit(oid, body.toString('utf8'));
-        next.push(commits[oid].tree);
-      } else if (type === 'tree') {
-        const entries = parseTree(body, h.hashLen);
-        trees[oid] = entries;
-        for (const e of entries) if (e.type === 'tree') next.push(e.oid);
-      } else if (type === 'tag') {
-        tags[oid] = parseTag(oid, body.toString('utf8'));
-        next.push(tags[oid].target);
-      }
+    let wanted = seed.filter((o) => o && !(o in commits) && !(o in trees) && !(o in tags));
+    while (wanted.length > 0) {
+        const batch = parseBatch(
+            await run(h.repo, ['cat-file', '--batch'], wanted.join('\n') + '\n'),
+        );
+        const next: Oid[] = [];
+        for (const [oid, { type, body }] of batch) {
+            if (type === 'commit') {
+                commits[oid] = parseCommit(oid, body.toString('utf8'));
+                next.push(commits[oid].tree);
+            } else if (type === 'tree') {
+                const entries = parseTree(body, h.hashLen);
+                trees[oid] = entries;
+                for (const e of entries) if (e.type === 'tree') next.push(e.oid);
+            } else if (type === 'tag') {
+                tags[oid] = parseTag(oid, body.toString('utf8'));
+                next.push(tags[oid].target);
+            }
+        }
+        wanted = [...new Set(next)].filter(
+            (o) => o && !(o in commits) && !(o in trees) && !(o in tags),
+        );
     }
-    wanted = [...new Set(next)].filter(
-      (o) => o && !(o in commits) && !(o in trees) && !(o in tags),
-    );
-  }
 }
 
-export async function readStep(h: Repository, capabilities: Capabilities, seq: number): Promise<Step> {
-  const limit = COMMIT_WINDOW;
-  const [head, refs, indexRead] = await Promise.all([
-    readHead(h.repo),
-    readRefs(h.repo, h.gitDir),
-    readIndex(h.repo, capabilities),
-  ]);
-  const { index, indexElided } = indexRead;
-
-  // The window: one more than asked for, so we know whether there is more.
-  const revs = lines(await text(h.repo, revListArgs(limit + 1, head.oid !== undefined)));
-  const more = revs.length > limit;
-  const windowCommits = revs.slice(0, limit);
-  const inWindow = new Set(windowCommits);
-
-  const commits: Record<Oid, Commit> = {};
-  const trees: Record<Oid, TreeEntry[]> = {};
-  const tags: Record<Oid, TagObject> = {};
-  const objects: Record<Oid, GitObject> = {};
-
-  // Commit headers for the window, plus the tag objects the refs point at.
-  const tagOids = refs.filter((r) => r.objectType === 'tag').map((r) => r.oid);
-  const wanted = [...new Set([...windowCommits, ...tagOids])];
-  if (wanted.length > 0) {
-    for (const [oid, { type, body }] of parseBatch(
-      await run(h.repo, ['cat-file', '--batch'], wanted.join('\n') + '\n'),
-    )) {
-      if (type === 'commit') commits[oid] = parseCommit(oid, body.toString('utf8'));
-      else if (type === 'tag') tags[oid] = parseTag(oid, body.toString('utf8'));
-    }
-  }
-
-  if (capabilities.fullLoad) {
-    // Small enough to hold whole: every object's header in one conversation,
-    // then every commit, tree and tag body in another. Unreachable objects fall
-    // out of the traversal for free, which is the lesson made executable.
-    const all = lines(
-      await text(h.repo, [
-        'cat-file',
-        '--batch-all-objects',
-        '--batch-check=%(objectname) %(objecttype) %(objectsize)',
-      ]),
-    );
-    const structural: Oid[] = [];
-    for (const l of all) {
-      const [oid, type, size] = l.split(' ');
-      objects[oid] = { oid, type: type as ObjectType, size: Number(size) };
-      if (type !== 'blob') structural.push(oid);
-    }
-    await readObjects(h, structural, commits, trees, tags);
-  } else {
-    // Bounded by the window, not by what anyone has expanded: a step carries
-    // everything a view could draw, so expanding a commit is a redraw and never
-    // a question for the server. Nothing here walks the object database.
-    //
-    // ponytail: the trees of `limit` commits, whole, on every step. The window
-    // is the knob if that ever bites — nobody has measured it on a repository
-    // this size.
-    const seedTrees = windowCommits.map((o) => commits[o]?.tree).filter(Boolean);
-    await readObjects(h, seedTrees, commits, trees, tags);
-    const known = new Set<Oid>([
-      ...Object.keys(commits),
-      ...Object.keys(trees),
-      ...Object.keys(tags),
-      ...Object.values(trees).flatMap((es) => es.map((e) => e.oid)),
-      ...index.map((e) => e.oid),
+export async function readStep(
+    h: Repository,
+    capabilities: Capabilities,
+    seq: number,
+): Promise<Step> {
+    const limit = COMMIT_WINDOW;
+    const [head, refs, indexRead] = await Promise.all([
+        readHead(h.repo),
+        readRefs(h.repo, h.gitDir),
+        readIndex(h.repo, capabilities),
     ]);
-    if (known.size > 0) {
-      for (const l of lines(
-        await text(
-          h.repo,
-          ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],
-          [...known].join('\n') + '\n',
-        ),
-      )) {
-        const [oid, type, size] = l.split(' ');
-        if (!type || type === 'missing') continue;
-        objects[oid] = { oid, type: type as ObjectType, size: Number(size) };
-      }
+    const { index, indexElided } = indexRead;
+
+    // The window: one more than asked for, so we know whether there is more.
+    const revs = lines(await text(h.repo, revListArgs(limit + 1, head.oid !== undefined)));
+    const more = revs.length > limit;
+    const windowCommits = revs.slice(0, limit);
+    const inWindow = new Set(windowCommits);
+
+    const commits: Record<Oid, Commit> = {};
+    const trees: Record<Oid, TreeEntry[]> = {};
+    const tags: Record<Oid, TagObject> = {};
+    const objects: Record<Oid, GitObject> = {};
+
+    // Commit headers for the window, plus the tag objects the refs point at.
+    const tagOids = refs.filter((r) => r.objectType === 'tag').map((r) => r.oid);
+    const wanted = [...new Set([...windowCommits, ...tagOids])];
+    if (wanted.length > 0) {
+        for (const [oid, { type, body }] of parseBatch(
+            await run(h.repo, ['cat-file', '--batch'], wanted.join('\n') + '\n'),
+        )) {
+            if (type === 'commit') commits[oid] = parseCommit(oid, body.toString('utf8'));
+            else if (type === 'tag') tags[oid] = parseTag(oid, body.toString('utf8'));
+        }
     }
-  }
 
-  const reach = capabilities.fullLoad
-    ? findUnreachable(objects, commits, trees, tags, head, refs, index)
-    : null;
+    if (capabilities.fullLoad) {
+        // Small enough to hold whole: every object's header in one conversation,
+        // then every commit, tree and tag body in another. Unreachable objects fall
+        // out of the traversal for free, which is the lesson made executable.
+        const all = lines(
+            await text(h.repo, [
+                'cat-file',
+                '--batch-all-objects',
+                '--batch-check=%(objectname) %(objecttype) %(objectsize)',
+            ]),
+        );
+        const structural: Oid[] = [];
+        for (const l of all) {
+            const [oid, type, size] = l.split(' ');
+            objects[oid] = { oid, type: type as ObjectType, size: Number(size) };
+            if (type !== 'blob') structural.push(oid);
+        }
+        await readObjects(h, structural, commits, trees, tags);
+    } else {
+        // Bounded by the window, not by what anyone has expanded: a step carries
+        // everything a view could draw, so expanding a commit is a redraw and never
+        // a question for the server. Nothing here walks the object database.
+        //
+        // ponytail: the trees of `limit` commits, whole, on every step. The window
+        // is the knob if that ever bites — nobody has measured it on a repository
+        // this size.
+        const seedTrees = windowCommits.map((o) => commits[o]?.tree).filter(Boolean);
+        await readObjects(h, seedTrees, commits, trees, tags);
+        const known = new Set<Oid>([
+            ...Object.keys(commits),
+            ...Object.keys(trees),
+            ...Object.keys(tags),
+            ...Object.values(trees).flatMap((es) => es.map((e) => e.oid)),
+            ...index.map((e) => e.oid),
+        ]);
+        if (known.size > 0) {
+            for (const l of lines(
+                await text(
+                    h.repo,
+                    ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],
+                    [...known].join('\n') + '\n',
+                ),
+            )) {
+                const [oid, type, size] = l.split(' ');
+                if (!type || type === 'missing') continue;
+                objects[oid] = { oid, type: type as ObjectType, size: Number(size) };
+            }
+        }
+    }
 
-  // A ref pointing outside the window is left out and counted, never drawn as
-  // a link to a shape that isn't there.
-  const refsOutside = refs.filter((r) => !inWindow.has(r.target ?? r.oid)).length;
+    const reach = capabilities.fullLoad
+        ? findUnreachable(objects, commits, trees, tags, head, refs, index)
+        : null;
 
-  return {
-    seq,
-    time: Date.now(),
-    repo: h.name,
-    gitDir: h.gitDir,
-    head,
-    refs,
-    objects,
-    commits,
-    trees,
-    tags,
-    // Always, whether or not this view draws it: hiding the index is a drawing
-    // decision the browser makes, and a step recorded while it was hidden is
-    // scrubbed back to later with it shown.
-    index,
-    indexElided,
-    unreachable: reach?.unreachable ?? null,
-    stagedOnly: reach?.stagedOnly ?? null,
-    capabilities,
-    window: {
-      commits: windowCommits,
-      totalCommits: capabilities.fullLoad ? countCommits(objects) : null,
-      more,
-      refsOutside,
-    },
-    notes: notesFor(capabilities, { more, refsOutside, indexElided: !!indexElided }),
-  };
+    // A ref pointing outside the window is left out and counted, never drawn as
+    // a link to a shape that isn't there.
+    const refsOutside = refs.filter((r) => !inWindow.has(r.target ?? r.oid)).length;
+
+    return {
+        seq,
+        time: Date.now(),
+        repo: h.name,
+        gitDir: h.gitDir,
+        head,
+        refs,
+        objects,
+        commits,
+        trees,
+        tags,
+        // Always, whether or not this view draws it: hiding the index is a drawing
+        // decision the browser makes, and a step recorded while it was hidden is
+        // scrubbed back to later with it shown.
+        index,
+        indexElided,
+        unreachable: reach?.unreachable ?? null,
+        stagedOnly: reach?.stagedOnly ?? null,
+        capabilities,
+        window: {
+            commits: windowCommits,
+            totalCommits: capabilities.fullLoad ? countCommits(objects) : null,
+            more,
+            refsOutside,
+        },
+        notes: notesFor(capabilities, { more, refsOutside, indexElided: !!indexElided }),
+    };
 }
 
 function countCommits(objects: Record<Oid, GitObject>): number {
-  let n = 0;
-  for (const o of Object.values(objects)) if (o.type === 'commit') n++;
-  return n;
+    let n = 0;
+    for (const o of Object.values(objects)) if (o.type === 'commit') n++;
+    return n;
 }
 
 /**
@@ -526,73 +537,73 @@ function countCommits(objects: Record<Oid, GitObject>): number {
  * all. It is not an unreachable object (gc keeps it), so it gets its own list.
  */
 export function findUnreachable(
-  objects: Record<Oid, GitObject>,
-  commits: Record<Oid, Commit>,
-  trees: Record<Oid, TreeEntry[]>,
-  tags: Record<Oid, TagObject>,
-  head: Head,
-  refs: Ref[],
-  index: IndexEntry[],
+    objects: Record<Oid, GitObject>,
+    commits: Record<Oid, Commit>,
+    trees: Record<Oid, TreeEntry[]>,
+    tags: Record<Oid, TagObject>,
+    head: Head,
+    refs: Ref[],
+    index: IndexEntry[],
 ): { unreachable: Oid[]; stagedOnly: Oid[] } {
-  const seen = new Set<Oid>();
-  const stack: Oid[] = [];
-  const push = (o?: Oid) => {
-    if (o && !seen.has(o)) {
-      seen.add(o);
-      stack.push(o);
-    }
-  };
-  const walk = () => {
-    while (stack.length > 0) {
-      const oid = stack.pop()!;
-      const commit = commits[oid];
-      if (commit) {
-        push(commit.tree);
-        for (const p of commit.parents) push(p);
-        continue;
-      }
-      const tag = tags[oid];
-      if (tag) {
-        push(tag.target);
-        continue;
-      }
-      for (const e of trees[oid] ?? []) push(e.oid);
-    }
-  };
+    const seen = new Set<Oid>();
+    const stack: Oid[] = [];
+    const push = (o?: Oid) => {
+        if (o && !seen.has(o)) {
+            seen.add(o);
+            stack.push(o);
+        }
+    };
+    const walk = () => {
+        while (stack.length > 0) {
+            const oid = stack.pop()!;
+            const commit = commits[oid];
+            if (commit) {
+                push(commit.tree);
+                for (const p of commit.parents) push(p);
+                continue;
+            }
+            const tag = tags[oid];
+            if (tag) {
+                push(tag.target);
+                continue;
+            }
+            for (const e of trees[oid] ?? []) push(e.oid);
+        }
+    };
 
-  push(head.oid);
-  for (const r of refs) push(r.oid);
-  walk();
-  const named = new Set(seen); // everything history reaches, before the index
+    push(head.oid);
+    for (const r of refs) push(r.oid);
+    walk();
+    const named = new Set(seen); // everything history reaches, before the index
 
-  for (const e of index) push(e.oid);
-  walk();
+    for (const e of index) push(e.oid);
+    walk();
 
-  return {
-    unreachable: Object.keys(objects).filter((oid) => !seen.has(oid)),
-    // A gitlink entry names a commit that need not be here at all, so ask the
-    // object list rather than assume.
-    stagedOnly: [...seen].filter((oid) => !named.has(oid) && oid in objects),
-  };
+    return {
+        unreachable: Object.keys(objects).filter((oid) => !seen.has(oid)),
+        // A gitlink entry names a commit that need not be here at all, so ask the
+        // object list rather than assume.
+        stagedOnly: [...seen].filter((oid) => !named.has(oid) && oid in objects),
+    };
 }
 
 function notesFor(
-  capabilities: Capabilities,
-  ctx: { more: boolean; refsOutside: number; indexElided: boolean },
+    capabilities: Capabilities,
+    ctx: { more: boolean; refsOutside: number; indexElided: boolean },
 ): NoteId[] {
-  const notes: NoteId[] = [];
-  if (!capabilities.fullLoad) notes.push('noUnreachableDetection');
-  if (ctx.indexElided) notes.push('indexElided');
-  if (ctx.more) notes.push('more');
-  if (ctx.refsOutside > 0) notes.push('refsOutside');
-  // Two things a note is not. Not what the view toolbar's toggles hide: those
-  // are the viewer's, so the sentence is theirs to make too (`Recording.notes`),
-  // and a step must not still claim the index is hidden once they show it again.
-  // And not advice about the repository — `git gc` and `commit-graph write` say
-  // nothing about what the canvas is leaving out, and a toolbar that nags is one
-  // the viewer stops reading.
-  notes.push('bodiesOnSelection');
-  return notes;
+    const notes: NoteId[] = [];
+    if (!capabilities.fullLoad) notes.push('noUnreachableDetection');
+    if (ctx.indexElided) notes.push('indexElided');
+    if (ctx.more) notes.push('more');
+    if (ctx.refsOutside > 0) notes.push('refsOutside');
+    // Two things a note is not. Not what the view toolbar's toggles hide: those
+    // are the viewer's, so the sentence is theirs to make too (`Recording.notes`),
+    // and a step must not still claim the index is hidden once they show it again.
+    // And not advice about the repository — `git gc` and `commit-graph write` say
+    // nothing about what the canvas is leaving out, and a toolbar that nags is one
+    // the viewer stops reading.
+    notes.push('bodiesOnSelection');
+    return notes;
 }
 
 /**
@@ -603,48 +614,63 @@ function notesFor(
  * whole of it: only on selection, and only for something already packed.
  */
 export async function objectPath(h: Repository, oid: Oid): Promise<string | null> {
-  const loose = `objects/${oid.slice(0, 2)}/${oid.slice(2)}`;
-  if (await stat(join(h.gitDir, loose)).then(() => true, () => false)) return loose;
-  const dir = join(h.gitDir, 'objects/pack');
-  const idxs = await readdir(dir).then(
-    (names) => names.filter((n) => n.endsWith('.idx')).sort(),
-    () => [] as string[],
-  );
-  for (const idx of idxs) {
-    const listing = await run(h.repo, ['show-index'], await readFile(join(dir, idx)));
-    // One line per object: <offset> SP <sha> SP (<crc>).
-    if (listing.includes(` ${oid} `)) return `objects/pack/${idx.slice(0, -4)}.pack`;
-  }
-  // An alternate object database, or a submodule's commit: git can find it,
-  // this repository does not hold it.
-  return null;
+    const loose = `objects/${oid.slice(0, 2)}/${oid.slice(2)}`;
+    if (
+        await stat(join(h.gitDir, loose)).then(
+            () => true,
+            () => false,
+        )
+    )
+        return loose;
+    const dir = join(h.gitDir, 'objects/pack');
+    const idxs = await readdir(dir).then(
+        (names) => names.filter((n) => n.endsWith('.idx')).sort(),
+        () => [] as string[],
+    );
+    for (const idx of idxs) {
+        const listing = await run(h.repo, ['show-index'], await readFile(join(dir, idx)));
+        // One line per object: <offset> SP <sha> SP (<crc>).
+        if (listing.includes(` ${oid} `)) return `objects/pack/${idx.slice(0, -4)}.pack`;
+    }
+    // An alternate object database, or a submodule's commit: git can find it,
+    // this repository does not hold it.
+    return null;
 }
 
 /** A body is for reading one thing. Fetched on selection, never broadcast —
  *  and with it, where in .git that one thing is kept. */
-export async function readBody(h: Repository, oid: Oid): Promise<{
-  type: ObjectType;
-  size: number;
-  text: string | null;
-  truncated?: boolean;
-  entries?: TreeEntry[];
-  path: string | null;
+export async function readBody(
+    h: Repository,
+    oid: Oid,
+): Promise<{
+    type: ObjectType;
+    size: number;
+    text: string | null;
+    truncated?: boolean;
+    entries?: TreeEntry[];
+    path: string | null;
 }> {
-  const batch = parseBatch(await run(h.repo, ['cat-file', '--batch'], oid + '\n'));
-  const got = batch.get(oid);
-  if (!got) throw new GitError(`no such object ${oid}`);
-  const path = await objectPath(h, oid);
-  if (got.type === 'tree') {
-    return { type: 'tree', size: got.body.length, text: null, entries: parseTree(got.body, h.hashLen), path };
-  }
-  const slice = got.body.subarray(0, 64 * 1024);
-  const binary = slice.includes(0);
-  return {
-    type: got.type,
-    size: got.body.length,
-    text: binary ? null : slice.toString('utf8'),
-    // The inspector must not present the first 64 KiB of a blob as the whole blob.
-    truncated: got.body.length > slice.length,
-    path,
-  };
+    const batch = parseBatch(await run(h.repo, ['cat-file', '--batch'], oid + '\n'));
+    const got = batch.get(oid);
+    if (!got) throw new GitError(`no such object ${oid}`);
+    const path = await objectPath(h, oid);
+    if (got.type === 'tree') {
+        return {
+            type: 'tree',
+            size: got.body.length,
+            text: null,
+            entries: parseTree(got.body, h.hashLen),
+            path,
+        };
+    }
+    const slice = got.body.subarray(0, 64 * 1024);
+    const binary = slice.includes(0);
+    return {
+        type: got.type,
+        size: got.body.length,
+        text: binary ? null : slice.toString('utf8'),
+        // The inspector must not present the first 64 KiB of a blob as the whole blob.
+        truncated: got.body.length > slice.length,
+        path,
+    };
 }

@@ -38,7 +38,7 @@ const source = (file: string) => readFileSync(join(ROOT, file), 'utf8');
  * would rather fail on than pretend about — hence `NO_COMPUTED_IMPORT` below.
  */
 const imports = (file: string) =>
-  [...source(file).matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+    [...source(file).matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
 
 /** An import whose target is worked out at runtime, which the walk above cannot
  *  follow — so it is refused outright rather than quietly skipped. */
@@ -46,118 +46,130 @@ const NO_COMPUTED_IMPORT = /import\s*\(\s*[^'"\s)]/;
 
 /** Where an import lands, as a repo-relative `.ts` path — or null for a builtin. */
 function target(from: string, spec: string): string | null {
-  if (!spec.startsWith('.')) return null;
-  return relative(ROOT, resolve(ROOT, dirname(from), spec.replace(/\.js$/, '.ts')));
+    if (!spec.startsWith('.')) return null;
+    return relative(ROOT, resolve(ROOT, dirname(from), spec.replace(/\.js$/, '.ts')));
 }
 
 /** Everything reachable from `entry`, following relative imports. */
 function reachable(entry: string): { files: Set<string>; builtins: Map<string, string> } {
-  const files = new Set<string>();
-  const builtins = new Map<string, string>();
-  const queue = [entry];
-  while (queue.length) {
-    const file = queue.pop()!;
-    if (files.has(file)) continue;
-    files.add(file);
-    for (const spec of imports(file)) {
-      const to = target(file, spec);
-      if (to === null) {
-        if (spec.startsWith('node:')) builtins.set(spec, file);
-        continue;
-      }
-      queue.push(to);
+    const files = new Set<string>();
+    const builtins = new Map<string, string>();
+    const queue = [entry];
+    while (queue.length) {
+        const file = queue.pop()!;
+        if (files.has(file)) continue;
+        files.add(file);
+        for (const spec of imports(file)) {
+            const to = target(file, spec);
+            if (to === null) {
+                if (spec.startsWith('node:')) builtins.set(spec, file);
+                continue;
+            }
+            queue.push(to);
+        }
     }
-  }
-  return { files, builtins };
+    return { files, builtins };
 }
 
 /** Every `.ts` under a directory, subfolders included — `web/localization/` is
  *  served to a browser exactly as `web/app.ts` is. */
 const treeOf = (dir: string) =>
-  (readdirSync(join(ROOT, dir), { recursive: true }) as string[])
-    .map((f) => f.split(sep).join('/'))
-    .filter((f) => f.endsWith('.ts'))
-    .map((f) => `${dir}/${f}`);
+    (readdirSync(join(ROOT, dir), { recursive: true }) as string[])
+        .map((f) => f.split(sep).join('/'))
+        .filter((f) => f.endsWith('.ts'))
+        .map((f) => `${dir}/${f}`);
 
 const webFiles = treeOf('web');
 
 describe('the line between the server and the browser', () => {
-  it('classifies every file in src/, so a new one is a decision', () => {
-    assert.deepEqual(
-      treeOf('src').sort(),
-      [...SERVER_ONLY, ...SEAM].sort(),
-      'a file in src/ is either the server’s alone or the seam both halves hold — say which',
-    );
-  });
+    it('classifies every file in src/, so a new one is a decision', () => {
+        assert.deepEqual(
+            treeOf('src').sort(),
+            [...SERVER_ONLY, ...SEAM].sort(),
+            'a file in src/ is either the server’s alone or the seam both halves hold — say which',
+        );
+    });
 
-  /**
-   * The direction that used to be impossible to get wrong, now that the words
-   * live in `web/`: the server printing a translated sentence would mean asking
-   * a viewer's browser what language a terminal is in.
-   */
-  it('never lets the server reach into the browser’s half', () => {
-    for (const entry of SERVER_ONLY) {
-      const reached = [...reachable(entry).files].filter((f) => f.startsWith('web/'));
-      assert.deepEqual(reached, [], `${entry} reaches into web/`);
-    }
-  });
+    /**
+     * The direction that used to be impossible to get wrong, now that the words
+     * live in `web/`: the server printing a translated sentence would mean asking
+     * a viewer's browser what language a terminal is in.
+     */
+    it('never lets the server reach into the browser’s half', () => {
+        for (const entry of SERVER_ONLY) {
+            const reached = [...reachable(entry).files].filter((f) => f.startsWith('web/'));
+            assert.deepEqual(reached, [], `${entry} reaches into web/`);
+        }
+    });
 
-  it('never lets the browser reach the half that spawns git or writes the recording', () => {
-    for (const entry of webFiles) {
-      const { files } = reachable(entry);
-      for (const server of SERVER_ONLY) {
-        assert.ok(!files.has(server), `${entry} reaches ${server}`);
-      }
-    }
-  });
+    it('never lets the browser reach the half that spawns git or writes the recording', () => {
+        for (const entry of webFiles) {
+            const { files } = reachable(entry);
+            for (const server of SERVER_ONLY) {
+                assert.ok(!files.has(server), `${entry} reaches ${server}`);
+            }
+        }
+    });
 
-  it('never lets a node: builtin reach the browser', () => {
-    for (const entry of webFiles) {
-      const { builtins } = reachable(entry);
-      assert.deepEqual(
-        [...builtins].map(([spec, where]) => `${where} imports ${spec}`),
-        [],
-        `${entry} is served to a browser, which has no node: builtins`,
-      );
-    }
-  });
+    it('never lets a node: builtin reach the browser', () => {
+        for (const entry of webFiles) {
+            const { builtins } = reachable(entry);
+            assert.deepEqual(
+                [...builtins].map(([spec, where]) => `${where} imports ${spec}`),
+                [],
+                `${entry} is served to a browser, which has no node: builtins`,
+            );
+        }
+    });
 
-  it('keeps the seam free of the server, so it stays servable', () => {
-    for (const shared of SEAM) {
-      const { files, builtins } = reachable(shared);
-      assert.deepEqual([...builtins.keys()], [], `${shared} is shared and must hold no builtin`);
-      for (const server of SERVER_ONLY) assert.ok(!files.has(server), `${shared} reaches ${server}`);
-    }
-  });
+    it('keeps the seam free of the server, so it stays servable', () => {
+        for (const shared of SEAM) {
+            const { files, builtins } = reachable(shared);
+            assert.deepEqual(
+                [...builtins.keys()],
+                [],
+                `${shared} is shared and must hold no builtin`,
+            );
+            for (const server of SERVER_ONLY)
+                assert.ok(!files.has(server), `${shared} reaches ${server}`);
+        }
+    });
 
-  /**
-   * The other direction is the premise: *a step is what git did, a view is how
-   * you look at it.* The browser reads — the recording off the event stream, and
-   * one object's bytes on selection — and has nothing it can send. A second way
-   * out of `web/` would be a browser reaching for the repository, so the list is
-   * asserted whole rather than reviewed.
-   *
-   * Every way a page can reach the network is looked for, not just `fetch`, and
-   * each one has to name where it is going *as a literal*: a call whose URL is
-   * worked out at runtime is one this test cannot vouch for, so it fails as
-   * loudly as a new route would.
-   */
-  const REACHES_OUT = /\b(fetch|EventSource|XMLHttpRequest|WebSocket|sendBeacon)\s*\(\s*(['"`])?([^'"`,)]*)/g;
+    /**
+     * The other direction is the premise: *a step is what git did, a view is how
+     * you look at it.* The browser reads — the recording off the event stream, and
+     * one object's bytes on selection — and has nothing it can send. A second way
+     * out of `web/` would be a browser reaching for the repository, so the list is
+     * asserted whole rather than reviewed.
+     *
+     * Every way a page can reach the network is looked for, not just `fetch`, and
+     * each one has to name where it is going *as a literal*: a call whose URL is
+     * worked out at runtime is one this test cannot vouch for, so it fails as
+     * loudly as a new route would.
+     */
+    const REACHES_OUT =
+        /\b(fetch|EventSource|XMLHttpRequest|WebSocket|sendBeacon)\s*\(\s*(['"`])?([^'"`,)]*)/g;
 
-  it('gives the browser no way to change anything the server holds', () => {
-    const calls = webFiles.flatMap((f) =>
-      [...source(f).matchAll(REACHES_OUT)].map(
-        ([, what, quoted, where]) => `${f}: ${what} ${quoted ? where : '(not a literal)'}`,
-      ),
-    );
-    assert.deepEqual(calls.sort(), [
-      'web/app.ts: EventSource /events',
-      'web/inspector.ts: fetch /object?oid=${m.body.oid}',
-    ]);
-    for (const f of webFiles) {
-      // Both halves of a write: the verb, and any way of choosing one.
-      assert.ok(!/method\s*:/.test(source(f)), `${f} sets a request method, so it is sending something`);
-      assert.ok(!NO_COMPUTED_IMPORT.test(source(f)), `${f} imports something this test cannot follow`);
-    }
-  });
+    it('gives the browser no way to change anything the server holds', () => {
+        const calls = webFiles.flatMap((f) =>
+            [...source(f).matchAll(REACHES_OUT)].map(
+                ([, what, quoted, where]) => `${f}: ${what} ${quoted ? where : '(not a literal)'}`,
+            ),
+        );
+        assert.deepEqual(calls.sort(), [
+            'web/app.ts: EventSource /events',
+            'web/inspector.ts: fetch /object?oid=${m.body.oid}',
+        ]);
+        for (const f of webFiles) {
+            // Both halves of a write: the verb, and any way of choosing one.
+            assert.ok(
+                !/method\s*:/.test(source(f)),
+                `${f} sets a request method, so it is sending something`,
+            );
+            assert.ok(
+                !NO_COMPUTED_IMPORT.test(source(f)),
+                `${f} imports something this test cannot follow`,
+            );
+        }
+    });
 });
