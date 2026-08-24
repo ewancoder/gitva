@@ -78,14 +78,14 @@ test('both halves are drawn at once', () => {
 
     const bShape = byId.get(bBlob);
     assert.ok(bShape, 'the surviving blob is drawn');
-    assert.equal(bShape!.unreachable, true, 'as a ghost, never silently dropped');
+    assert.equal(bShape.unreachable, true, 'as a ghost, never silently dropped');
 
     // Staging is not a disappearing act: the blob `git add` wrote is still an
     // object, drawn solid, with the index entry that holds it wired to it.
     const aShape = byId.get(aBlob);
     assert.ok(aShape, 'the staged blob is drawn');
-    assert.ok(!aShape!.unreachable, 'solid, not a ghost — the index holds it');
-    assert.equal(aShape!.staged, true, 'and marked as held by the index alone');
+    assert.ok(!aShape.unreachable, 'solid, not a ghost — the index holds it');
+    assert.equal(aShape.staged, true, 'and marked as held by the index alone');
     assert.match(
         explain(reset, 'blob', aBlob).facts.find(([k]) => k === 'reachable')![1],
         /only through the index/,

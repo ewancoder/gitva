@@ -10,7 +10,7 @@ import { RECORDING_CAP, type Step } from '../src/types.js';
 
 /** The steps off an event stream, one frame at a time. `quietMs` ends it
  *  when nothing more arrives, which is how a test asserts that nothing did. */
-async function* stepsOf(res: Response, quietMs = 0) {
+async function* stepsOf(res: Response, quietMs = 0): AsyncGenerator<Step, void> {
     const reader = res.body!.getReader();
     let buf = '';
     try {
@@ -28,13 +28,20 @@ async function* stepsOf(res: Response, quietMs = 0) {
                 const data = frame.split('\ndata: ')[1];
                 // A connect hands over every step at once; the live tail is one at a
                 // time. Either way what a viewer wants is steps, in order.
-                if (frame.startsWith('event: steps\n')) yield* JSON.parse(data);
-                else if (frame.startsWith('event: step\n')) yield JSON.parse(data);
+                if (frame.startsWith('event: steps\n')) yield* JSON.parse(data) as Step[];
+                else if (frame.startsWith('event: step\n')) yield JSON.parse(data) as Step;
             }
         }
     } finally {
         await reader.cancel();
     }
+}
+
+/** The next step off a stream. A test that asks has already made one happen. */
+async function nextStep(stream: AsyncGenerator<Step, void>): Promise<Step> {
+    const { value } = await stream.next();
+    assert.ok(value, 'the stream ended before the step the test was waiting for');
+    return value;
 }
 
 /** Silence, as an end of stream. */
@@ -107,7 +114,7 @@ describe('the server', () => {
 
     it('pushes a whole step down the stream', async () => {
         const stream = stepsOf(await fetch(base + 'events'));
-        const step = (await stream.next()).value;
+        const step = await nextStep(stream);
         assert.equal(step.repo, repo.dir.split('/').pop());
         assert.ok(step.window.commits.length >= 3);
         await stream.return(undefined);
@@ -115,7 +122,7 @@ describe('the server', () => {
 
     it('reads one body only when asked, and checks the oid first', async () => {
         const a = repo.git('hash-object', 'a.txt');
-        const body = await (await fetch(`${base}object?oid=${a}`)).json();
+        const body = (await (await fetch(`${base}object?oid=${a}`)).json()) as { text: string };
         assert.equal(body.text, 'alpha\n');
         assert.equal((await fetch(`${base}object?oid=../../etc/passwd`)).status, 400);
     });
@@ -126,7 +133,7 @@ describe('the server', () => {
     it('numbers steps of the repository, and takes nothing from a browser', async () => {
         const res = await fetch(base + 'events');
         const stream = stepsOf(res);
-        const a = (await stream.next()).value;
+        const a = await nextStep(stream);
 
         for (const method of ['POST', 'GET']) {
             const said = await fetch(base + 'view', {
@@ -139,7 +146,7 @@ describe('the server', () => {
         // A new object is a step, and the only kind of thing that is.
         repo.write('e.txt', 'epsilon\n');
         repo.git('hash-object', '-w', 'e.txt');
-        const c = (await stream.next()).value;
+        const c = await nextStep(stream);
         assert.equal(c.seq, a.seq + 1);
         await stream.return(undefined);
     });
@@ -168,7 +175,7 @@ async function recordingFrame(port: number): Promise<{ id: string; learning: boo
         buf += new TextDecoder().decode(value);
     }
     await reader.cancel();
-    return JSON.parse(found[1]);
+    return JSON.parse(found[1]) as { id: string; learning: boolean };
 }
 
 describe('a repository that moves under the server', () => {
@@ -185,8 +192,9 @@ describe('a repository that moves under the server', () => {
         const first = ensureFirstStep(
             active,
             () => recorded,
-            async () => {
+            () => {
                 builds++;
+                return Promise.resolve();
             },
         );
         finish();
@@ -280,9 +288,7 @@ describe('a directory that is not a repository yet', () => {
                     GIT_CONFIG_SYSTEM: '/dev/null',
                 },
             });
-            const [s, same] = await Promise.all(
-                streams.map(async (stream) => (await stream.next()).value),
-            );
+            const [s, same] = await Promise.all(streams.map((stream) => nextStep(stream)));
             assert.equal(s.head.unborn, true);
             assert.deepEqual(s.refs, []);
             assert.equal(same.seq, s.seq);
@@ -298,9 +304,7 @@ describe('a directory that is not a repository yet', () => {
                 input: 'alpha\n',
                 encoding: 'utf8',
             }).trim();
-            const next = await Promise.all(
-                streams.map(async (stream) => (await stream.next()).value),
-            );
+            const next = await Promise.all(streams.map((stream) => nextStep(stream)));
             assert.ok(next.every((step) => step.seq === s.seq + 1 && step.objects[oid]));
             await Promise.all(streams.map((stream) => stream.return(undefined)));
         } finally {
@@ -341,7 +345,7 @@ describe('the steps everyone shares', () => {
     /** Steps reach the steps the way they reach the wire: already serialised. */
     const step = (seq: number, extra: Partial<Step> = {}) =>
         JSON.stringify(fakeStep({ seq, ...extra }));
-    const seqs = (steps: string[]) => steps.map((s) => JSON.parse(s).seq);
+    const seqs = (steps: string[]) => steps.map((s) => (JSON.parse(s) as Step).seq);
     /** A step of a repository big enough for the byte ceiling to be the one that bites. */
     const heavy = (seq: number, mb: number) => step(seq, { repo: 'x'.repeat(mb << 20) });
 
@@ -384,7 +388,7 @@ describe('the steps everyone shares', () => {
 
             const watching = stepsOf(await fetch(`http://127.0.0.1:${server.port}/events`));
             const seen: Step[] = [];
-            for (let i = 0; i < 3; i++) seen.push((await watching.next()).value);
+            for (let i = 0; i < 3; i++) seen.push(await nextStep(watching));
             assert.deepEqual(
                 seen.map((s) => s.seq),
                 [1, 2, 3],
@@ -407,7 +411,7 @@ describe('the steps everyone shares', () => {
         try {
             // Somebody has to be watching for the poller to be asking at all.
             const watching = stepsOf(await fetch(base + 'events'));
-            const start = (await watching.next()).value;
+            const start = await nextStep(watching);
             for (const name of ['e', 'f']) {
                 repo.write(`${name}.txt`, `${name}\n`);
                 repo.git('hash-object', '-w', `${name}.txt`);
@@ -416,7 +420,7 @@ describe('the steps everyone shares', () => {
 
             const late = stepsOf(await fetch(base + 'events'));
             const seen: Step[] = [];
-            for (let i = 0; i < 3; i++) seen.push((await late.next()).value);
+            for (let i = 0; i < 3; i++) seen.push(await nextStep(late));
             assert.deepEqual(
                 seen.map((s) => s.seq),
                 [start.seq, start.seq + 1, start.seq + 2],

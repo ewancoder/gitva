@@ -209,7 +209,7 @@ describe('starting up', () => {
     it('answers --help and --version without serving anything', async () => {
         const said: string[] = [];
         const write = process.stdout.write.bind(process.stdout);
-        process.stdout.write = ((s: string) => (said.push(s), true)) as typeof process.stdout.write;
+        process.stdout.write = (s: string) => (said.push(s), true);
         try {
             assert.equal(await main(['--help']), undefined);
             assert.equal(await main(['--version']), undefined);
@@ -228,10 +228,10 @@ describe('starting up', () => {
     it('closes the server on ctrl+c, and exits non-zero when it will not close', async () => {
         const codes: number[] = [];
         const said: string[] = [];
-        const exit = process.exit;
+        const exit = process.exit.bind(process);
         const write = process.stderr.write.bind(process.stderr);
         process.exit = ((code?: number) => void codes.push(code ?? 0)) as typeof process.exit;
-        process.stderr.write = ((s: string) => (said.push(s), true)) as typeof process.stderr.write;
+        process.stderr.write = (s: string) => (said.push(s), true);
         let closed = false;
         try {
             await stopServer({ port: 1, close: () => ((closed = true), Promise.resolve()) });

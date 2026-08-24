@@ -122,7 +122,7 @@ describe('the inspector on screen', () => {
             new Promise((resolve, reject) => {
                 asked.push({
                     oid: new URL(url, 'http://x/').searchParams.get('oid')!,
-                    answer: (body) => resolve({ json: async () => body } as Response),
+                    answer: (body) => resolve({ json: () => Promise.resolve(body) }),
                     fail: () => reject(new Error('no')),
                 });
             })) as unknown as typeof fetch;
@@ -227,7 +227,7 @@ describe('the inspector on screen', () => {
 
     it('shows a ref’s bytes without asking the server for anything', () => {
         const el = new El('aside');
-        globalThis.fetch = (() => assert.fail('a ref is not fetched')) as unknown as typeof fetch;
+        globalThis.fetch = () => assert.fail('a ref is not fetched');
         const s = fakeStep({
             refs: [{ name: 'refs/heads/main', oid: 'aaa', objectType: 'commit', packed: false }],
         });

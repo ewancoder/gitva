@@ -312,8 +312,8 @@ describe('degrading the documented way above a limit', () => {
 
     it('draws the index as the delta from HEAD, and counts the rest', () => {
         assert.ok(step.indexElided);
-        assert.equal(step.indexElided!.total, 4);
-        assert.ok(step.indexElided!.shown < step.indexElided!.total);
+        assert.equal(step.indexElided.total, 4);
+        assert.ok(step.indexElided.shown < step.indexElided.total);
         assert.ok(step.notes.includes('indexElided'));
     });
 

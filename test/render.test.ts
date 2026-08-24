@@ -249,13 +249,13 @@ describe('painting', () => {
     /** Every value the painter gave one style property, in order. */
     function painted(s: Scene, prop: 'strokeStyle' | 'font', over: Partial<Paint> = {}): string[] {
         const seen: string[] = [];
-        const ctx = new Proxy(
-            { measureText: (t: string) => ({ width: t.length * 7 }) } as Record<string, unknown>,
-            {
-                get: (t, k) => (k in t ? t[k as string] : () => {}),
-                set: (t, k, v) => (k === prop && seen.push(String(v)), (t[k as string] = v), true),
-            },
-        ) as unknown as CanvasRenderingContext2D;
+        const stub: Record<string, unknown> = {
+            measureText: (t: string) => ({ width: t.length * 7 }),
+        };
+        const ctx = new Proxy(stub, {
+            get: (t, k) => (k in t ? t[k as string] : () => {}),
+            set: (t, k, v) => (k === prop && seen.push(String(v)), (t[k as string] = v), true),
+        }) as unknown as CanvasRenderingContext2D;
         snapPositions();
         draw(ctx, s, { ...paint(), ...over });
         return seen;
@@ -317,13 +317,13 @@ describe('painting', () => {
     it("puts a tree entry's name on the link, unless the names are turned off", () => {
         const written = (over: Partial<Paint> = {}) => {
             const said: string[] = [];
-            const ctx = new Proxy(
-                {
-                    measureText: (t: string) => ({ width: t.length * 7 }),
-                    fillText: (t: string) => said.push(t),
-                } as Record<string, unknown>,
-                { get: (t, k) => (k in t ? t[k as string] : () => {}) },
-            ) as unknown as CanvasRenderingContext2D;
+            const stub: Record<string, unknown> = {
+                measureText: (t: string) => ({ width: t.length * 7 }),
+                fillText: (t: string) => said.push(t),
+            };
+            const ctx = new Proxy(stub, {
+                get: (t, k) => (k in t ? t[k as string] : () => {}),
+            }) as unknown as CanvasRenderingContext2D;
             snapPositions();
             draw(ctx, full, { ...paint(), ...over });
             return said;

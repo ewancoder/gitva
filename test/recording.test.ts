@@ -448,7 +448,8 @@ describe('the recording from before this browser arrived', () => {
         first.toggle(oid('a'));
 
         const reloaded = new Recording();
-        reloaded.answers = JSON.parse(JSON.stringify(first.answers)); // through localStorage
+        // through localStorage
+        reloaded.answers = JSON.parse(JSON.stringify(first.answers)) as typeof first.answers;
         reloaded.arrive(step(1, ['a']), SHUT, true);
         assert.ok(
             reloaded.view.expanded.includes(oid('a')),

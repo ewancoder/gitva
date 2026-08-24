@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import {
     FORMAT,
@@ -120,7 +120,7 @@ describe('keeping the recording', () => {
 
         // And what this version writes is what this version reads back.
         await saveRecording(file, { signal: 'a', steps: ['{"seq":1}'] });
-        assert.equal(JSON.parse(readFileSync(file, 'utf8')).format, FORMAT);
+        assert.equal((JSON.parse(readFileSync(file, 'utf8')) as { format: number }).format, FORMAT);
         assert.deepEqual(await loadRecording(file), { signal: 'a', steps: ['{"seq":1}'] });
     });
 
@@ -129,7 +129,10 @@ describe('keeping the recording', () => {
         await saveRecording(file, { signal: 'a', steps: ['{"seq":1}'] });
         await saveRecording(file, { signal: 'b', steps: ['{"seq":1}', '{"seq":2}'] });
         // No leftover half-file beside it, and the whole of the last write is there.
-        assert.equal(JSON.parse(readFileSync(file, 'utf8')).steps.length, 2);
+        assert.equal(
+            (JSON.parse(readFileSync(file, 'utf8')) as { steps: string[] }).steps.length,
+            2,
+        );
         assert.throws(() => readFileSync(`${file}.tmp`, 'utf8'));
     });
 
