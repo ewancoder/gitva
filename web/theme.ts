@@ -37,6 +37,12 @@ export const theme = {
     // staged is a state, like unreachable, and states never get a hue of their
     // own. Far from the accent, which stays reserved for "this just changed".
     staged: '#8f86e6',
+    // Not a fourth hue either: no hue at all, but the paper the other objects are
+    // printed on. A submodule is a commit this repository does not have, so it is
+    // drawn as an empty card — outlined, because a pale fill needs an edge to be
+    // a shape on a light ground. Like the three hues it does not move with the
+    // ground: what you recognise a kind by must not change under you.
+    submodule: '#e9ecf3',
 
     accent: '#ff5ea8',
 
@@ -123,6 +129,9 @@ const matrix: Partial<Theme> = {
     tree: '#54f07a',
     blob: '#54f07a',
     staged: '#9dffb8',
+    // Pale, like everywhere else: the label on an object is dark ink, so a fill
+    // it cannot be read on is not an option on any ground.
+    submodule: '#c6ffd4',
 
     accent: '#c9ff2e',
 
@@ -159,7 +168,9 @@ export const hueFor = (kind: string): string =>
           ? theme.tree
           : kind === 'blob'
             ? theme.blob
-            : theme.ink;
+            : kind === 'submodule'
+              ? theme.submodule
+              : theme.ink;
 
 /** Chip hue by what the pointer is. Ids are `ref:<full ref name>`. */
 export const chipHue = (kind: string, id: string): string =>

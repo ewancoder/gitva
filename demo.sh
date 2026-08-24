@@ -131,6 +131,11 @@ step "A nested directory — a tree inside a tree."
 run "mkdir -p lib; printf 'def f(): pass\n' > lib/f.py"
 run "git add lib/f.py; git commit -q -m 'add lib/f.py'"
 
+step "A submodule: mode 160000, an entry naming a commit that lives in another repository — never in this one."
+run "git init -q -b main sub; printf 'a library, versioned on its own\n' > sub/lib.txt; git -C sub add lib.txt; git -C sub commit -q -m 'the submodule repository'"
+run "printf '[submodule \"sub\"]\n\tpath = sub\n\turl = ./sub\n' > .gitmodules; git update-index --add --cacheinfo 160000,\$(git -C sub rev-parse HEAD),sub; git add .gitmodules"
+run "git commit -q -m 'add sub as a submodule'"
+
 step "Change one file: a new commit, a new tree, and the untouched blobs shared with the parent."
 run "printf 'alpha, revised\n' > a.txt"
 run "git add a.txt; git commit -q -m 'revise alpha'"

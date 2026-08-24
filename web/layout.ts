@@ -236,6 +236,16 @@ export function layout(
     const heldBack = (oid: Oid) => S.canvas.heldBack(step.trees[oid]?.length ?? 0);
     const unreachable = new Set(step.unreachable ?? []);
     const stagedOnly = new Set(step.stagedOnly ?? []);
+    /** A submodule's commit is in another repository, so `step.objects` will never
+     *  hold it. The entry that names it — mode 160000 — is the only thing that
+     *  knows what it is. */
+    const gitlinks = new Set(
+        Object.values(step.trees).flatMap((es) =>
+            es.filter((e) => e.type === 'commit').map((e) => e.oid),
+        ),
+    );
+    const typeOf = (oid: Oid, trees: Record<Oid, unknown>) =>
+        gitlinks.has(oid) ? 'commit' : (step.objects[oid]?.type ?? (trees[oid] ? 'tree' : 'blob'));
 
     // A column can be widened by hand — dragging the gap after it — when the
     // you want room to arrange pinned shapes. Never narrower than its content:
@@ -442,7 +452,7 @@ export function layout(
         g.levels.forEach((col, d) => {
             col.forEach((oid, i) => {
                 if (at.has(oid)) return; // placed once, near the things that point at it
-                const type = step.objects[oid]?.type ?? (step.trees[oid] ? 'tree' : 'blob');
+                const type = typeOf(oid, step.trees);
                 put({
                     id: oid,
                     kind: type === 'tree' ? 'tree' : type === 'commit' ? 'submodule' : 'blob',
@@ -452,7 +462,7 @@ export function layout(
                     w: M.objW,
                     h: M.objH,
                     label: short(oid),
-                    sub: type !== 'tree' ? 'blob' : collapsed.has(oid) ? heldBack(oid) : 'tree',
+                    sub: type === 'tree' && collapsed.has(oid) ? heldBack(oid) : type,
                     collapsed: type === 'tree' && collapsed.has(oid),
                     unreachable: unreachable.has(oid),
                     origin: d === 0 ? row.oid : undefined,
@@ -545,7 +555,7 @@ export function layout(
             g.levels.forEach((col, d) => {
                 col.forEach((oid, i) => {
                     if (at.has(oid)) return;
-                    const type = step.objects[oid]?.type ?? (strayTrees[oid] ? 'tree' : 'blob');
+                    const type = typeOf(oid, strayTrees);
                     const n = put({
                         id: oid,
                         kind: type === 'tree' ? 'tree' : type === 'commit' ? 'submodule' : 'blob',

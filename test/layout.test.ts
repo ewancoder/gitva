@@ -608,6 +608,20 @@ describe('the scene', () => {
         assert.ok(chip.y <= shape(blob).y, 'and the chip holding it comes up beside it');
     });
 
+    it('draws a submodule as a submodule, not a blob', () => {
+        // The whole point of a gitlink: mode 160000 names a commit this object
+        // database does not have, so `step.objects` can never say what it is and
+        // the entry naming it is the only thing that knows.
+        const s = fakeCommits({ a: [] });
+        const sub = oid('sub');
+        s.trees[oid('ta')] = [{ mode: '160000', name: 'sub', oid: sub, type: 'commit' }];
+
+        const scene = layout(s, { ...DEFAULT_VIEW, expanded: [oid('a')] });
+        const shape = scene.shapes.find((n) => n.id === sub)!;
+        assert.equal(shape.kind, 'submodule');
+        assert.equal(shape.sub, 'commit', "git's own word for it, out of ls-tree");
+    });
+
     it('leaves a staged tree below, where its fan-out has room', () => {
         // Only a gitlink can put a tree in the index's reach, and a tree is a row
         // of its own — the top of the page is for the loose blobs `git add` writes.

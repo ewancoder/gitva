@@ -26,6 +26,8 @@
         --tree: #54bf85;
         --blob: #5aa7ea;
         --staged: #8f86e6;
+        /* No hue, and it stays put on a light ground: see web/theme.ts. */
+        --submodule: #e9ecf3;
         --accent: #ff5ea8;
         --hover: #2b3140;
         --danger: #f2685e;
@@ -59,6 +61,7 @@
         --tree: #54f07a;
         --blob: #54f07a;
         --staged: #9dffb8;
+        --submodule: #c6ffd4;
         --accent: #c9ff2e;
         --hover: #0a3317;
         --danger: #b6ff2e;
@@ -224,6 +227,7 @@
       .swatch.tree { background: var(--tree); clip-path: polygon(30% 0, 100% 0, 100% 100%, 30% 100%, 0 70%, 0 30%); }
       .swatch.blob { border-radius: 8px; background: var(--blob); }
       .swatch.staged { border-radius: 8px; background: var(--staged); }
+      .swatch.submodule { background: var(--submodule); border: 1px solid var(--muted); border-radius: var(--r); }
       .swatch.ref { border: 1px solid var(--muted); border-radius: var(--r); }
       .swatch.tag { border: 1px solid var(--muted); clip-path: polygon(0 50%, 35% 0, 100% 0, 100% 100%, 35% 100%); }
       .swatch.index { border: 1px dashed var(--muted); border-radius: var(--r); }
@@ -319,6 +323,7 @@
         <span><span class="swatch tree"></span><span data-t="help.legend.tree"></span></span>
         <span><span class="swatch blob"></span><span data-t="help.legend.blob"></span></span>
         <span><span class="swatch staged"></span><span data-t="help.legend.staged"></span></span>
+        <span><span class="swatch submodule"></span><span data-t="help.legend.submodule"></span></span>
         <span><span class="swatch ref"></span><span data-t="help.legend.ref"></span></span>
         <span><span class="swatch tag"></span><span data-t="help.legend.tag"></span></span>
         <span><span class="swatch index"></span><span data-t="help.legend.index"></span></span>

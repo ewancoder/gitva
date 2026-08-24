@@ -26,7 +26,7 @@ const bytes = (n: number) =>
 
 /** Everything the inspector says about one selected shape. */
 export function explain(step: Step, kind: string, id: string): Explanation {
-    const base = explainKind(kind);
+    let base = explainKind(kind);
     const F = S.inspector.fields;
     const V = S.inspector.values;
     const facts: [string, string][] = [];
@@ -87,10 +87,13 @@ export function explain(step: Step, kind: string, id: string): Explanation {
             facts.push([F.resolvesTo, step.head.oid ?? '']);
         }
     } else if (kind === 'index') {
-        const e = step.index.find((x) => entryId(x.path, x.stage) === id);
+        const e = indexEntry(step, id);
         if (e) {
+            // A gitlink is the one entry that stages something this database does
+            // not have — so it is taught as what it is, and its sha is a commit's.
+            if (isGitlink(e)) base = explainKind('indexSubmodule');
             facts.push([F.path, e.path]);
-            facts.push([F.blob, e.oid]);
+            facts.push([isGitlink(e) ? F.commit : F.blob, e.oid]);
             facts.push([F.mode, e.mode]);
             if (e.stage !== 0) facts.push([F.stage, V.conflictStage(e.stage)]);
         }
@@ -100,6 +103,13 @@ export function explain(step: Step, kind: string, id: string): Explanation {
 }
 
 export const entryId = (path: string, stage: number) => `index:${stage}:${path}`;
+
+/** The entry a scene shape in the index column stands for. */
+export const indexEntry = (step: Step, id: string) =>
+    step.index.find((x) => entryId(x.path, x.stage) === id);
+
+/** Mode 160000: a submodule's commit, which lives in another repository. */
+export const isGitlink = (e?: { mode: string }) => e?.mode === '160000';
 
 /** Scene shapes for refs are keyed `ref:<full name>`; the lookups want the name. */
 export const refName = (id: string) => id.replace(/^ref:/, '');

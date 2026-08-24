@@ -128,6 +128,18 @@ describe('hues', () => {
         ]);
     });
 
+    it('keeps a submodule off the ink, which is the one colour that turns over', () => {
+        // Drawn as ink it was a white card on the dark ground and a black one on
+        // the light, where the label — always dark, like every object's — went
+        // with it. Its own colour, and not in the light palette, so it stays put.
+        for (const mode of ['dark', 'light'] as const) {
+            setTheme(mode);
+            assert.equal(hueFor('submodule'), '#e9ecf3');
+            assert.notEqual(hueFor('submodule'), theme.ink);
+        }
+        setTheme('dark');
+    });
+
     it('tells the kinds of pointer apart by their outline', () => {
         assert.equal(chipHue('head', 'HEAD'), theme.head);
         assert.equal(chipHue('tag', 'g1'), theme.tagObject);

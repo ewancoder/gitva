@@ -7,7 +7,7 @@
  * only turns that into elements and asks the server for the body.
  */
 
-import { explain, refName } from './explain.js';
+import { explain, indexEntry, isGitlink, refName } from './explain.js';
 import { S } from './localization/index.js';
 import type { Oid, Step } from '../src/types.js';
 import type { Shape } from './layout.js';
@@ -37,13 +37,16 @@ export function inspectorModel(step: Step, shape: Shape): InspectorModel {
             : shape.kind === 'head'
               ? headFile(step)
               : null;
+    // A gitlink entry stages a commit that lives in another repository, so there
+    // are no bytes here to read out — the same reason a submodule shape has none.
+    const gitlink = shape.kind === 'index' && isGitlink(indexEntry(step, shape.id));
     return {
         ...e,
         raw,
         // A commit is an object like any other: the parsed facts are above, the
         // body is what git actually stored.
         body:
-            raw === null && shape.oid && READABLE.includes(shape.kind)
+            raw === null && !gitlink && shape.oid && READABLE.includes(shape.kind)
                 ? { oid: shape.oid, heading: headingFor(shape.kind) }
                 : null,
     };

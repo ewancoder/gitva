@@ -30,6 +30,26 @@ describe('what to read out', () => {
         assert.deepEqual(headings, ['contents', 'entries', 'raw object', 'raw object', 'contents']);
     });
 
+    it('asks for nothing on a submodule index entry — that commit is not in this database', () => {
+        // The gitlink is the one index entry whose sha names something this
+        // repository does not have, so a fetch could only ever fail.
+        const staged = fakeStep({
+            index: [{ path: 'sub', oid: 'c9', mode: '160000', stage: 0 }],
+        });
+        const m = inspectorModel(staged, shape({ kind: 'index', id: 'index:0:sub', oid: 'c9' }));
+        assert.equal(m.title, 'Submodule entry');
+        assert.equal(m.body, null);
+        assert.deepEqual(
+            m.facts,
+            [
+                ['path', 'sub'],
+                ['commit', 'c9'],
+                ['mode', '160000'],
+            ],
+            'and its sha is a commit, not a blob',
+        );
+    });
+
     it('explains a submodule as the commit it is, in another repository', () => {
         const m = inspectorModel(step, shape({ kind: 'submodule', id: 'c1' }));
         assert.equal(m.title, 'Commit');

@@ -422,6 +422,13 @@ function drawShape(ctx: CanvasRenderingContext2D, shape: Shape, p: Paint, lit: S
     ) {
         ctx.fillStyle = hue;
         ctx.fill();
+        // The one object fill that carries no hue, so on a light ground it is
+        // nearly the ground: it needs an edge to be a shape at all.
+        if (shape.kind === 'submodule') {
+            ctx.strokeStyle = theme.muted;
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+        }
     } else {
         ctx.fillStyle = theme.raised;
         ctx.fill();
