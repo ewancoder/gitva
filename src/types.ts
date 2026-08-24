@@ -134,7 +134,7 @@ export const RECORDING_CAP = 400;
 
 /** How many commits a step carries. Fixed for the run: a step holds everything
  *  a view could want to draw, so there is nothing for a browser to page in. */
-export const COMMIT_WINDOW = 120;
+export const COMMIT_WINDOW = 1000;
 
 export const DEFAULT_VIEW: View = {
     expanded: [],
