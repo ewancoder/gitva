@@ -1,5 +1,6 @@
 /**
- * The client: one view, one recording, one camera.
+ * The page: the toolbars, the inspector, the stream of steps — everything
+ * around the canvas.
  *
  * It only ever reads. Every way the user can change what is on screen is a
  * change to the view, which lives here and goes nowhere: the server is told
@@ -8,37 +9,24 @@
  * redone — and once the recording has arrived, a lost connection costs nothing
  * but the next step.
  *
- * What is left here is DOM: elements, events and painting. Every decision the
- * gestures make is in `recording.ts` and `camera.ts`, where it is tested.
+ * The canvas itself is `canvas.ts`, mounted here and published as
+ * `gitva/canvas`: the object graph, the camera and every gesture on it, so a
+ * page that is not this one can draw the same steps. What is left here is the
+ * page around it. Every decision the gestures make is in `recording.ts` and
+ * `camera.ts`, where it is tested.
  */
 
-import { diffScenes, isVisible, describe, EMPTY_CHANGE, type Change } from './diff.js';
-import { layout, M, type Scene, type Shape } from './layout.js';
+import { describe } from './diff.js';
 import { language, LANGUAGES, S, setLanguage } from './localization/index.js';
 import type { Step } from '../src/types.js';
-import {
-    bounded,
-    centre,
-    fit,
-    glideStep,
-    refit,
-    toCanvas,
-    zoom,
-    zoomOut,
-    type Camera,
-} from './camera.js';
+import { mount, type CanvasSettings } from './canvas.js';
 import { renderInspector } from './inspector.js';
-import { columnEdgeAt, draw, hitTest, snapPositions } from './render.js';
-import { isDouble, Pins, Recording, type Click } from './recording.js';
 import { type Mode, setTheme, theme } from './theme.js';
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-const canvas = $<HTMLCanvasElement>('canvas');
-const ctx = canvas.getContext('2d')!;
 const inspector = $('inspector');
-const viewport = () => ({ width: canvas.clientWidth, height: canvas.clientHeight });
 
 /** Copy a sha and say so briefly; a clipboard the browser refuses is not worth
  *  a dialog. `said` is what to show having copied it: a sha is shown short, and
@@ -62,7 +50,9 @@ function copied(oid: string, said = oid.slice(0, 7)) {
 const kept = <T>(key: string, empty: string): T =>
     JSON.parse(localStorage.getItem(key) ?? empty) as T;
 
-// --- settings: about how you like to work, not about this session
+// --- settings: about how you like to work, not about this session. The ones
+// about the canvas are the canvas's own (`CanvasSettings`), kept in the same
+// place: they are one answer to "how do you like to work", not two.
 interface Settings {
     language: string;
     showIndex: boolean;
@@ -70,29 +60,30 @@ interface Settings {
     /** `null` until you have said: `--learning` puts the links from unreachable
      *  up before anyone asks, and must not keep overruling an answer you gave. */
     showLinksFromUnreachable: boolean | null;
-    centreOnClick: boolean;
-    expandNewCommits: boolean;
-    refitOnChange: boolean;
-    showPins: boolean;
-    showNames: boolean;
     theme: Mode;
     inspectorWidth: number;
 }
-const settings: Settings = {
+const keptSettings = kept<Partial<Settings & CanvasSettings>>('gitva.settings', '{}');
+const DEFAULTS: Settings = {
     language: 'en',
     showIndex: true,
     showUnreachable: true,
     showLinksFromUnreachable: null,
-    centreOnClick: false,
-    expandNewCommits: true,
-    refitOnChange: true,
-    showPins: false,
-    showNames: true,
     theme: 'dark',
     inspectorWidth: 430,
-    ...kept<Partial<Settings>>('gitva.settings', '{}'),
 };
-const saveSettings = () => localStorage.setItem('gitva.settings', JSON.stringify(settings));
+// This file's own keys off what was kept, and no others: the rest of that object
+// is the canvas's, and each half is only ever written back from the one that
+// owns it. Both halves taking the whole is how a setting toggled after a reload
+// used to be overwritten by the copy the page loaded with.
+const settings: Settings = {
+    ...DEFAULTS,
+    ...(Object.fromEntries(
+        Object.entries(keptSettings).filter(([key]) => key in DEFAULTS),
+    ) as Partial<Settings>),
+};
+const saveSettings = () =>
+    localStorage.setItem('gitva.settings', JSON.stringify({ ...canvas.settings, ...settings }));
 
 // --- the ground. Yours, like the language: a setting in this browser,
 // never posted, so nobody else's canvas turns white when yours does. Chosen
@@ -154,7 +145,7 @@ themeBtn.addEventListener('click', () => {
     } else settings.theme = settings.theme === 'light' ? 'dark' : 'light';
     saveSettings();
     applyTheme();
-    schedule();
+    canvas.schedule();
 });
 applyTheme();
 
@@ -209,188 +200,106 @@ async function chooseLanguage(code: string) {
     applyWords();
     showConnection(source.readyState !== 2);
     updateToolbars();
-    renderInspector(
-        inspector,
-        recording.current,
-        scene?.shapes.find((n) => n.id === selected) ?? null,
-    );
+    renderInspector(inspector, recording.current, canvas.shape(canvas.selected));
     showChange(recording.current ? describe(shownFrom, recording.current) : '');
-    relayout(false, false);
+    canvas.redraw(false);
 }
 
-// --- the recording: every step seen, where you stand in it, and the view you ask
-// with. It owns all three, so nothing here keeps a second copy to drift.
-const recording = new Recording();
+// --- the canvas: the object graph, the camera, and every gesture on it. It
+// owns the recording, the pins, the marks and the widths; nothing here keeps a
+// second copy to drift, and everything below is the page around it.
+const canvas = mount($<HTMLCanvasElement>('canvas'), {
+    settings: keptSettings,
+    view: {
+        showIndex: settings.showIndex,
+        showUnreachable: settings.showUnreachable,
+        ...(settings.showLinksFromUnreachable !== null
+            ? { showLinksFromUnreachable: settings.showLinksFromUnreachable }
+            : {}),
+        // `collapsed` is this browser's and nobody else's — a tree it shut before
+        // a reload is still shut, the same way a commit it collapsed is.
+        collapsed: kept('gitva.collapsed', '[]'),
+    },
+    onSelect: (shape) => {
+        if (shape) localStorage.setItem('gitva.selected', shape.id);
+        else localStorage.removeItem('gitva.selected');
+        renderInspector(inspector, recording.current, shape);
+        // Anything with a sha is a key in the key-value store, so a click hands
+        // you the key: the whole point is that you can paste it into the next
+        // command.
+        if (shape?.oid) copied(shape.oid);
+    },
+    onChange: (what) => {
+        if (what === 'view') persistView();
+        else if (what === 'pins') savePins();
+        else if (what === 'marks') saveMarks();
+        else saveColumns();
+    },
+});
+const recording = canvas.recording;
 // Which commits you have opened and collapsed is an answer you gave, so
 // it outlives the page the way the settings do — and a tree you shut is the
 // same answer about a different kind of shape.
 // ponytail: one key for the origin, so two repositories served on the same
 // port share it — harmless, the shas of one are never the shas of the other.
 recording.answers = kept('gitva.answers', '{}');
-recording.view = {
-    ...recording.view,
-    showIndex: settings.showIndex,
-    showUnreachable: settings.showUnreachable,
-    showLinksFromUnreachable:
-        settings.showLinksFromUnreachable ?? recording.view.showLinksFromUnreachable,
-    collapsed: kept('gitva.collapsed', '[]'),
-};
 const saveAnswers = () => {
     localStorage.setItem('gitva.answers', JSON.stringify(recording.answers));
     localStorage.setItem('gitva.collapsed', JSON.stringify(recording.view.collapsed ?? []));
 };
-const pins = new Pins();
 // Where you dragged something is the same kind of answer as a collapse: yours, and
 // no reason for a reload to undo it. Same one key per origin.
-pins.restore(kept('gitva.pins', '[]'));
-const savePins = () => localStorage.setItem('gitva.pins', JSON.stringify(pins.all));
+canvas.pins.restore(kept('gitva.pins', '[]'));
+const savePins = () => localStorage.setItem('gitva.pins', JSON.stringify(canvas.pins.all));
 // How wide you have dragged each column. A hand-set width, like a pin, so
 // it outlives the page — and like the collapses, one key for the origin.
-const columnWidths = kept<Record<string, number>>('gitva.columns', '{}');
-const saveColumns = () => localStorage.setItem('gitva.columns', JSON.stringify(columnWidths));
+Object.assign(canvas.columnWidths, kept<Record<string, number>>('gitva.columns', '{}'));
+const saveColumns = () =>
+    localStorage.setItem('gitva.columns', JSON.stringify(canvas.columnWidths));
+// A mark is an answer you gave, like a pin, so it comes back across a reload.
+for (const id of kept<string[]>('gitva.marks', '[]')) canvas.marked.add(id);
+const saveMarks = () => localStorage.setItem('gitva.marks', JSON.stringify([...canvas.marked]));
+canvas.selected = localStorage.getItem('gitva.selected');
 
-// --- what is on screen
-let scene: Scene | null = null;
-let leaving: Shape[] = [];
-let change: Change = EMPTY_CHANGE;
-let flashAt = -1e9;
-let enterAt = -1e9;
-// A shape you removed yourself is gone the moment you asked; one git removed has
-// to be seen going, or the lesson leaves the screen before you read it.
-let exitMs = theme.duration;
-let camera: Camera = { x: 24, y: 24, scale: 1 };
-let hover: string | null = null;
-let selected: string | null = localStorage.getItem('gitva.selected');
 /** The step the change line was worked out from, so it can be said again in
  *  another language without the recording moving. */
 let shownFrom: Step | null = null;
-/** The last click, waiting to see whether a second one joins it. */
-let lastClick: Click | null = null;
-
-/** Objects marked by right-click, kept by sha until right-clicked again — and
- *  across a reload, because a mark is an answer you gave, like a pin. */
-const marked = new Set<string>(kept<string[]>('gitva.marks', '[]'));
-const saveMarks = () => localStorage.setItem('gitva.marks', JSON.stringify([...marked]));
-
-// ---------------------------------------------------------------------------
-// Painting on demand — sitting still costs no CPU at all
-// ---------------------------------------------------------------------------
-
-let running = false;
-function schedule() {
-    if (running) return;
-    running = true;
-    requestAnimationFrame(paint);
-}
-
-function paint() {
-    running = false;
-    if (!scene) return;
-    const now = performance.now();
-    const flash = reduceMotion ? 0 : Math.max(0, 1 - (now - flashAt) / 5000);
-    const enter = reduceMotion ? 1 : Math.min(1, (now - enterAt) / theme.duration);
-    const exit = reduceMotion ? 1 : Math.min(1, (now - enterAt) / exitMs);
-    if (glide) {
-        const step = glideStep(camera, glide, reduceMotion ? 1 : 0.22);
-        camera = step.camera;
-        if (step.done) glide = null;
-    }
-    const settling = draw(ctx, scene, {
-        camera,
-        width: canvas.clientWidth,
-        height: canvas.clientHeight,
-        dpr: devicePixelRatio,
-        change,
-        flash,
-        hover,
-        selected,
-        marked,
-        showPins: settings.showPins,
-        showNames: settings.showNames,
-        enter,
-        leaving,
-        exit,
-        motion: !reduceMotion,
-        resizing: hoverEdge,
-    });
-    if (flash > 0 || enter < 1 || exit < 1 || settling || glide) schedule();
-}
-
-/** Where wheel panning is heading. Every other camera move is direct, and
- *  cancels it. */
-let glide: { x: number; y: number } | null = null;
-
-function relayout(animate: boolean, repoChanged: boolean) {
-    // Every tree the recording has ever read, not only the ones this step came with:
-    // a commit opened now has to draw open on a step recorded before it was.
-    const step = recording.shown;
-    if (!step) return;
-    const next = layout(step, recording.view, pins.at(step.seq), columnWidths);
-    // Losing your last link is the lesson — being teleported to the bottom of the
-    // page is not. An object whose relations changed used to be pinned where it
-    // already was, which froze it there for good: everything else went on
-    // reflowing underneath, and the pile-up was the pins, not the layout. It
-    // travels instead — see `snapPositions`. Dragging is the one move that must
-    // not lag the cursor, so it snaps.
-    if (!animate) snapPositions();
-    const fresh = diffScenes(scene, next);
-    const same = scene !== null && !isVisible(fresh);
-    const going = scene ? scene.shapes.filter((n) => fresh.removed.has(n.id)) : [];
-    scene = next;
-    // A step that draws the same shapes leaves the flash and any fade alone.
-    if (same) return schedule();
-    change = fresh;
-    leaving = going;
-    if (animate) {
-        enterAt = performance.now();
-        exitMs = repoChanged ? 2500 : theme.duration;
-        // The one reserved accent, spent on nothing but "this just changed".
-        if (repoChanged) flashAt = performance.now();
-    } else {
-        enterAt = -1e9;
-    }
-    schedule();
-}
 
 // ---------------------------------------------------------------------------
 // The recording
 // ---------------------------------------------------------------------------
 
-/** The recording moved: draw where it stands now, having come from `prev`. */
-function showStep(prev: Step | null) {
+/** The recording moved: say where it stands now, having come from `prev`.
+ *  `drawn` is a step the canvas has already painted — `show` does that itself,
+ *  because a step arriving is the one move the canvas makes on its own. */
+function showStep(prev: Step | null, drawn = false) {
     shownFrom = prev;
     const changed = describe(prev, recording.current!);
     showChange(prev ? changed : S.change.first);
-    relayout(true, prev !== null && changed !== S.change.none);
+    if (!drawn) canvas.redraw(true, prev !== null && changed !== S.change.none);
     redressed();
 }
 
 /** Same step, drawn again — an expand, a toggle, a widened column. */
 function redressed() {
     updateToolbars();
-    if (selected) {
-        renderInspector(
-            inspector,
-            recording.current,
-            scene?.shapes.find((n) => n.id === selected) ?? null,
-        );
-    }
+    if (canvas.selected)
+        renderInspector(inspector, recording.current, canvas.shape(canvas.selected));
 }
 
 // ---------------------------------------------------------------------------
 // Listening to the server
 // ---------------------------------------------------------------------------
 
-/** The view changed: write down the part of it that outlives the page, and
- *  draw again. Nothing is sent anywhere — the step on screen already holds
+/** The view changed: write down the part of it that outlives the page, and say
+ *  it again. Nothing is sent anywhere — the step on screen already holds
  *  everything the new view needs, which is what keeps the view yours. */
-function viewChanged() {
+function persistView() {
     settings.showIndex = recording.view.showIndex;
     settings.showUnreachable = recording.view.showUnreachable !== false;
     settings.showLinksFromUnreachable = recording.view.showLinksFromUnreachable === true;
     saveSettings();
     saveAnswers();
-    relayout(true, false);
     updateToolbars();
 }
 
@@ -404,29 +313,17 @@ const source = new EventSource('/events');
 source.addEventListener('steps', (e) => {
     showConnection(true);
     const steps = JSON.parse(e.data as string) as Step[];
-    for (const s of steps) recording.arrive(s, settings, true);
+    for (const s of steps) canvas.show(s, true);
     showStep(null);
-    if (scene) {
-        camera = fit(scene, canvas.clientWidth);
-        glide = null;
-        schedule();
-    }
+    canvas.fitCamera();
 });
 
 source.addEventListener('step', (e) => {
     showConnection(true);
     const s = JSON.parse(e.data as string) as Step;
-    const a = recording.arrive(s, settings);
-    if (a.kind === 'shown') {
-        showStep(a.prev);
-        // The first step frames the object graph; after that only if asked to, because
-        // history arriving is what makes the object graph outgrow the canvas.
-        if (scene && (a.first || settings.refitOnChange)) {
-            camera = a.first ? fit(scene, canvas.clientWidth) : refit(scene, viewport(), camera);
-            glide = null;
-            schedule();
-        }
-    } else updateToolbars();
+    const a = canvas.show(s);
+    if (a.kind === 'shown') showStep(a.prev, true);
+    else updateToolbars();
 });
 /** Which recording this is, and whether the presenter asked for every commit
  *  expanded — both facts about the run, told once per connection. A click hands
@@ -470,7 +367,7 @@ function updateToolbars() {
     // The path is a tooltip now: the view toolbar's machine text is the identifier the
     // recording is filed under, which is the thing worth copying.
     $('repo-name').title = step.gitDir;
-    $('tally').textContent = recording.tally(scene?.shapes.length ?? 0);
+    $('tally').textContent = recording.tally(canvas.drawn?.shapes.length ?? 0);
 
     const list = $('notes-list');
     list.replaceChildren();
@@ -505,278 +402,85 @@ function showChange(text: string) {
 }
 
 $('toggle-index').addEventListener('click', () => {
-    recording.view = { ...recording.view, showIndex: !recording.view.showIndex };
-    viewChanged();
+    canvas.setView({ showIndex: !recording.view.showIndex });
 });
 $('toggle-unreachable').addEventListener('click', () => {
-    recording.view = {
-        ...recording.view,
-        showUnreachable: recording.view.showUnreachable === false,
-    };
-    viewChanged();
+    canvas.setView({ showUnreachable: recording.view.showUnreachable === false });
 });
 $('toggle-links-from-unreachable').addEventListener('click', () => {
-    recording.view = {
-        ...recording.view,
-        showLinksFromUnreachable: !recording.view.showLinksFromUnreachable,
-    };
-    viewChanged();
+    canvas.setView({ showLinksFromUnreachable: !recording.view.showLinksFromUnreachable });
 });
 // The names on a tree's links are painting, not a question for the server: it
 // is a setting, so turning them off is nobody else's business.
 const namesBtn = $('toggle-names');
 const showNames = () => {
-    namesBtn.setAttribute('aria-pressed', String(settings.showNames));
-    schedule();
+    namesBtn.setAttribute('aria-pressed', String(canvas.settings.showNames));
+    canvas.schedule();
 };
 showNames();
 namesBtn.addEventListener('click', () => {
-    settings.showNames = !settings.showNames;
+    canvas.settings.showNames = !canvas.settings.showNames;
     saveSettings();
     showNames();
 });
-$('expand-all').addEventListener('click', () => {
-    recording.expandAll();
-    viewChanged();
-});
-$('collapse-all').addEventListener('click', () => {
-    recording.collapseAll();
-    viewChanged();
-});
+$('expand-all').addEventListener('click', () => canvas.expandAll());
+$('collapse-all').addEventListener('click', () => canvas.collapseAll());
 // Dropping every pin, at every moment of the recording: a pin is a thing you put
 // there by hand, so taking them all back is one gesture, not a page reload.
 // A widened column is the same kind of thing, and goes back with them.
-$('unpin').addEventListener('click', () => {
-    pins.clear();
-    savePins();
-    for (const k of Object.keys(columnWidths)) delete columnWidths[k];
-    saveColumns();
-    relayout(true, false);
-});
+$('unpin').addEventListener('click', () => canvas.resetView());
 $('help-btn').addEventListener('click', () => $<HTMLDialogElement>('help').showModal());
 $('settings-btn').addEventListener('click', () => $<HTMLDialogElement>('settings').showModal());
 const centreBox = $<HTMLInputElement>('centre-on-click');
-centreBox.checked = settings.centreOnClick;
+centreBox.checked = canvas.settings.centreOnClick;
 centreBox.addEventListener('change', () => {
-    settings.centreOnClick = centreBox.checked;
+    canvas.settings.centreOnClick = centreBox.checked;
     saveSettings();
 });
 const expandNew = $<HTMLInputElement>('expand-new-commits');
-expandNew.checked = settings.expandNewCommits;
+expandNew.checked = canvas.settings.expandNewCommits;
 expandNew.addEventListener('change', () => {
-    settings.expandNewCommits = expandNew.checked;
+    canvas.settings.expandNewCommits = expandNew.checked;
     saveSettings();
 });
 const pinBox = $<HTMLInputElement>('show-pins');
-pinBox.checked = settings.showPins;
+pinBox.checked = canvas.settings.showPins;
 pinBox.addEventListener('change', () => {
-    settings.showPins = pinBox.checked;
+    canvas.settings.showPins = pinBox.checked;
     saveSettings();
-    schedule();
+    canvas.schedule();
 });
 const refitBox = $<HTMLInputElement>('refit-on-change');
-refitBox.checked = settings.refitOnChange;
+refitBox.checked = canvas.settings.refitOnChange;
 refitBox.addEventListener('change', () => {
-    settings.refitOnChange = refitBox.checked;
+    canvas.settings.refitOnChange = refitBox.checked;
     saveSettings();
 });
 $('play').addEventListener('click', () => {
     if (recording.following) {
         recording.following = false;
         updateToolbars();
-    } else moved(recording.goLive());
+    } else moved(canvas.live());
 });
-$('step-back').addEventListener('click', () => moved(recording.step(-1)));
-$('step-fwd').addEventListener('click', () => moved(recording.step(1)));
+$('step-back').addEventListener('click', () => moved(canvas.step(-1)));
+$('step-fwd').addEventListener('click', () => moved(canvas.step(1)));
 $('scrub').addEventListener('input', () => {
-    moved(recording.scrubTo(Number($<HTMLInputElement>('scrub').value)));
+    moved(canvas.scrubTo(Number($<HTMLInputElement>('scrub').value)));
 });
 
-const moved = (j: { prev: Step | null } | null) => (j ? showStep(j.prev) : updateToolbars());
+/** The canvas has drawn wherever it landed; what is left is saying so. */
+const moved = (j: { prev: Step | null } | null) => (j ? showStep(j.prev, true) : updateToolbars());
 
 addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-    if (e.key === 'f' && scene) {
-        camera = fit(scene, canvas.clientWidth);
-        glide = null;
-        schedule();
-    } else if (e.key === '[' || e.key === 'ArrowLeft') moved(recording.step(-1));
-    else if (e.key === ']' || e.key === 'ArrowRight') moved(recording.step(1));
+    if (e.key === 'f') canvas.fitCamera();
+    else if (e.key === '[' || e.key === 'ArrowLeft') moved(canvas.step(-1));
+    else if (e.key === ']' || e.key === 'ArrowRight') moved(canvas.step(1));
     else if (e.key === ' ') {
         e.preventDefault();
         $('play').click();
     } else if (e.key === 'i') $('toggle-index').click();
 });
-
-// ---------------------------------------------------------------------------
-// The camera and the mouse
-// ---------------------------------------------------------------------------
-
-const canvasAt = (ev: { clientX: number; clientY: number }) =>
-    toCanvas(camera, ev, canvas.getBoundingClientRect());
-
-let drag: {
-    id: string | null;
-    x: number;
-    y: number;
-    moved: boolean;
-    dx: number;
-    dy: number;
-} | null = null;
-/** The column edge under the pointer, or the one being dragged. */
-let hoverEdge: string | null = null;
-let resize: { key: string; column: { x: number; w: number } } | null = null;
-
-canvas.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;
-    glide = null;
-    canvas.setPointerCapture(e.pointerId);
-    canvas.classList.add('dragging');
-    const w = canvasAt(e);
-    const hit = scene ? hitTest(scene, w.x, w.y) : null;
-    // A shape under the pointer wins the edge: the edge is empty space by nature.
-    const key = hit || !scene ? null : columnEdgeAt(scene, w.x);
-    const column = scene?.columns.find((b) => b.key === key);
-    resize = key && column ? { key, column: { x: column.x, w: column.w } } : null;
-    drag = hit
-        ? { id: hit.id, x: e.clientX, y: e.clientY, moved: false, dx: w.x - hit.x, dy: w.y - hit.y }
-        : { id: null, x: e.clientX, y: e.clientY, moved: false, dx: 0, dy: 0 };
-});
-
-canvas.addEventListener('pointermove', (e) => {
-    if (!drag) {
-        const w = canvasAt(e);
-        const hit = scene ? hitTest(scene, w.x, w.y) : null;
-        const id = hit?.id ?? null;
-        const over = hit || !scene ? null : columnEdgeAt(scene, w.x);
-        if (id !== hover || over !== hoverEdge) {
-            hover = id;
-            hoverEdge = over;
-            canvas.style.cursor = id ? 'pointer' : over ? 'col-resize' : 'grab';
-            schedule();
-        }
-        return;
-    }
-    const dx = e.clientX - drag.x;
-    const dy = e.clientY - drag.y;
-    if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
-    if (resize) {
-        // The edge sits half a gap past the column's right edge, and the width is
-        // clamped back to the content's own in `layout`, so dragging left stops
-        // where the column is full rather than at some number invented here.
-        columnWidths[resize.key] = canvasAt(e).x - M.columnGap / 2 - resize.column.x;
-        drag.moved = true;
-        relayout(false, false);
-    } else if (drag.id && drag.moved) {
-        const w = canvasAt(e);
-        pins.put(recording.current?.seq ?? 0, drag.id, w.x - drag.dx, w.y - drag.dy);
-        relayout(false, false);
-    } else if (!drag.id && scene) {
-        camera = {
-            ...camera,
-            ...bounded({ x: camera.x + dx, y: camera.y + dy }, camera.scale, scene, viewport()),
-        };
-        drag.x = e.clientX;
-        drag.y = e.clientY;
-        schedule();
-    }
-});
-
-canvas.addEventListener('pointerup', (e) => {
-    canvas.classList.remove('dragging');
-    if (resize) {
-        resize = null;
-        saveColumns();
-        drag = null;
-        return;
-    }
-    const click: Click | null =
-        drag && !drag.moved ? { at: e.timeStamp, x: e.clientX, y: e.clientY, id: drag.id } : null;
-    // Written out at the end of the gesture, not per pointermove: one drag is a
-    // hundred of those, and the same reason `saveColumns` sits where it does.
-    if (drag?.moved && drag.id) savePins();
-    drag = null;
-    if (!click) return;
-
-    // The pair acts on what the *first* click hit, because that click may have
-    // centred it and moved it out from under the pointer.
-    const double = isDouble(lastClick, click);
-    const id = double ? lastClick!.id : click.id;
-    lastClick = double ? null : click;
-    const shape = id ? (scene?.shapes.find((n) => n.id === id) ?? null) : null;
-
-    if (double) {
-        // Double-click opens the thing you double-clicked, the way it opens a
-        // folder everywhere else — and empty space pulls the whole object graph back.
-        if (shape?.kind === 'commit') recording.toggle(shape.id);
-        else if (shape?.kind === 'tree') recording.toggleTree(shape.id);
-        else if (!shape && scene) {
-            camera = zoomOut(scene, viewport(), canvasAt(e).y);
-            glide = null;
-            schedule();
-            return;
-        } else return;
-        viewChanged();
-        return;
-    }
-    // Shift is the undo of dragging: the pin comes out and the layout takes the
-    // shape back. Nothing is selected or copied on the way — it is one act.
-    if (e.shiftKey && id) {
-        if (pins.drop(id)) {
-            savePins();
-            relayout(true, false);
-        }
-        return;
-    }
-    selected = id;
-    if (id) localStorage.setItem('gitva.selected', id);
-    else localStorage.removeItem('gitva.selected');
-    renderInspector(inspector, recording.current, shape);
-    // Anything with a sha is a key in the key-value store, so a click hands you
-    // the key: the whole point is that you can paste it into the next command.
-    if (shape?.oid) copied(shape.oid);
-    if (shape && settings.centreOnClick) {
-        glide = null;
-        camera = centre(camera, shape, viewport());
-    }
-    schedule();
-});
-
-canvas.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    const w = canvasAt(e);
-    const hit = scene ? hitTest(scene, w.x, w.y) : null;
-    if (!hit) return;
-    // A shape moves around as the object graph is expanded and collapsed, and a
-    // mark is how you follow it. One gesture for every kind: a mark says "keep an
-    // eye on this", and that is the same wish whether the thing is a commit, a
-    // blob, a branch or a staged path.
-    if (!marked.delete(hit.id)) marked.add(hit.id);
-    saveMarks();
-    schedule();
-});
-
-canvas.addEventListener(
-    'wheel',
-    (e) => {
-        e.preventDefault();
-        if (!scene) return;
-        if (e.ctrlKey || e.metaKey) {
-            glide = null;
-            camera = zoom(camera, canvasAt(e), e.deltaY, scene, viewport());
-        } else {
-            const at = glide ?? camera;
-            glide = bounded(
-                { x: at.x - e.deltaX, y: at.y - e.deltaY },
-                camera.scale,
-                scene,
-                viewport(),
-            );
-        }
-        schedule();
-    },
-    { passive: false },
-);
 
 // ---------------------------------------------------------------------------
 // The inspector
@@ -818,13 +522,11 @@ inspector.addEventListener('click', (e) => {
 
 // ---------------------------------------------------------------------------
 
+// The canvas sizes itself; the rain is a second canvas over it, so it follows.
 new ResizeObserver(() => {
-    canvas.width = Math.round(canvas.clientWidth * devicePixelRatio);
-    canvas.height = Math.round(canvas.clientHeight * devicePixelRatio);
-    rain.width = Math.round(canvas.clientWidth * devicePixelRatio);
-    rain.height = Math.round(canvas.clientHeight * devicePixelRatio);
-    schedule();
-}).observe(canvas);
+    rain.width = Math.round(canvas.element.clientWidth * devicePixelRatio);
+    rain.height = Math.round(canvas.element.clientHeight * devicePixelRatio);
+}).observe(canvas.element);
 
 applyWords();
 $('live-text').textContent = S.status.connecting;
