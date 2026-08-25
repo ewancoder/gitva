@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>git, one command at a time</title>
+    <!-- The no-build path: a bundler resolves `gitva/canvas` on its own. -->
+    <script type="importmap">
+      {
+        "imports": { "gitva/canvas": "/node_modules/gitva/dist/web/canvas.js" }
+      }
+    </script>
+    <style>
+      /* The canvas paints its own ground; the page around it matches. */
+      :root {
+        --ground: #0d0f13;
+        --surface: #171a21;
+        --line: #2c313d;
+        --ink: #dfe4ee;
+        --muted: #8d96a8;
+        --accent: #ff5ea8;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: grid;
+        grid-template-columns: 380px 1fr;
+        background: var(--ground);
+        color: var(--ink);
+        font:
+          15px/1.55 system-ui,
+          sans-serif;
+      }
+      #lesson {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 24px;
+        overflow: auto;
+        background: var(--surface);
+        border-right: 1px solid var(--line);
+      }
+      h1 {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 600;
+      }
+      #count {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      #command {
+        font:
+          14px ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          Consolas,
+          monospace;
+        background: var(--ground);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 10px 12px;
+        overflow-x: auto;
+        white-space: pre;
+      }
+      #says {
+        margin: 0;
+      }
+      #selected {
+        color: var(--muted);
+        font-size: 13px;
+        min-height: 3em;
+      }
+      #selected b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      nav {
+        display: flex;
+        gap: 8px;
+      }
+      #tools {
+        margin-top: auto;
+      }
+      button[aria-pressed="false"] {
+        opacity: 0.5;
+      }
+      button {
+        flex: 1;
+        padding: 8px;
+        font: inherit;
+        color: var(--ink);
+        background: var(--ground);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      button:hover:not(:disabled) {
+        border-color: var(--accent);
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      footer {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      #graph {
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <section id="lesson">
+      <h1>git, one command at a time</h1>
+      <p id="count"></p>
+      <pre id="command"></pre>
+      <p id="says"></p>
+      <p id="selected"></p>
+      <nav id="tools">
+        <button id="reset">reset view</button>
+        <button id="index">index</button>
+        <button id="expand">expand all</button>
+      </nav>
+      <nav>
+        <button id="back">← back</button>
+        <button id="next">next →</button>
+      </nav>
+      <footer>
+        Drag to move anything, drag the ground to pan, wheel to scroll,
+        ctrl-wheel to zoom, double-click a commit or a tree to expand it,
+        right-click to mark, shift-click to put one shape back.
+      </footer>
+    </section>
+    <div id="graph"></div>
+    <script type="module" src="./lesson.js"></script>
+  </body>
+</html>

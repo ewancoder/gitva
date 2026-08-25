@@ -10,7 +10,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
@@ -109,6 +109,53 @@ describe('the line between the server and the browser', () => {
                 assert.ok(!files.has(server), `${entry} reaches ${server}`);
             }
         }
+    });
+
+    /**
+     * The browser half is published as well as served: `gitva/canvas` is how a
+     * page that is not ours mounts the canvas and hands it steps. What
+     * package.json points at is checked here rather than found out by whoever
+     * installs it — and it is checked against the build, because a published
+     * entry point that npm does not pack is a broken install and nothing else.
+     */
+    it('publishes an entry point that is built and packed', () => {
+        const pkg = JSON.parse(source('package.json')) as {
+            exports: Record<string, { types: string; default: string }>;
+            files: string[];
+        };
+        const entry = pkg.exports['./canvas'];
+        assert.equal(entry.default, './dist/web/canvas.js');
+        assert.ok(existsSync(join(ROOT, entry.default)), `${entry.default} is not built`);
+        assert.ok(existsSync(join(ROOT, entry.types)), `${entry.types} is not built`);
+        for (const f of [entry.default, entry.types])
+            assert.ok(
+                pkg.files.some((packed) => f.startsWith(`./${packed}/`)),
+                `${f} is published but not packed`,
+            );
+    });
+
+    /**
+     * `web/app.ts` is a page around the canvas, and `samples/webapp` is another
+     * one. They are the same component only for as long as they enter it the
+     * same way — so this is the door, and `canvas.ts` is the whole of it.
+     *
+     * Without this, `app.ts` importing `./inspector.js` or `./theme.js` reads as
+     * harmless: it resolves, it type-checks, and it is even the same file the
+     * canvas itself imports. What it costs is the seam — those files travel with
+     * the canvas if it is ever split into its own package, and every one app.ts
+     * reached past `canvas.ts` for is a re-export somebody has to discover by
+     * breaking the build. Re-export it now and the split is a move plus one
+     * import line.
+     */
+    it('lets the page reach the canvas only through the entry point it publishes', () => {
+        const reached = imports('web/app.ts')
+            .filter((spec) => spec.startsWith('.'))
+            .filter((spec) => spec !== './canvas.js');
+        assert.deepEqual(
+            reached,
+            [],
+            'web/app.ts imports past canvas.ts — re-export it from canvas.ts instead, so a page that is not ours can have it too',
+        );
     });
 
     it('never lets a node: builtin reach the browser', () => {

@@ -1,3 +1,5 @@
 /node_modules/
 /dist/
 /example/
+/samples/webapp/node_modules/
+/samples/webapp/package-lock.json

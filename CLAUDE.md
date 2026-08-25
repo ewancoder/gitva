@@ -174,11 +174,30 @@ dependency passes the one-sentence test in `INITIAL_DESIGN.md` §14.
 | `src/store.ts` | the recording on disk: where the system keeps it, `recordingKey` (the ten-character identifier, shown in the view toolbar), one file per key, load and save, and `FORMAT` — **bump it whenever a step stops meaning what it meant**, because a kept recording written under another number is dropped rather than half-drawn. |
 | `src/server.ts` | `node:http`: static files, SSE `/events`, `GET /object`. **Nothing that writes** — there is no route a browser can reach that changes what is recorded. |
 | `src/cli.ts` | `parseArgs` (pure), `main`, `FLAGS` — every flag, and what `--help` says about it; opens the browser. Runs only when it *is* the command, so importing it for a test starts nothing. |
-| `web/` | `index.html` (all CSS), `app.ts` (DOM, events, painting — and nothing else), `render.ts` (canvas), `layout.ts`, `diff.ts`, `explain.ts`, `recording.ts` (steps, cursor, view, pins — no DOM), `camera.ts` (arithmetic only), `inspector.ts`, `theme.ts`. |
+| `web/` | `index.html` (all CSS), `canvas.ts` (the mounted `<canvas>`: paint loop, camera, gestures — **the published entry point**), `app.ts` (the page around it: toolbars, inspector, the stream of steps, `localStorage`), `render.ts` (canvas), `layout.ts`, `diff.ts`, `explain.ts`, `recording.ts` (steps, cursor, view, pins — no DOM), `camera.ts` (arithmetic only), `inspector.ts`, `theme.ts`. |
 | `web/localization/` | `languages/en.ts` — **every string the browser shows**; `languages/ru.ts`; `strings.ts` (`Strings`, the shape a translation fills, read off `en`); `index.ts` (`LANGUAGES`, a loader per language, the live binding `S`, `setLanguage`). No language but English is loaded until it is chosen. |
+| `samples/webapp/` | a page built on `gitva/canvas` and nothing else: recorded steps, a slide each, its own twenty-line static server. Not compiled and not served by gitva — `test/sample.test.ts` draws its steps so a change to `Step` cannot break it quietly. |
 | `test/` | `fixture.ts` builds real repos with real plumbing, and `fakeStep` for what is said rather than what git did; the rest are `node:test`. `boundary.test.ts` is the split itself, enforced. |
 
 **`src/` is the server, `web/` is the browser, and `src/types.ts` is the one file both hold.**
+
+**`web/` is published as well as served.** `gitva/canvas` (`package.json`'s `exports`,
+`dist/web/canvas.js`) hands another page `mount(element, options)`: the object graph, the
+camera and every gesture on it, drawing whatever steps it is given. That is affordable
+precisely because *a step is what git did* — a page with a file of recorded steps needs no
+git, no server and no route, so a tutorial site can teach with them command by command.
+`app.ts` is one such page and holds no gesture of its own, so there is exactly one
+implementation of each. Anything a page around the canvas decides — what to persist, what
+the toolbars say, whether a click copies a sha — reaches it through `MountOptions`, never by
+a second copy of the state: `canvas.recording`, `canvas.pins`, `canvas.marked`,
+`canvas.columnWidths` and `canvas.settings` are the only ones there are. **Everything a
+toolbar does is a method on the canvas** — `resetView`, `unpin`, `setView`, `expandAll`,
+`collapseAll`, `step`, `goto`, `scrubTo`, `live`, `fitCamera` — because a page with no toolbar of ours
+must still be able to undo a gesture it cannot see: something dragged off the edge is
+unreachable by hand. `app.ts` calls the same ones its buttons always did. `canvas.ts` is
+`app.ts`'s neighbour under every rule here — no `node:` builtin, no route, nothing served
+that the static route cannot reach.
+
 Everything the browser draws with — the layout, the diffing, the teaching text, the words — is
 in `web/`, compiled to `dist/web` and served from there. `src/types.ts` is served too, and must
 never touch a `node:` builtin. Nothing else in `src/` is servable, and nothing in `src/` may
@@ -194,7 +213,12 @@ because no other test loads it.
 `git.js` from `web/` type-checks perfectly and fails at the first `node:child_process`. It lists
 every file in `src/` as server-only or seam — a new one there is a decision, so the table has to be
 edited — walks the imports out of `web/**` and the seam, asserts the server never reaches into
-`web/`, and asserts the one call the browser makes: `GET /object`, and nothing else, ever.
+`web/`, and asserts the one call the browser makes: `GET /object`, and nothing else, ever. It
+also holds the door: **`web/app.ts`'s only import into the canvas half is `./canvas.js`** — the
+same entry point `samples/webapp` mounts through, which is what makes the two the same component
+rather than two pages sharing a folder. Anything the page needs from `theme.ts`, `inspector.ts`,
+`diff.ts` or the strings is **re-exported from `canvas.ts`**, never imported past it; that way
+splitting the canvas into its own package is a move plus one import line.
 
 `dist/` is build output and gitignored.
 
@@ -334,8 +358,8 @@ in the language the process was built with.
   some git situation demanded it, so an untested branch is a git situation nobody checked. A new
   feature is not done when it works — it is done when it has tests and `npm test` is green with
   nothing newly uncovered.
-- **If a thing cannot be tested, split it until it can.** That is what `web/app.ts` is: DOM,
-  events and painting, with every decision it makes moved into `recording.ts` (steps, collapses,
+- **If a thing cannot be tested, split it until it can.** That is what `web/app.ts` and
+  `web/canvas.ts` are: DOM, events and painting, with every decision they make moved into `recording.ts` (steps, collapses,
   pins, paging, what the recording toolbar says), `camera.ts` (bounds, gliding, zooming, fitting)
   and `inspector.ts`'s `inspectorModel`, all of which are pure and all tested. Painting is
   checked by looking at it, but *what* to paint is not: `path()` and `hitTest()` decide things,

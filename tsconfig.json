@@ -8,6 +8,8 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "sourceMap": true,
+    // `gitva/canvas` is a published entry point, so the types go out with it.
+    "declaration": true,
     "outDir": "dist"
   },
   "include": ["src", "web", "test"]

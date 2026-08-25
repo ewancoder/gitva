@@ -174,3 +174,57 @@ Stack:
 - TypeScript
 - Canvas 2D
 - ESLint / Prettier
+
+## Use the canvas in your own page
+
+The canvas ships as a library, so a page that is not gitva can draw the same object graph:
+a tutorial that shows what each command does, side by side with the text explaining it.
+
+```
+npm install gitva
+```
+
+```js
+import { mount } from 'gitva/canvas';
+
+const canvas = mount(document.getElementById('graph'), {
+    theme: 'light',
+    onSelect: (shape) => console.log(shape?.oid),
+});
+
+for (const step of steps) canvas.show(step); // draw a step
+canvas.goto(0);
+```
+
+You get the object graph and every gesture on it - drag to pin, drag empty space to pan,
+wheel to scroll, ctrl-wheel to zoom, double-click to expand a commit or a tree, right-click
+to mark, shift-click to unpin, and a column edge to drag. Give the element a size: the
+canvas fills it.
+
+The toolbars are yours to build. You can use these methods to control the canvas:
+
+```js
+canvas.resetView();                     // every pin out, every column back - the reset view button
+canvas.unpin(id);                       // or just the one
+canvas.setView({ showIndex: false });   // the index, unreachable and links toggles
+canvas.expandAll();                     // and canvas.collapseAll()
+canvas.step(-1);                        // walk the recording; also goto(i), scrubTo(i), live()
+canvas.settings.showNames = false;      // then canvas.schedule()
+canvas.fitCamera();                     // the way back from anywhere
+```
+
+`canvas.recording` holds the steps, the cursor and the view to read them off, and `onChange`
+tells you when a gesture - or one of these calls - moved a pin, a mark, a column or the view,
+so a page that keeps any of that has one place to write it down.
+
+It never talks to a server, and there is nothing to configure: it draws the steps you hand
+it. A step is what git did, so steps recorded months ago draw exactly as they did then.
+`samples/webapp/` is a working page of exactly that: nine commands, one slide each.
+`npm install && npm start` in that folder.
+
+To get some, run gitva on a scratch repository, type the commands you want to teach, and
+take the recording off the event stream:
+
+```
+curl -sN -m 3 localhost:8080/events | grep -m1 '^data: \[' | cut -c7- > steps.json
+```
