@@ -184,6 +184,14 @@ a tutorial that shows what each command does, side by side with the text explain
 npm install gitva
 ```
 
+Or from a CDN, with no build step at all - `gitva` and `gitva/canvas` are the same module:
+
+```html
+<script type="module">
+    import { mount } from 'https://esm.sh/gitva';
+</script>
+```
+
 ```js
 import { mount } from 'gitva/canvas';
 

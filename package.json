@@ -1,6 +1,6 @@
 {
   "name": "gitva",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "The visual anatomy of git: a visual tutorial taught from the internals upward, drawing a repository's .git as a live object graph in your browser.",
   "license": "MIT",
   "author": "Ivan Zyranau",
@@ -22,7 +22,13 @@
   "bin": {
     "gitva": "dist/src/cli.js"
   },
+  "main": "./dist/web/canvas.js",
+  "types": "./dist/web/canvas.d.ts",
   "exports": {
+    ".": {
+      "types": "./dist/web/canvas.d.ts",
+      "default": "./dist/web/canvas.js"
+    },
     "./canvas": {
       "types": "./dist/web/canvas.d.ts",
       "default": "./dist/web/canvas.js"
