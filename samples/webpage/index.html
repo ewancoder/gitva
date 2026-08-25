@@ -1,0 +1,332 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>gitva from a CDN</title>
+
+<style>
+  html,
+  body {
+    margin: 0;
+    height: 100%;
+    background: #0d0f13;
+  }
+  #graph {
+    height: 100%;
+  }
+  nav {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    gap: 8px;
+    font:
+      14px system-ui,
+      sans-serif;
+  }
+  button {
+    padding: 6px 12px;
+    color: #dfe4ee;
+    background: #171a21;
+    border: 1px solid #2c313d;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+</style>
+
+<div id="graph"></div>
+<nav>
+  <button id="back">← back</button>
+  <button id="next">next →</button>
+</nav>
+
+<script type="module">
+  import { mount } from "https://esm.sh/gitva@1.5.1";
+
+  const canvas = mount(graph);
+  for (const step of JSON.parse(steps.textContent)) canvas.show(step);
+  canvas.goto(0);
+
+  back.onclick = () => canvas.step(-1);
+  next.onclick = () => canvas.step(1);
+</script>
+
+<!--
+  That is the whole page. Everything below is data, not code.
+
+  A step is what git did: three commands, recorded off gitva's own event stream
+  and pasted in. A page holding steps needs no git, no server and no route — the
+  canvas draws whatever it is handed.
+
+    git add hello.txt         a blob, and an index entry naming it
+    git commit -m "hello"     a tree wrapping the blob, a commit naming the tree
+    git commit -am "world"    a second of each; nothing was changed, only added
+-->
+<script type="application/json" id="steps">
+  [
+    {
+      "seq": 1,
+      "time": 1767261601000,
+      "repo": "lesson",
+      "gitDir": "/home/you/lesson/.git",
+      "tags": {},
+      "unreachable": [],
+      "stagedOnly": [],
+      "capabilities": {
+        "objectCount": 0,
+        "looseCount": 0,
+        "refCount": 0,
+        "fullLoad": true,
+        "indexShapes": true,
+        "commitGraph": false,
+        "limits": {
+          "fullLoad": 12000,
+          "indexShapes": 400
+        }
+      },
+      "notes": ["bodiesOnSelection"],
+      "head": {
+        "ref": "refs/heads/main",
+        "detached": false,
+        "unborn": true
+      },
+      "refs": [],
+      "objects": {
+        "ce013625030ba8dba906f756967f9e9ca394464a": {
+          "oid": "ce013625030ba8dba906f756967f9e9ca394464a",
+          "type": "blob",
+          "size": 6
+        }
+      },
+      "commits": {},
+      "trees": {},
+      "index": [
+        {
+          "path": "hello.txt",
+          "oid": "ce013625030ba8dba906f756967f9e9ca394464a",
+          "mode": "100644",
+          "stage": 0
+        }
+      ],
+      "window": {
+        "commits": [],
+        "totalCommits": 0,
+        "more": false,
+        "refsOutside": 0
+      }
+    },
+    {
+      "seq": 2,
+      "time": 1767261602000,
+      "repo": "lesson",
+      "gitDir": "/home/you/lesson/.git",
+      "tags": {},
+      "unreachable": [],
+      "stagedOnly": [],
+      "capabilities": {
+        "objectCount": 0,
+        "looseCount": 0,
+        "refCount": 0,
+        "fullLoad": true,
+        "indexShapes": true,
+        "commitGraph": false,
+        "limits": {
+          "fullLoad": 12000,
+          "indexShapes": 400
+        }
+      },
+      "notes": ["bodiesOnSelection"],
+      "head": {
+        "ref": "refs/heads/main",
+        "oid": "b4b6f1e792891d766d74c12b33baab028d1dcba3",
+        "detached": false,
+        "unborn": false
+      },
+      "refs": [
+        {
+          "name": "refs/heads/main",
+          "oid": "b4b6f1e792891d766d74c12b33baab028d1dcba3",
+          "objectType": "commit",
+          "packed": false
+        }
+      ],
+      "objects": {
+        "ce013625030ba8dba906f756967f9e9ca394464a": {
+          "oid": "ce013625030ba8dba906f756967f9e9ca394464a",
+          "type": "blob",
+          "size": 6
+        },
+        "aaa96ced2d9a1c8e72c56b253a0e2fe78393feb7": {
+          "oid": "aaa96ced2d9a1c8e72c56b253a0e2fe78393feb7",
+          "type": "tree",
+          "size": 37
+        },
+        "b4b6f1e792891d766d74c12b33baab028d1dcba3": {
+          "oid": "b4b6f1e792891d766d74c12b33baab028d1dcba3",
+          "type": "commit",
+          "size": 160
+        }
+      },
+      "commits": {
+        "b4b6f1e792891d766d74c12b33baab028d1dcba3": {
+          "oid": "b4b6f1e792891d766d74c12b33baab028d1dcba3",
+          "tree": "aaa96ced2d9a1c8e72c56b253a0e2fe78393feb7",
+          "parents": [],
+          "subject": "add hello",
+          "message": "add hello",
+          "author": "gitva <gitva@example.com>",
+          "authorDate": 1767261600000,
+          "committer": "gitva <gitva@example.com>"
+        }
+      },
+      "trees": {
+        "aaa96ced2d9a1c8e72c56b253a0e2fe78393feb7": [
+          {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "ce013625030ba8dba906f756967f9e9ca394464a",
+            "name": "hello.txt"
+          }
+        ]
+      },
+      "index": [
+        {
+          "path": "hello.txt",
+          "oid": "ce013625030ba8dba906f756967f9e9ca394464a",
+          "mode": "100644",
+          "stage": 0
+        }
+      ],
+      "window": {
+        "commits": ["b4b6f1e792891d766d74c12b33baab028d1dcba3"],
+        "totalCommits": 1,
+        "more": false,
+        "refsOutside": 0
+      }
+    },
+    {
+      "seq": 3,
+      "time": 1767261603000,
+      "repo": "lesson",
+      "gitDir": "/home/you/lesson/.git",
+      "tags": {},
+      "unreachable": [],
+      "stagedOnly": [],
+      "capabilities": {
+        "objectCount": 0,
+        "looseCount": 0,
+        "refCount": 0,
+        "fullLoad": true,
+        "indexShapes": true,
+        "commitGraph": false,
+        "limits": {
+          "fullLoad": 12000,
+          "indexShapes": 400
+        }
+      },
+      "notes": ["bodiesOnSelection"],
+      "head": {
+        "ref": "refs/heads/main",
+        "oid": "98671da22cde34a203a39152c015de213bbc9b28",
+        "detached": false,
+        "unborn": false
+      },
+      "refs": [
+        {
+          "name": "refs/heads/main",
+          "oid": "98671da22cde34a203a39152c015de213bbc9b28",
+          "objectType": "commit",
+          "packed": false
+        }
+      ],
+      "objects": {
+        "ce013625030ba8dba906f756967f9e9ca394464a": {
+          "oid": "ce013625030ba8dba906f756967f9e9ca394464a",
+          "type": "blob",
+          "size": 6
+        },
+        "94954abda49de8615a048f8d2e64b5de848e27a1": {
+          "oid": "94954abda49de8615a048f8d2e64b5de848e27a1",
+          "type": "blob",
+          "size": 12
+        },
+        "aaa96ced2d9a1c8e72c56b253a0e2fe78393feb7": {
+          "oid": "aaa96ced2d9a1c8e72c56b253a0e2fe78393feb7",
+          "type": "tree",
+          "size": 37
+        },
+        "b2ebf159fb11cd612e1c3e62636be14ce60424ad": {
+          "oid": "b2ebf159fb11cd612e1c3e62636be14ce60424ad",
+          "type": "tree",
+          "size": 37
+        },
+        "b4b6f1e792891d766d74c12b33baab028d1dcba3": {
+          "oid": "b4b6f1e792891d766d74c12b33baab028d1dcba3",
+          "type": "commit",
+          "size": 160
+        },
+        "98671da22cde34a203a39152c015de213bbc9b28": {
+          "oid": "98671da22cde34a203a39152c015de213bbc9b28",
+          "type": "commit",
+          "size": 208
+        }
+      },
+      "commits": {
+        "b4b6f1e792891d766d74c12b33baab028d1dcba3": {
+          "oid": "b4b6f1e792891d766d74c12b33baab028d1dcba3",
+          "tree": "aaa96ced2d9a1c8e72c56b253a0e2fe78393feb7",
+          "parents": [],
+          "subject": "add hello",
+          "message": "add hello",
+          "author": "gitva <gitva@example.com>",
+          "authorDate": 1767261600000,
+          "committer": "gitva <gitva@example.com>"
+        },
+        "98671da22cde34a203a39152c015de213bbc9b28": {
+          "oid": "98671da22cde34a203a39152c015de213bbc9b28",
+          "tree": "b2ebf159fb11cd612e1c3e62636be14ce60424ad",
+          "parents": ["b4b6f1e792891d766d74c12b33baab028d1dcba3"],
+          "subject": "add world",
+          "message": "add world",
+          "author": "gitva <gitva@example.com>",
+          "authorDate": 1767261600000,
+          "committer": "gitva <gitva@example.com>"
+        }
+      },
+      "trees": {
+        "aaa96ced2d9a1c8e72c56b253a0e2fe78393feb7": [
+          {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "ce013625030ba8dba906f756967f9e9ca394464a",
+            "name": "hello.txt"
+          }
+        ],
+        "b2ebf159fb11cd612e1c3e62636be14ce60424ad": [
+          {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "94954abda49de8615a048f8d2e64b5de848e27a1",
+            "name": "hello.txt"
+          }
+        ]
+      },
+      "index": [
+        {
+          "path": "hello.txt",
+          "oid": "94954abda49de8615a048f8d2e64b5de848e27a1",
+          "mode": "100644",
+          "stage": 0
+        }
+      ],
+      "window": {
+        "commits": [
+          "98671da22cde34a203a39152c015de213bbc9b28",
+          "b4b6f1e792891d766d74c12b33baab028d1dcba3"
+        ],
+        "totalCommits": 2,
+        "more": false,
+        "refsOutside": 0
+      }
+    }
+  ]
+</script>

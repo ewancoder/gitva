@@ -228,7 +228,9 @@ so a page that keeps any of that has one place to write it down.
 It never talks to a server, and there is nothing to configure: it draws the steps you hand
 it. A step is what git did, so steps recorded months ago draw exactly as they did then.
 `samples/webapp/` is a working page of exactly that: nine commands, one slide each.
-`npm install && npm start` in that folder.
+`npm install && npm start` in that folder. `samples/webpage/index.html` is the same idea
+with nothing around it - one file, three steps inline, the canvas off a CDN. Open it in a
+browser; there is nothing to install.
 
 To get some, run gitva on a scratch repository, type the commands you want to teach, and
 take the recording off the event stream:
