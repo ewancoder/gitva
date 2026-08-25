@@ -16,12 +16,22 @@
  * `camera.ts`, where it is tested.
  */
 
-import { describe } from './diff.js';
-import { language, LANGUAGES, S, setLanguage } from './localization/index.js';
-import type { Step } from '../src/types.js';
-import { mount, type CanvasSettings } from './canvas.js';
-import { renderInspector } from './inspector.js';
-import { type Mode, setTheme, theme } from './theme.js';
+// One import, because `gitva/canvas` is one component: this page is on the same
+// side of that door as `samples/webapp`, and nothing here reaches past it.
+import {
+    describe,
+    language,
+    LANGUAGES,
+    mount,
+    renderInspector,
+    S,
+    setLanguage,
+    setTheme,
+    theme,
+    type CanvasSettings,
+    type Mode,
+    type Step,
+} from './canvas.js';
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 

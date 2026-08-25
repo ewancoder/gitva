@@ -1,0 +1,127 @@
+[
+  {
+    "seq": 1,
+    "time": 1787620895151,
+    "repo": "lesson",
+    "gitDir": "/home/you/lesson/.git",
+    "head": { "ref": "refs/heads/main", "detached": false, "unborn": true },
+    "refs": [],
+    "objects": {},
+    "commits": {},
+    "trees": {},
+    "tags": {},
+    "index": [],
+    "unreachable": [],
+    "stagedOnly": [],
+    "capabilities": {
+      "objectCount": 0,
+      "looseCount": 0,
+      "refCount": 0,
+      "fullLoad": true,
+      "indexShapes": true,
+      "commitGraph": false,
+      "limits": { "fullLoad": 12000, "indexShapes": 400 }
+    },
+    "window": { "commits": [], "totalCommits": 0, "more": false, "refsOutside": 0 },
+    "notes": ["bodiesOnSelection"]
+  },
+  {
+    "objects": { "94bab17c85ac96c4dd0cfcb7a16f22f6862733eb": 11 },
+    "unreachable": ["94bab17c85ac96c4dd0cfcb7a16f22f6862733eb"]
+  },
+  {
+    "index": [{ "path": "hello.txt", "oid": "94bab17c85ac96c4dd0cfcb7a16f22f6862733eb" }],
+    "stagedOnly": ["94bab17c85ac96c4dd0cfcb7a16f22f6862733eb"]
+  },
+  {
+    "refs": [{ "name": "refs/heads/main", "oid": "fb1ee640b08d0b048343bd4a0c7105c69fdba511" }],
+    "objects": {
+      "81d04dff1615ffbaa56d10e0a43f2832f6d0f8f9": 37,
+      "fb1ee640b08d0b048343bd4a0c7105c69fdba511": 167
+    },
+    "commits": {
+      "fb1ee640b08d0b048343bd4a0c7105c69fdba511": {
+        "tree": "81d04dff1615ffbaa56d10e0a43f2832f6d0f8f9",
+        "subject": "the first commit"
+      }
+    },
+    "trees": {
+      "81d04dff1615ffbaa56d10e0a43f2832f6d0f8f9": [
+        { "name": "hello.txt", "oid": "94bab17c85ac96c4dd0cfcb7a16f22f6862733eb" }
+      ]
+    },
+    "index": [{ "path": "hello.txt", "oid": "94bab17c85ac96c4dd0cfcb7a16f22f6862733eb" }]
+  },
+  {
+    "refs": [{ "name": "refs/heads/main", "oid": "fb1ee640b08d0b048343bd4a0c7105c69fdba511" }],
+    "objects": { "0597a19e0d25b844c18b6ef3b47b6f639a07eacc": 18 },
+    "index": [
+      { "path": "hello.txt", "oid": "94bab17c85ac96c4dd0cfcb7a16f22f6862733eb" },
+      { "path": "index-notes.txt", "oid": "0597a19e0d25b844c18b6ef3b47b6f639a07eacc" }
+    ],
+    "stagedOnly": ["0597a19e0d25b844c18b6ef3b47b6f639a07eacc"]
+  },
+  {
+    "refs": [{ "name": "refs/heads/main", "oid": "fb1ee640b08d0b048343bd4a0c7105c69fdba511" }],
+    "index": [{ "path": "hello.txt", "oid": "94bab17c85ac96c4dd0cfcb7a16f22f6862733eb" }],
+    "unreachable": ["0597a19e0d25b844c18b6ef3b47b6f639a07eacc"]
+  },
+  {
+    "refs": [{ "name": "refs/heads/main", "oid": "51a3a1d34ea7ee9f0ecb830189b6254edf58ed3f" }],
+    "objects": {
+      "c497b97ef939423f43a97b4dc3a419ecccaab7a4": 80,
+      "51a3a1d34ea7ee9f0ecb830189b6254edf58ed3f": 214
+    },
+    "commits": {
+      "51a3a1d34ea7ee9f0ecb830189b6254edf58ed3f": {
+        "tree": "c497b97ef939423f43a97b4dc3a419ecccaab7a4",
+        "parents": ["fb1ee640b08d0b048343bd4a0c7105c69fdba511"],
+        "subject": "a second commit"
+      }
+    },
+    "trees": {
+      "c497b97ef939423f43a97b4dc3a419ecccaab7a4": [
+        { "name": "hello.txt", "oid": "94bab17c85ac96c4dd0cfcb7a16f22f6862733eb" },
+        { "name": "index-notes.txt", "oid": "0597a19e0d25b844c18b6ef3b47b6f639a07eacc" }
+      ]
+    },
+    "index": [
+      { "path": "hello.txt", "oid": "94bab17c85ac96c4dd0cfcb7a16f22f6862733eb" },
+      { "path": "index-notes.txt", "oid": "0597a19e0d25b844c18b6ef3b47b6f639a07eacc" }
+    ]
+  },
+  {
+    "refs": [
+      { "name": "refs/heads/experiment", "oid": "51a3a1d34ea7ee9f0ecb830189b6254edf58ed3f" },
+      { "name": "refs/heads/main", "oid": "51a3a1d34ea7ee9f0ecb830189b6254edf58ed3f" }
+    ],
+    "index": [
+      { "path": "hello.txt", "oid": "94bab17c85ac96c4dd0cfcb7a16f22f6862733eb" },
+      { "path": "index-notes.txt", "oid": "0597a19e0d25b844c18b6ef3b47b6f639a07eacc" }
+    ]
+  },
+  {
+    "refs": [
+      { "name": "refs/heads/experiment", "oid": "51a3a1d34ea7ee9f0ecb830189b6254edf58ed3f" },
+      { "name": "refs/heads/main", "oid": "51a3a1d34ea7ee9f0ecb830189b6254edf58ed3f" },
+      {
+        "name": "refs/tags/v1",
+        "oid": "52904e682ddde7f80f9c7685ac064f7e9bc5b8d1",
+        "objectType": "tag",
+        "target": "51a3a1d34ea7ee9f0ecb830189b6254edf58ed3f"
+      }
+    ],
+    "objects": { "52904e682ddde7f80f9c7685ac064f7e9bc5b8d1": 132 },
+    "tags": {
+      "52904e682ddde7f80f9c7685ac064f7e9bc5b8d1": {
+        "target": "51a3a1d34ea7ee9f0ecb830189b6254edf58ed3f",
+        "name": "v1",
+        "message": "first release\n"
+      }
+    },
+    "index": [
+      { "path": "hello.txt", "oid": "94bab17c85ac96c4dd0cfcb7a16f22f6862733eb" },
+      { "path": "index-notes.txt", "oid": "0597a19e0d25b844c18b6ef3b47b6f639a07eacc" }
+    ]
+  }
+]

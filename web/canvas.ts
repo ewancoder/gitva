@@ -589,9 +589,24 @@ export function mount(target: HTMLElement, options: MountOptions = {}): Canvas {
     return new Canvas(target, options);
 }
 
-export { setLanguage, LANGUAGES } from './localization/index.js';
-export { setTheme } from './theme.js';
+/**
+ * The rest of the door. A page around the canvas needs more than `mount` — the
+ * words it labels its own buttons with, the palette it paints its own chrome in,
+ * the inspector, a sentence about what a step changed — and every one of those
+ * lives in a file that would travel with the canvas if it were ever split out.
+ * So they are re-exported here rather than imported past this file: `web/app.ts`
+ * reaches the canvas half through this entry point and nowhere else, exactly as
+ * `samples/webapp` does, which is what makes the two the same component rather
+ * than two pages that happen to share a folder. `test/boundary.test.ts` holds
+ * that line.
+ *
+ * `S` and `language` are re-exported as live bindings, so `setLanguage` still
+ * swaps the words under a page that says everything again.
+ */
+export { setLanguage, LANGUAGES, S, language } from './localization/index.js';
+export { setTheme, theme } from './theme.js';
 export { renderInspector } from './inspector.js';
+export { describe } from './diff.js';
 export type { Scene, Shape } from './layout.js';
 export type { Mode } from './theme.js';
 export type { Arrival } from './recording.js';

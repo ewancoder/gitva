@@ -134,6 +134,30 @@ describe('the line between the server and the browser', () => {
             );
     });
 
+    /**
+     * `web/app.ts` is a page around the canvas, and `samples/webapp` is another
+     * one. They are the same component only for as long as they enter it the
+     * same way — so this is the door, and `canvas.ts` is the whole of it.
+     *
+     * Without this, `app.ts` importing `./inspector.js` or `./theme.js` reads as
+     * harmless: it resolves, it type-checks, and it is even the same file the
+     * canvas itself imports. What it costs is the seam — those files travel with
+     * the canvas if it is ever split into its own package, and every one app.ts
+     * reached past `canvas.ts` for is a re-export somebody has to discover by
+     * breaking the build. Re-export it now and the split is a move plus one
+     * import line.
+     */
+    it('lets the page reach the canvas only through the entry point it publishes', () => {
+        const reached = imports('web/app.ts')
+            .filter((spec) => spec.startsWith('.'))
+            .filter((spec) => spec !== './canvas.js');
+        assert.deepEqual(
+            reached,
+            [],
+            'web/app.ts imports past canvas.ts — re-export it from canvas.ts instead, so a page that is not ours can have it too',
+        );
+    });
+
     it('never lets a node: builtin reach the browser', () => {
         for (const entry of webFiles) {
             const { builtins } = reachable(entry);

@@ -1,0 +1,12 @@
+{
+  "name": "gitva-webapp-sample",
+  "private": true,
+  "type": "module",
+  "description": "A tutorial page that draws recorded gitva steps, one command at a time.",
+  "scripts": {
+    "start": "node serve.js"
+  },
+  "dependencies": {
+    "gitva": "file:../.."
+  }
+}
