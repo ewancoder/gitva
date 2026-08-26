@@ -527,6 +527,12 @@ export function layout(
                     if (!strayed.has(p))
                         links.push({ id: `p:${oid}:${p}`, from: oid, to: p, kind: 'parent' });
                 }
+                // And it still names its own tree, which after a reset is usually the
+                // tree the live commit shares: the discarded commit is intact, and the
+                // link is the only thing on screen saying gc would free none of it.
+                const tree = step.commits[oid]?.tree;
+                if (tree !== undefined && !strayed.has(tree))
+                    links.push({ id: `t:${oid}`, from: oid, to: tree, kind: 'tree' });
                 if (collapsed.has(oid)) continue;
                 const names = new Map<Oid, string[]>();
                 for (const e of step.trees[oid] ?? []) {

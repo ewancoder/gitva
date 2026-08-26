@@ -755,6 +755,27 @@ describe('the scene', () => {
         assert.equal(on[0].kind, 'parent');
     });
 
+    it('draws a discarded commit\u2019s link to the live tree it shares', () => {
+        // Two unrelated commits over one tree, only one of them reachable: the
+        // ghost still names that tree, and nothing else on screen says so.
+        const s = fakeCommits({ a: [] });
+        const lost = oid('lost');
+        s.trees[oid('ta')] = [{ mode: '100644', name: 'a.txt', oid: oid('bl'), type: 'blob' }];
+        s.objects[oid('ta')] = { oid: oid('ta'), type: 'tree', size: 1 };
+        s.objects[oid('bl')] = { oid: oid('bl'), type: 'blob', size: 1 };
+        s.commits[lost] = { ...s.commits[oid('a')], oid: lost, tree: oid('ta'), parents: [] };
+        s.objects[lost] = { oid: lost, type: 'commit', size: 1 };
+        s.unreachable = [lost];
+
+        const tree = (v: View) =>
+            layout(s, v).links.filter((e) => e.from === lost && e.to === oid('ta'));
+        const open = { ...DEFAULT_VIEW, expanded: [oid('a')] };
+        assert.equal(tree(open).length, 0, 'off by default, like any link from unreachable');
+        const on = tree({ ...open, showLinksFromUnreachable: true });
+        assert.equal(on.length, 1);
+        assert.equal(on[0].kind, 'tree');
+    });
+
     it('says nothing about the entries of a collapsed unreachable object, links from unreachable or not', () => {
         const s = fakeCommits({ a: [] });
         const [live, lost] = ['bl', 'tlost'].map(oid);
