@@ -153,6 +153,14 @@
       #notes-toolbar ul { display: contents; margin: 0; padding: 0; }
 
       main { display: grid; grid-template-columns: 1fr auto auto; min-height: 0; }
+      /* A grid item refuses to shrink below its content, and the canvas element
+         carries an intrinsic size in *device* pixels — 1920 wide on a 1280px
+         screen at 1.5 scale. Without this the object graph claims all of that
+         and pushes the inspector off the edge of the screen entirely. */
+      main > * { min-width: 0; min-height: 0; }
+      /* Docked at the bottom instead: the same three cells, stacked. On a
+         narrow screen a 430px column is most of the object graph. */
+      main.bottom { grid-template-columns: 1fr; grid-template-rows: 1fr auto auto; }
       #canvas { display: block; width: 100%; height: 100%; cursor: grab; }
       /* Behind the object graph, in the same cell: on that one ground the
          canvas's own ground is painted translucent, so this shows through it
@@ -171,6 +179,8 @@
       /* The details inspector is where the teaching lives, so it earns width —
          and how much is yours to drag, the way a canvas column's width is. */
       #inspector-edge { width: 5px; cursor: col-resize; background: var(--line); }
+      main.bottom #inspector-edge { width: auto; height: 5px; cursor: row-resize; }
+      main.bottom aside { width: auto; }
       aside {
         width: 430px; background: var(--surface);
         overflow-y: auto; scroll-behavior: smooth; padding: calc(var(--u) * 2);
@@ -309,7 +319,7 @@
 
     <div id="notes-toolbar"><ul id="notes-list"></ul></div>
 
-    <main>
+    <main id="main">
       <canvas id="rain" aria-hidden="true"></canvas>
       <canvas id="canvas"></canvas>
       <div id="copied" aria-live="polite"></div>
@@ -365,6 +375,7 @@
       <label><input type="checkbox" id="refit-on-change" /> <span data-t="settings.refitOnChange"></span></label>
       <label><input type="checkbox" id="show-pins" /> <span data-t="settings.showPins"></span></label>
       <label><input type="checkbox" id="expand-new-commits" /> <span data-t="settings.expandNewCommits"></span></label>
+      <label><input type="checkbox" id="inspector-at-bottom" /> <span data-t="settings.inspectorAtBottom"></span></label>
       <footer><button data-t="close" onclick="this.closest('dialog').close()"></button></footer>
     </dialog>
 

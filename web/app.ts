@@ -72,6 +72,10 @@ interface Settings {
     showLinksFromUnreachable: boolean | null;
     theme: Mode;
     inspectorWidth: number;
+    inspectorHeight: number;
+    /** Which edge the inspector sits on. On a narrow screen — a projector, a
+     *  laptop half-screen — a column wide enough to read is most of the canvas. */
+    inspectorAtBottom: boolean;
 }
 const keptSettings = kept<Partial<Settings & CanvasSettings>>('gitva.settings', '{}');
 const DEFAULTS: Settings = {
@@ -81,6 +85,8 @@ const DEFAULTS: Settings = {
     showLinksFromUnreachable: null,
     theme: 'dark',
     inspectorWidth: 430,
+    inspectorHeight: 260,
+    inspectorAtBottom: false,
 };
 // This file's own keys off what was kept, and no others: the rest of that object
 // is the canvas's, and each half is only ever written back from the one that
@@ -496,17 +502,39 @@ addEventListener('keydown', (e) => {
 // The inspector
 // ---------------------------------------------------------------------------
 
-/** How wide the teaching is, is yours. The canvas follows on its own — its
- *  ResizeObserver is what redraws it. */
+/** How big the teaching is, and which edge it sits on, are yours. The canvas
+ *  follows on its own — its ResizeObserver is what redraws it. The size is kept
+ *  per edge: docking to the bottom and back must not turn a 430px column into a
+ *  430px-tall one. */
 const inspectorEdgeEl = $('inspector-edge');
-const setInspectorWidth = (w: number) => {
-    settings.inspectorWidth = Math.max(240, Math.min(w, innerWidth - 240));
-    inspector.style.width = `${settings.inspectorWidth}px`;
+const setInspectorSize = (n: number) => {
+    const bottom = settings.inspectorAtBottom;
+    const size = Math.max(160, Math.min(n, (bottom ? innerHeight : innerWidth) - 240));
+    if (bottom) settings.inspectorHeight = size;
+    else settings.inspectorWidth = size;
+    inspector.style.width = bottom ? '' : `${size}px`;
+    inspector.style.height = bottom ? `${size}px` : '';
 };
-setInspectorWidth(settings.inspectorWidth);
+const dockInspector = () => {
+    $('main').classList.toggle('bottom', settings.inspectorAtBottom);
+    setInspectorSize(
+        settings.inspectorAtBottom ? settings.inspectorHeight : settings.inspectorWidth,
+    );
+};
+dockInspector();
+const bottomBox = $<HTMLInputElement>('inspector-at-bottom');
+bottomBox.checked = settings.inspectorAtBottom;
+bottomBox.addEventListener('change', () => {
+    settings.inspectorAtBottom = bottomBox.checked;
+    dockInspector();
+    saveSettings();
+});
 inspectorEdgeEl.addEventListener('pointerdown', (e) => {
     inspectorEdgeEl.setPointerCapture(e.pointerId);
-    const move = (m: PointerEvent) => setInspectorWidth(innerWidth - m.clientX);
+    const move = (m: PointerEvent) =>
+        setInspectorSize(
+            settings.inspectorAtBottom ? innerHeight - m.clientY : innerWidth - m.clientX,
+        );
     inspectorEdgeEl.addEventListener('pointermove', move);
     // Written out at the end of the gesture, like the columns and the pins.
     inspectorEdgeEl.addEventListener(

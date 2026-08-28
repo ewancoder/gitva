@@ -91,6 +91,7 @@ export const ru: Strings = {
         'settings.refitOnChange': 'авто-масштабирование, когда в репозитории что-то происходит',
         'settings.showPins': 'показать булавку на всём, что вы передвинули вручную',
         'settings.expandNewCommits': 'новые коммиты сразу развёрнуты',
+        'settings.inspectorAtBottom': 'инспектор снизу, а не сбоку',
     },
 
     canvas: {

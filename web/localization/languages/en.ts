@@ -105,6 +105,7 @@ export const en = {
         'settings.refitOnChange': 'auto-zoom the view when something happens in the repository',
         'settings.showPins': 'visual pins for everything you moved manually',
         'settings.expandNewCommits': 'new commits expanded by default',
+        'settings.inspectorAtBottom': 'the inspector sits along the bottom, not the side',
     },
 
     // -------------------------------------------------------------------------

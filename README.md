@@ -128,6 +128,7 @@ Click anything to read what it is or inspect its content.
 | drag a column edge | change the size of the column |
 | click on SHA in the inspector | copy the SHA |
 | click on file path in the inspector | copy absolute file path |
+| drag the inspector edge | resize the inspector — settings dock it along the bottom instead of the side, for a narrow screen |
 | *reset view* | drops every pin (reset to default object positions) and puts the columns width back |
 | <kbd>f</kbd> <kbd>←</kbd>/<kbd>[</kbd> <kbd>→</kbd>/<kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |
 
