@@ -12,6 +12,14 @@ export interface Camera {
     scale: number;
 }
 
+/** Where the scene is and how big it is — `Scene`'s own first four fields. */
+export interface Extent {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
 /** The canvas the object graph is seen through, in css pixels. */
 export interface Viewport {
     width: number;
@@ -22,26 +30,31 @@ export interface Viewport {
 const MARGIN = 20;
 
 /**
- * The object graph is a page, not a plane: you can reach every edge of it and no
- * further. Panning past the last commit into empty grey is how you lose the
- * whole thing and have to scroll back for it.
+ * The object graph is a page, not a plane: you can reach every edge of it and half
+ * a canvas further. Panning off into empty grey is how you lose the whole thing and
+ * have to scroll back for it, but an edge you cannot pan past is an edge you cannot
+ * drag a shape into open space beside.
  */
 export function bounded(
     c: { x: number; y: number },
     scale: number,
-    scene: { width: number; height: number },
+    scene: Extent,
     viewport: Viewport,
 ): { x: number; y: number } {
-    const axis = (v: number, span: number, content: number) => {
-        const far = span - content * scale - MARGIN;
+    const axis = (v: number, span: number, origin: number, content: number) => {
+        // The scene starts wherever the highest, leftmost shape was dragged to, which
+        // is above and left of the columns once you have moved one there.
+        const near = MARGIN - origin * scale;
+        const far = span - (origin + content) * scale - MARGIN;
         // Content shorter than the canvas makes `far` the larger of the two, so the
         // pair is ordered rather than assumed — otherwise the clamp inverts and
         // pins a small object graph to the bottom right.
-        return Math.min(Math.max(v, Math.min(MARGIN, far)), Math.max(MARGIN, far));
+        const room = span / 2;
+        return Math.min(Math.max(v, Math.min(near, far) - room), Math.max(near, far) + room);
     };
     return {
-        x: axis(c.x, viewport.width, scene.width),
-        y: axis(c.y, viewport.height, scene.height),
+        x: axis(c.x, viewport.width, scene.x, scene.width),
+        y: axis(c.y, viewport.height, scene.y, scene.height),
     };
 }
 
@@ -91,7 +104,7 @@ export function zoom(
     cam: Camera,
     at: { x: number; y: number },
     deltaY: number,
-    scene: { width: number; height: number },
+    scene: Extent,
     viewport: Viewport,
 ): Camera {
     const scale = Math.min(4, Math.max(0.1, cam.scale * Math.exp(-deltaY / 400)));

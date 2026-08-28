@@ -21,7 +21,16 @@ const links: Link[] = [
     { id: 't:c2', from: 'c2', to: 't2', kind: 'tree' },
     { id: 'e:t2:b', from: 't2', to: 'b', kind: 'entry' },
 ];
-const scene = { shapes: [], links, columns: [], width: 0, height: 0, rows: [] } satisfies Scene;
+const scene = {
+    shapes: [],
+    links,
+    columns: [],
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    rows: [],
+} satisfies Scene;
 
 function lit(start: string, already: string[] = []) {
     const shapes = new Set(already);
@@ -62,6 +71,8 @@ describe('what is under the pointer', () => {
         ],
         links: [],
         columns: [],
+        x: 0,
+        y: 0,
         width: 200,
         height: 200,
         rows: [],
@@ -98,6 +109,8 @@ describe('the edge a column is widened by', () => {
             { key: 'commits', label: 'commits', x: 140, w: 88 },
             { key: 'index', label: 'index', x: 256, w: 176 },
         ],
+        x: 0,
+        y: 0,
         width: 400,
         height: 200,
         rows: [],
@@ -222,6 +235,8 @@ describe('painting', () => {
             { key: 'commits' as const, label: 'commits', x: 0, w: 90 },
             { key: 'index' as const, label: 'index', x: 400, w: 90 },
         ],
+        x: 0,
+        y: 0,
         width: 700,
         height: 200,
         rows: [],

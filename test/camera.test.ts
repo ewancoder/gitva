@@ -10,27 +10,35 @@ import { bounded, centre, fit, glideStep, refit, toCanvas, zoom, zoomOut } from 
 import type { Scene } from '../web/layout.js';
 
 const viewport = { width: 500, height: 400 };
-const tall = { width: 1000, height: 3000 };
+const tall = { x: 0, y: 0, width: 1000, height: 3000 };
 const scene = (width: number, height: number) =>
-    ({ shapes: [], links: [], columns: [], width, height, rows: [] }) satisfies Scene;
+    ({ shapes: [], links: [], columns: [], x: 0, y: 0, width, height, rows: [] }) satisfies Scene;
 
 describe('panning bounds', () => {
-    it('stops at the near edge and at the far edge of an object graph bigger than the canvas', () => {
-        assert.deepEqual(bounded({ x: 900, y: 900 }, 1, tall, viewport), { x: 20, y: 20 });
-        // Far side: the canvas's width minus the content's, less the same margin.
-        assert.deepEqual(bounded({ x: -9999, y: -9999 }, 1, tall, viewport), { x: -520, y: -2620 });
+    it('stops half a canvas past each edge of an object graph bigger than the canvas', () => {
+        assert.deepEqual(bounded({ x: 900, y: 900 }, 1, tall, viewport), { x: 270, y: 220 });
+        // Far side: the canvas's width minus the content's, less the same margin, and
+        // then half a canvas of empty room to drag a shape into.
+        assert.deepEqual(bounded({ x: -9999, y: -9999 }, 1, tall, viewport), { x: -770, y: -2820 });
     });
 
-    it('keeps an object graph smaller than the canvas inside it, either way it is pushed', () => {
-        const small = { width: 100, height: 50 };
-        assert.deepEqual(bounded({ x: -400, y: -400 }, 1, small, viewport), { x: 20, y: 20 });
-        assert.deepEqual(bounded({ x: 9999, y: 9999 }, 1, small, viewport), { x: 380, y: 330 });
+    it('lets an object graph smaller than the canvas be pushed half a canvas off either way', () => {
+        const small = { x: 0, y: 0, width: 100, height: 50 };
+        assert.deepEqual(bounded({ x: -400, y: -400 }, 1, small, viewport), { x: -230, y: -180 });
+        assert.deepEqual(bounded({ x: 9999, y: 9999 }, 1, small, viewport), { x: 630, y: 530 });
+    });
+
+    it('pans up to a scene that starts above the columns, where a shape was dragged', () => {
+        const above = { x: 0, y: -600, width: 1000, height: 3600 };
+        // The camera may put the topmost shape a margin below the top of the canvas,
+        // and half a canvas further down again.
+        assert.deepEqual(bounded({ x: 0, y: 9999 }, 1, above, viewport).y, 620 + 200);
     });
 
     it('measures the content at the zoom it is drawn at', () => {
         // Zoomed out far enough, an object graph twice the canvas's width fits in it, and
         // what was a floor becomes a ceiling.
-        assert.deepEqual(bounded({ x: -9999, y: 0 }, 0.1, tall, viewport), { x: 20, y: 20 });
+        assert.deepEqual(bounded({ x: -9999, y: 0 }, 0.1, tall, viewport), { x: -230, y: 0 });
     });
 });
 

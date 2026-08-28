@@ -325,6 +325,23 @@ describe('the scene', () => {
         assert.equal(column(back).w, column(plain).w);
     });
 
+    it('grows the scene down to hold a shape dragged below everything else', () => {
+        const s = fakeCommits({ c: ['b'], b: ['a'], a: [] });
+        const plain = layout(s, DEFAULT_VIEW);
+        const chip = plain.shapes.find((n) => n.kind === 'commit')!;
+        const down = layout(s, DEFAULT_VIEW, { [chip.id]: { x: chip.x, y: plain.height + 500 } });
+        assert.ok(down.height > plain.height + 500, 'and the canvas can be panned to it');
+    });
+
+    it('grows the scene up to hold a shape dragged above everything else', () => {
+        const s = fakeCommits({ c: ['b'], b: ['a'], a: [] });
+        const plain = layout(s, DEFAULT_VIEW);
+        const chip = plain.shapes.find((n) => n.kind === 'commit')!;
+        const up = layout(s, DEFAULT_VIEW, { [chip.id]: { x: chip.x, y: -500 } });
+        assert.ok(up.y < -500, 'the scene starts above it');
+        assert.ok(up.y + up.height >= plain.y + plain.height, 'and still reaches the bottom');
+    });
+
     it('widens a column by hand, moving every column after it along', () => {
         const plain = layout(step, DEFAULT_VIEW);
         const wide = layout(step, DEFAULT_VIEW, {}, { pointersAndTags: 400 });

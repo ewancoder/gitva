@@ -62,6 +62,13 @@ export interface Scene {
     shapes: Shape[];
     links: Link[];
     columns: Column[];
+    /**
+     * The top left of everything, and the size from there. Zero unless a shape was
+     * pinned above or left of the columns: the scene is what the camera may be panned
+     * over, so it has to reach wherever a shape was dragged to.
+     */
+    x: number;
+    y: number;
     width: number;
     height: number;
     /** Rows, for the renderer's culling and for the hover backdrop. */
@@ -728,7 +735,18 @@ export function layout(
         y = Math.max(y, cursor);
     }
 
-    const height = Math.max(y + 40, 200);
+    // A pinned shape is dragged wherever you like, and the canvas can only be panned
+    // as far as the scene reaches: a scene measured from the columns alone would
+    // refuse to pan to the empty space you just put something in.
+    const reach = (f: (s: Shape) => number) => shapes.reduce((m, s) => Math.max(m, f(s) + 40), 0);
+    const origin = (f: (s: Shape) => number) => shapes.reduce((m, s) => Math.min(m, f(s) - 40), 0);
+    const x0 = origin((s) => s.x);
+    const y0 = origin((s) => s.y);
+    const bottom = Math.max(
+        y + 40,
+        200,
+        reach((s) => s.y + s.h),
+    );
     return {
         shapes,
         links: links.filter((e) => at.has(e.from) && at.has(e.to)),
@@ -750,8 +768,14 @@ export function layout(
                 ? [{ key: 'index' as const, label: S.canvas.columns.index, x: indexX, w: indexW }]
                 : []),
         ],
-        width: (view.showIndex ? indexX + indexW : objectsX + objectsW) + 40,
-        height,
+        x: x0,
+        y: y0,
+        width:
+            Math.max(
+                (view.showIndex ? indexX + indexW : objectsX + objectsW) + 40,
+                reach((s) => s.x + s.w),
+            ) - x0,
+        height: bottom - y0,
         rows,
     };
 }
