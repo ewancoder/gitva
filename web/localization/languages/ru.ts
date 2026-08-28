@@ -83,6 +83,7 @@ export const ru: Strings = {
         'help.keys.back.does': 'шаг назад по записи',
         'help.keys.forward.does': 'шаг вперёд по записи',
         'help.keys.space.does': 'пауза или к живой записи',
+        'help.keys.presentation.does': 'скрыть панели для показа, и вернуть их обратно',
         close: 'закрыть',
 
         'settings.title': 'настройки',

@@ -97,6 +97,7 @@ export const en = {
         'help.keys.back.does': 'step back through the recording',
         'help.keys.forward.does': 'step forward through the recording',
         'help.keys.space.does': 'pause, or go live',
+        'help.keys.presentation.does': 'hide the toolbars for presenting, and bring them back',
         close: 'close',
 
         'settings.title': 'settings',

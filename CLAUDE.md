@@ -96,6 +96,11 @@ Everything horizontal across the top is a **toolbar**, each named for its job, n
 | **help** | a dialog holding two sections: **legend** and the keys |
 | **settings** | its own dialog, opened from the button beside help |
 
+**presentation** (`p`) hides every toolbar so the canvas has the whole window — a
+mode for the next ten minutes, so unlike the settings it is not kept. It touches nothing else:
+the inspector and the index are not toolbars and keep whatever you set them to. Not to be
+confused with `Recording.presenting()`, which is what the presenter said on the command line.
+
 The canvas columns are **pointers and tags | commits | trees and blobs | index**. Not "objects"
 — commits and tags are objects too, and a column labelled otherwise teaches the opposite of the
 lesson.

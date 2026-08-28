@@ -152,6 +152,16 @@
       #notes-toolbar li { list-style: none; }
       #notes-toolbar ul { display: contents; margin: 0; padding: 0; }
 
+      /* Presentation: every toolbar gone, so the object graph has the whole
+         window. The inspector and the index are not toolbars and keep whatever
+         you set them to. The rows go with the toolbars: a hidden toolbar is not
+         a grid item, so the canvas would otherwise land in the first `auto` row
+         — its own height — and leave the `1fr` one empty below it. */
+      body.presentation { grid-template-rows: 1fr; }
+      body.presentation #view-toolbar,
+      body.presentation #recording-toolbar,
+      body.presentation #notes-toolbar { display: none; }
+
       main { display: grid; grid-template-columns: 1fr auto auto; min-height: 0; }
       /* A grid item refuses to shrink below its content, and the canvas element
          carries an intrinsic size in *device* pixels — 1920 wide on a 1280px
@@ -361,6 +371,7 @@
         <span><kbd>&larr;</kbd> or <kbd>[</kbd></span><span data-t="help.keys.back.does"></span>
         <span><kbd>&rarr;</kbd> or <kbd>]</kbd></span><span data-t="help.keys.forward.does"></span>
         <span><kbd>space</kbd></span><span data-t="help.keys.space.does"></span>
+        <span><kbd>p</kbd></span><span data-t="help.keys.presentation.does"></span>
       </div>
       <footer>
         <button data-t="close" onclick="this.closest('dialog').close()"></button>

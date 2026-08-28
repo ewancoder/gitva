@@ -496,6 +496,10 @@ addEventListener('keydown', (e) => {
         e.preventDefault();
         $('play').click();
     } else if (e.key === 'i') $('toggle-index').click();
+    // Presentation: the toolbars go, the canvas gets the height. A mode for the
+    // next ten minutes rather than an answer about how you like to work, so
+    // unlike the settings it is not kept — a reload is back to the toolbars.
+    else if (e.key === 'p') document.body.classList.toggle('presentation');
 });
 
 // ---------------------------------------------------------------------------
