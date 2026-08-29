@@ -614,14 +614,25 @@ export function columnEdgeAt(scene: Scene, wx: number): string | null {
     return null;
 }
 
+/** Where a shape was last painted, which for the length of a slide is not where
+ *  layout is sending it. Null for one nothing has painted yet — it will be drawn
+ *  at its layout position, so that is where it is. */
+export function drawnPosition(id: string): { x: number; y: number } | null {
+    return drawnAt.get(id) ?? null;
+}
+
+/** What is under the pointer — tested against where each shape was *painted*, so
+ *  a click lands on the shape you can see. The shape handed back is the scene's
+ *  own, so anything reading a position off it wants `drawnPosition` too. */
 export function hitTest(scene: Scene, wx: number, wy: number): Shape | null {
     for (let i = scene.shapes.length - 1; i >= 0; i--) {
         const shape = scene.shapes[i];
+        const at = drawnPosition(shape.id) ?? shape;
         const hit =
-            wx >= shape.x - 3 &&
-            wx <= shape.x + shape.w + 3 &&
-            wy >= shape.y - 3 &&
-            wy <= shape.y + shape.h + 3;
+            wx >= at.x - 3 &&
+            wx <= at.x + shape.w + 3 &&
+            wy >= at.y - 3 &&
+            wy <= at.y + shape.h + 3;
         if (hit) return shape;
     }
     return null;

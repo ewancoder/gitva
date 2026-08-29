@@ -9,10 +9,14 @@
  * program's own state, one file per identifier.
  */
 
-import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+// The node one, so `unref()` is simply there: `lib.dom` makes the global's
+// return type a union, and this file is the server's alone.
+import { setInterval } from 'node:timers';
 
 /** Steps as the server holds them — already serialised — and the change signal
  *  they were built at, so a restart onto an untouched repository does not
@@ -122,4 +126,144 @@ export async function saveRecording(file: string, kept: Kept): Promise<void> {
  *  the repository rather than renumbering over ones the browser already has. */
 export function lastSeq(steps: string[]): number {
     return steps.length ? ((JSON.parse(steps[steps.length - 1]) as { seq: number }).seq ?? 0) : 0;
+}
+
+/**
+ * How often the holder touches its lock, and how old a lock has to be before
+ * its holder is presumed dead. `POLL_MS` in `server.ts` is 400 ms, so a beat a
+ * second is unhurried, and ten beats of slack means an ordinary scheduling
+ * hiccup — or a laptop lid — never makes a live gitva look dead.
+ */
+const HEARTBEAT_MS = 1_000;
+const STALE_MS = 10 * HEARTBEAT_MS;
+
+export function lockFile(key: string, dir: string = stateDir()): string {
+    return join(dir, `${key}.lock`);
+}
+
+/** What holding the recording gets you: the right to write it, until you let go.
+ *  `held` goes false the moment the file stops saying your name — a holder that
+ *  went quiet long enough to be presumed dead can wake up to find another gitva
+ *  keeping the recording, and must not write over it. */
+export interface Lock {
+    held: boolean;
+    release(): Promise<void>;
+}
+
+/** Who is holding it, written inside the file. A lock is a name on a shelf: the
+ *  file existing says somebody holds it, and the name says whether that is
+ *  still you. */
+function name(): string {
+    return `${process.pid}:${randomUUID()}`;
+}
+
+/** Takes the file and answers with the name written in it, or `null` because
+ *  another gitva has it. Throws only for a reason that is the disk's rather
+ *  than anybody's. */
+async function claim(file: string): Promise<string | null> {
+    await mkdir(dirname(file), { recursive: true });
+    const mine = name();
+    try {
+        // Exclusive, so two gitva starting on the same instant cannot both
+        // believe they took it.
+        await writeFile(file, mine, { flag: 'wx' });
+        return mine;
+    } catch {
+        // Somebody's lock is there. Move it aside before asking whose, because
+        // only one gitva can move the file that is there: the taking is settled
+        // before the question is, and the question is then about a file nobody
+        // else can still be changing. Asking first and moving second is what let
+        // two of them take turns being right — the one that stalled between the
+        // two would move a lock the other had just written and take it over.
+        const dead = `${file}.dead`;
+        try {
+            await rename(file, dead);
+            const held = await readFile(dead, 'utf8');
+            const beaten = (await stat(dead)).mtimeMs;
+            await rm(dead, { force: true });
+            if (Date.now() - beaten < STALE_MS) {
+                // Beaten on since: a live gitva is holding it, and this rename has
+                // taken its lock out from under it. Put its name back — but with
+                // `wx`, never a rename: a third gitva starting inside this instant
+                // finds the file missing and takes it, and a rename would put it
+                // back out from under *that* one and leave two of them believing
+                // they hold the recording until the next beat. Whoever is in the
+                // file when we get there is the holder, and it is not us.
+                await writeFile(file, held, { flag: 'wx' }).catch(() => {});
+                return null;
+            }
+            // Stale: the holder died without letting go, which is what a crash or
+            // a `kill -9` leaves behind.
+            await writeFile(file, mine, { flag: 'wx' });
+            return mine;
+        } catch {
+            // Somebody else moved it first, and by now they hold it. Losing a
+            // recording for one run has never been a reason to stop drawing.
+            return null;
+        }
+    }
+}
+
+/**
+ * One gitva writes a recording at a time. A second one still draws — it just
+ * does not persist — so nothing ever waits and there is no deadlock to have.
+ *
+ * `null` means a live gitva is holding it. A lock is handed back even when the
+ * file could not be written at all, because that is the disk being unwritable
+ * rather than the recording being taken, and a recording that cannot be kept
+ * has never been a reason to stop drawing.
+ */
+export async function takeLock(file: string, beatMs = HEARTBEAT_MS): Promise<Lock | null> {
+    let mine: string | null;
+    try {
+        if (!(mine = await claim(file))) return null;
+    } catch {
+        return { held: true, release: async () => {} };
+    }
+    const lock: Lock = {
+        held: true,
+        async release() {
+            clearInterval(beat);
+            lock.held = false;
+            // Only ours to remove, and the file is the only thing that says so:
+            // the recording may have changed hands since the last beat, and the
+            // gitva holding it now is the one whose name is in there.
+            await readFile(file, 'utf8')
+                .then((who) => (who === mine ? rm(file, { force: true }) : undefined))
+                .catch(() => {});
+        },
+    };
+    // The heartbeat is the whole difference between a holder that is alive and
+    // one that died: without it a gitva left running through a lecture would
+    // look dead a few seconds in. Unref'd, as the server's poll timer is, so it
+    // cannot hold the process open by itself.
+    const beat = setInterval(() => {
+        try {
+            // Reading it back first is what makes the beat a check as well as a
+            // beat: a laptop lid closed for a minute is a holder presumed dead,
+            // and the one that took over must not be touched.
+            if (readFileSync(file, 'utf8') !== mine) {
+                lock.held = false;
+                clearInterval(beat);
+                return;
+            }
+            const now = new Date();
+            utimesSync(file, now, now);
+        } catch {
+            // The lock file was swept away underneath us — clearing the state
+            // directory mid-session is a thing people do, and it takes the folder
+            // as often as the file. So make it again and put our name back,
+            // because holding the recording is the file saying we do; if
+            // something else got there first, it is theirs and we stop writing.
+            try {
+                mkdirSync(dirname(file), { recursive: true });
+                writeFileSync(file, mine, { flag: 'wx' });
+            } catch {
+                lock.held = false;
+                clearInterval(beat);
+            }
+        }
+    }, beatMs);
+    beat.unref();
+    return lock;
 }

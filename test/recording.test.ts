@@ -97,6 +97,44 @@ describe('the recording', () => {
     // reload — the stream reconnects by itself and is handed a whole recording
     // numbered from one again — so a tab left open must not take those steps for
     // ones it already holds and sit there, live, showing a recording that is gone.
+    // EventSource reconnects by itself after any blip, and every connection is
+    // handed the whole recording. The page refits the camera and says "the first
+    // step" on a frame that delivered something — so a frame that delivered
+    // nothing must say so, or a three-second hiccup yanks the canvas away from
+    // everyone reading it.
+    it('a reconnected stream re-sending the recording leaves the view where it was', () => {
+        const t = new Recording();
+        const recording = [step(1, ['c']), step(2, ['d', 'c'])];
+        assert.deepEqual(
+            t.arriveAll(recording, SHUT),
+            { first: true },
+            'the first connection draws nothing',
+        );
+
+        assert.equal(t.arriveAll(recording, SHUT), null);
+        assert.equal(t.steps.length, 2);
+        assert.equal(t.cursor, 1);
+
+        // Disconnected while git moved: the frame does carry news, and the page
+        // has to draw it.
+        assert.deepEqual(t.arriveAll([...recording, step(3, ['e', 'd', 'c'])], SHUT), {
+            first: false,
+        });
+        assert.equal(t.steps.length, 3);
+    });
+
+    // Standing back in history is the same answer as a camera you moved: a
+    // backlog arriving is recorded, and nothing about the view moves.
+    it('leaves a paused viewer alone when a reconnect hands over steps it missed', () => {
+        const t = new Recording();
+        t.arriveAll([step(1, ['c']), step(2, ['d', 'c'])], SHUT);
+        t.scrubTo(0);
+
+        assert.equal(t.arriveAll([step(3, ['e', 'd', 'c'])], SHUT), null);
+        assert.equal(t.steps.length, 3, 'the step was not recorded');
+        assert.equal(t.cursor, 0);
+    });
+
     it('starts over when the recording it is handed is numbered from one again', () => {
         const t = new Recording();
         t.arrive(step(1, ['c']), SHUT);
@@ -114,6 +152,25 @@ describe('the recording', () => {
         assert.ok(t.following, 'left standing in a recording that no longer exists');
         assert.equal(t.arrive({ ...step(2, ['f', 'e']), time: 100 }, SHUT, true).kind, 'shown');
         assert.equal(t.steps.length, 2);
+    });
+
+    // `--fresh` reaches a tab that never disconnected the same way an ordinary
+    // reconnect does: down the whole-recording frame. The page frames the object
+    // graph on a first step, and the step that lands on a recording started over
+    // is one — a browser told nothing but "you missed a step" keeps the camera it
+    // had around a scene the presenter has just replaced.
+    it('says the recording started over when --fresh replaces it mid-frame', () => {
+        const t = new Recording();
+        t.arriveAll([step(1, ['c']), step(2, ['d', 'c'])], SHUT);
+
+        const over = t.arriveAll([{ ...step(1, ['e']), time: 99 }], SHUT);
+        assert.deepEqual(over, { first: true }, 'a recording of one step, from the top');
+        assert.equal(t.steps.length, 1);
+
+        // And an ordinary missed step is still not a first step.
+        assert.deepEqual(t.arriveAll([{ ...step(2, ['f', 'e']), time: 100 }], SHUT), {
+            first: false,
+        });
     });
 
     it('keeps you on the step you were watching when the oldest one drops', () => {
