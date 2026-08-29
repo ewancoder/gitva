@@ -235,6 +235,19 @@
       }
       aside pre.unreadable { font-weight: 700; }
       aside .empty { color: var(--faint); }
+      /* Compact along the bottom is the bytes and nothing else: what was clicked
+         is still on the canvas, so the title, the fields and the contents heading
+         are height the contents can have instead. */
+      main.bottom.compact aside { padding-top: 6px; gap: 6px; }
+      main.bottom.compact aside h2,
+      main.bottom.compact aside > dt { display: none; }
+      /* What is left of the fields: the key, where git keeps it, and where a
+         pointer ends up — never more than two rows, whatever the kind. Hidden,
+         never re-shown, so a value with a layout of its own keeps it. */
+      main.bottom.compact aside dl > :not([data-field='sha'], [data-field='file'],
+        [data-field='resolvesTo']) { display: none; }
+      /* HEAD is the one hop worth the row: the file is .git/HEAD every time. */
+      main.bottom.compact aside[data-kind='head'] dl > [data-field='file'] { display: none; }
 
       /* `body` is a grid, so a dialog left to flow would be placed in a row
          rather than in the middle of the window: fixed and auto-margined puts

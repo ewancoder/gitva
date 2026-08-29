@@ -104,6 +104,9 @@ export function renderInspector(
     }
 
     const m = inspectorModel(step, shape);
+    // Which kind is being read: the compact inspector keeps a different row or
+    // two per kind, and that is a stylesheet's decision, not this file's.
+    el.dataset.kind = shape.kind;
     el.append(el2('h2', '', m.title));
     if (!compact) {
         el.append(el2('p', 'what', m.what));
@@ -122,7 +125,9 @@ export function renderInspector(
             const dt = el2('dt', '', k);
             if (k === F.sha) seenSha = true;
             else if (seenSha && !after) after = dt;
-            dl.append(dt, cell(k, v, F));
+            const dd = cell(k, v, F);
+            dt.dataset.field = dd.dataset.field = fieldKey(k, F);
+            dl.append(dt, dd);
         }
         el.append(dl);
     }
@@ -149,6 +154,12 @@ export function renderInspector(
             // A failure to read is a warning, not content: warning red, like `clear`.
             pre.className = 'unreadable danger';
         });
+}
+
+/** A fact's name in the strings rather than its words — what a row is hidden
+ *  by has to hold in every language. */
+function fieldKey(label: string, F: Record<string, string>): string {
+    return Object.keys(F).find((n) => F[n] === label) ?? '';
 }
 
 /**
@@ -182,8 +193,11 @@ function cell(label: string, v: string | Key | Key[], F: { sha: string }): HTMLE
  */
 function storedIn(dl: HTMLElement, before: HTMLElement | null, gitDir: string, path: string) {
     const F = S.inspector.fields;
-    dl.insertBefore(el2('dt', '', F.file), before);
-    dl.insertBefore(cell(F.file, { short: path, full: `${gitDir}/${path}` }, F), before);
+    const dt = el2('dt', '', F.file);
+    const dd = cell(F.file, { short: path, full: `${gitDir}/${path}` }, F);
+    dt.dataset.field = dd.dataset.field = 'file';
+    dl.insertBefore(dt, before);
+    dl.insertBefore(dd, before);
 }
 
 function el2(tag: string, cls: string, text: string): HTMLElement {

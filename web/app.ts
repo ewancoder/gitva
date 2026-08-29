@@ -480,6 +480,7 @@ compactBox.checked = settings.compact;
 compactBox.addEventListener('change', () => {
     settings.compact = compactBox.checked;
     saveSettings();
+    dockInspector();
     redressed();
 });
 const refitBox = $<HTMLInputElement>('refit-on-change');
@@ -537,6 +538,9 @@ const setInspectorSize = (n: number) => {
 };
 const dockInspector = () => {
     $('main').classList.toggle('bottom', settings.inspectorAtBottom);
+    // Compact *and* along the bottom is the contents alone — a strip that deep
+    // has room for the bytes or for everything about them, not both.
+    $('main').classList.toggle('compact', settings.compact);
     setInspectorSize(
         settings.inspectorAtBottom ? settings.inspectorHeight : settings.inspectorWidth,
     );
