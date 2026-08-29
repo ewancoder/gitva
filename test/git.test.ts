@@ -73,6 +73,10 @@ describe('parsing what git hands back', () => {
         assert.deepEqual(c.parents, ['2222', '3333']);
         assert.equal(c.author, 'A U Thor <a@b.c>');
         assert.equal(c.authorDate, 1700000000000);
+        // The committer is a second ident with a second date — a rebase keeps the
+        // author's and writes its own.
+        assert.equal(c.committer, 'C O Mitter <c@d.e>');
+        assert.equal(c.committerDate, 1700000001000);
         assert.equal(c.subject, 'subject line');
     });
 

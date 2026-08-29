@@ -51,6 +51,9 @@ export interface Commit {
     author: string;
     authorDate: number;
     committer: string;
+    /** A commit is written twice over: rebase, amend and am keep the author and
+     *  set a new committer, so the two dates are not the same commit's. */
+    committerDate: number;
     subject: string;
     message: string;
 }

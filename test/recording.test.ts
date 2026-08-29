@@ -45,6 +45,7 @@ function step(seq: number, commits: string[]): Step {
                     author: 'A <a@b>',
                     authorDate: 0,
                     committer: 'A <a@b>',
+                    committerDate: 1_700_000_000_000,
                     subject: c,
                     message: c,
                 },

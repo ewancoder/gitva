@@ -23,6 +23,7 @@ function fakeCommits(commits: Record<string, string[]>, extra: Partial<Step> = {
         author: 'A <a@b>',
         authorDate: 0,
         committer: 'A <a@b>',
+        committerDate: 1_700_000_000_000,
         subject: `commit ${o}`,
         message: `commit ${o}`,
     });
@@ -362,11 +363,15 @@ describe('the scene', () => {
     it('explains the ref chips it draws — the scene keys them, the inspector looks them up', () => {
         const chip = layout(step, DEFAULT_VIEW).shapes.find((n) => n.kind === 'ref')!;
         const facts = explain(step, 'ref', chip.id).facts;
+        // The name is the part you type; the whole of it is the file's path.
         assert.deepEqual(
             facts.find(([k]) => k === 'name'),
-            ['name', 'refs/heads/main'],
+            ['name', 'main'],
         );
-        assert.ok(facts.some(([k, v]) => k === 'contains' && v === oid('c')));
+        assert.deepEqual(facts.find(([k]) => k === 'file')![1], {
+            short: 'refs/heads/main',
+            full: `${step.gitDir}/refs/heads/main`,
+        });
     });
 
     // There is nothing to draw a parent outside the window *to*, and no button to

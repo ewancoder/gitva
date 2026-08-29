@@ -157,6 +157,7 @@ export function parseCommit(oid: Oid, body: string): Commit {
         author: '',
         authorDate: 0,
         committer: '',
+        committerDate: 0,
         subject: message.split('\n')[0] ?? '',
         message,
     };
@@ -170,7 +171,10 @@ export function parseCommit(oid: Oid, body: string): Commit {
         else if (key === 'author') {
             c.author = identName(value);
             c.authorDate = identDate(value);
-        } else if (key === 'committer') c.committer = identName(value);
+        } else if (key === 'committer') {
+            c.committer = identName(value);
+            c.committerDate = identDate(value);
+        }
     }
     return c;
 }

@@ -37,7 +37,7 @@ export interface Kept {
  * that cannot tell whether unreachable detection was on would draw a repository
  * as having nothing unreachable in it.
  */
-export const FORMAT = 5;
+export const FORMAT = 6;
 
 /** Where the system keeps state a program owns. `GITVA_STATE_DIR` overrides,
  *  which is also how the tests keep out of the real one. */

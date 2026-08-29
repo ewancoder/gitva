@@ -76,6 +76,9 @@ interface Settings {
     /** Which edge the inspector sits on. On a narrow screen — a projector, a
      *  laptop half-screen — a column wide enough to read is most of the canvas. */
     inspectorAtBottom: boolean;
+    /** Less on screen, everywhere: for now the inspector drops its teaching text,
+     *  and anything else that gets a compact form answers to this one setting. */
+    compact: boolean;
 }
 const keptSettings = kept<Partial<Settings & CanvasSettings>>('gitva.settings', '{}');
 const DEFAULTS: Settings = {
@@ -87,6 +90,7 @@ const DEFAULTS: Settings = {
     inspectorWidth: 430,
     inspectorHeight: 260,
     inspectorAtBottom: false,
+    compact: false,
 };
 // This file's own keys off what was kept, and no others: the rest of that object
 // is the canvas's, and each half is only ever written back from the one that
@@ -216,7 +220,7 @@ async function chooseLanguage(code: string) {
     applyWords();
     showConnection(source.readyState !== 2);
     updateToolbars();
-    renderInspector(inspector, recording.current, canvas.shape(canvas.selected));
+    renderInspector(inspector, recording.current, canvas.shape(canvas.selected), settings.compact);
     showChange(recording.current ? describe(shownFrom, recording.current) : '');
     canvas.redraw(false);
 }
@@ -239,7 +243,7 @@ const canvas = mount($<HTMLCanvasElement>('canvas'), {
     onSelect: (shape) => {
         if (shape) localStorage.setItem('gitva.selected', shape.id);
         else localStorage.removeItem('gitva.selected');
-        renderInspector(inspector, recording.current, shape);
+        renderInspector(inspector, recording.current, shape, settings.compact);
         // Anything with a sha is a key in the key-value store, so a click hands
         // you the key: the whole point is that you can paste it into the next
         // command.
@@ -300,7 +304,12 @@ function showStep(prev: Step | null, drawn = false) {
 function redressed() {
     updateToolbars();
     if (canvas.selected)
-        renderInspector(inspector, recording.current, canvas.shape(canvas.selected));
+        renderInspector(
+            inspector,
+            recording.current,
+            canvas.shape(canvas.selected),
+            settings.compact,
+        );
 }
 
 // ---------------------------------------------------------------------------
@@ -465,6 +474,13 @@ pinBox.addEventListener('change', () => {
     canvas.settings.showPins = pinBox.checked;
     saveSettings();
     canvas.schedule();
+});
+const compactBox = $<HTMLInputElement>('compact');
+compactBox.checked = settings.compact;
+compactBox.addEventListener('change', () => {
+    settings.compact = compactBox.checked;
+    saveSettings();
+    redressed();
 });
 const refitBox = $<HTMLInputElement>('refit-on-change');
 refitBox.checked = canvas.settings.refitOnChange;
