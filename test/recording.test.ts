@@ -97,6 +97,38 @@ describe('the recording', () => {
     // reload — the stream reconnects by itself and is handed a whole recording
     // numbered from one again — so a tab left open must not take those steps for
     // ones it already holds and sit there, live, showing a recording that is gone.
+    // EventSource reconnects by itself after any blip, and every connection is
+    // handed the whole recording. The page refits the camera and says "the first
+    // step" on a frame that delivered something — so a frame that delivered
+    // nothing must say so, or a three-second hiccup yanks the canvas away from
+    // everyone reading it.
+    it('a reconnected stream re-sending the recording leaves the view where it was', () => {
+        const t = new Recording();
+        const recording = [step(1, ['c']), step(2, ['d', 'c'])];
+        assert.equal(t.arriveAll(recording, SHUT), true, 'the first connection draws nothing');
+
+        assert.equal(t.arriveAll(recording, SHUT), false);
+        assert.equal(t.steps.length, 2);
+        assert.equal(t.cursor, 1);
+
+        // Disconnected while git moved: the frame does carry news, and the page
+        // has to draw it.
+        assert.equal(t.arriveAll([...recording, step(3, ['e', 'd', 'c'])], SHUT), true);
+        assert.equal(t.steps.length, 3);
+    });
+
+    // Standing back in history is the same answer as a camera you moved: a
+    // backlog arriving is recorded, and nothing about the view moves.
+    it('leaves a paused viewer alone when a reconnect hands over steps it missed', () => {
+        const t = new Recording();
+        t.arriveAll([step(1, ['c']), step(2, ['d', 'c'])], SHUT);
+        t.scrubTo(0);
+
+        assert.equal(t.arriveAll([step(3, ['e', 'd', 'c'])], SHUT), false);
+        assert.equal(t.steps.length, 3, 'the step was not recorded');
+        assert.equal(t.cursor, 0);
+    });
+
     it('starts over when the recording it is handed is numbered from one again', () => {
         const t = new Recording();
         t.arrive(step(1, ['c']), SHUT);

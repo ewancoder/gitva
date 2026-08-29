@@ -32,7 +32,7 @@ import {
     type Camera,
 } from './camera.js';
 import { columnEdgeAt, draw, hitTest, snapPositions } from './render.js';
-import { isDouble, Pins, Recording, type Arrival, type Click } from './recording.js';
+import { isDouble, Pins, Recording, type Arrival, type Click, type Settings } from './recording.js';
 import { setTheme, theme, type Mode } from './theme.js';
 import type { Step, View } from '../src/types.js';
 
@@ -210,14 +210,7 @@ export class Canvas {
      * last one is in and the caller redraws.
      */
     show(step: Step, replay = false): Arrival {
-        const arrival = this.recording.arrive(
-            step,
-            {
-                showIndex: this.recording.view.showIndex,
-                expandNewCommits: this.settings.expandNewCommits,
-            },
-            replay,
-        );
+        const arrival = this.recording.arrive(step, this.arriving, replay);
         if (replay || arrival.kind !== 'shown') return arrival;
         this.redraw(true, this.repoMoved(arrival.prev));
         // The first step frames the object graph; after that only if asked to,
@@ -230,6 +223,23 @@ export class Canvas {
             this.schedule();
         }
         return arrival;
+    }
+
+    /** The whole recording, replayed: every step recorded, none performed, and
+     *  nothing painted — the caller redraws once at the end. True when one of them
+     *  was shown, which is the only time there is anything to redraw or refit: the
+     *  stream reconnects by itself and is handed the recording again, and a
+     *  reconnect must leave the camera where the viewer put it. */
+    showAll(steps: Step[]): boolean {
+        return this.recording.arriveAll(steps, this.arriving);
+    }
+
+    /** What a step arriving is answered under. */
+    private get arriving(): Settings {
+        return {
+            showIndex: this.recording.view.showIndex,
+            expandNewCommits: this.settings.expandNewCommits,
+        };
     }
 
     /** Stand at step `i` and draw it; null if there is no such step. What was on

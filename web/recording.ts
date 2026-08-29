@@ -163,6 +163,17 @@ export class Recording {
         return { kind: 'shown', prev, first };
     }
 
+    /** A whole recording off the wire, replayed. The stream reconnects on its own
+     *  and is handed the recording again every time, so most of these frames are
+     *  steps already held: true only when one of them was shown, which is the only
+     *  time the page has anything to say or to refit. A blip must not pull the
+     *  canvas out from under everyone reading it. */
+    arriveAll(steps: Step[], settings: Settings): boolean {
+        let shown = false;
+        for (const s of steps) shown = this.arrive(s, settings, true).kind === 'shown' || shown;
+        return shown;
+    }
+
     /**
      * `--fresh` starts the recording over, and step numbers start over with it.
      * The stream reconnects on its own and is handed the whole recording, so a

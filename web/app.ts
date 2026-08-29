@@ -334,11 +334,18 @@ const source = new EventSource('/events');
  *  recorded, not performed: a page opened an hour in would otherwise strobe
  *  through the whole session, painting and posting a view per step on the
  *  way. One step is painted at the end — the newest — exactly as the very
- *  first step is. */
+ *  first step is.
+ *
+ *  This frame comes down every connection, and the stream reconnects on its own,
+ *  so most of them hand over the recording this browser is already holding: with
+ *  nothing new in it there is nothing to say and nothing to refit, the same as a
+ *  step that lands while you are paused. */
 source.addEventListener('steps', (e) => {
     showConnection(true);
-    const steps = JSON.parse(e.data as string) as Step[];
-    for (const s of steps) canvas.show(s, true);
+    if (!canvas.showAll(JSON.parse(e.data as string) as Step[])) {
+        updateToolbars();
+        return;
+    }
     showStep(null);
     canvas.fitCamera();
 });
