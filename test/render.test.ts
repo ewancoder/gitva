@@ -13,6 +13,7 @@ import type { Scene, Link, Shape } from '../web/layout.js';
 import { EMPTY_CHANGE } from '../web/diff.js';
 import { columnEdgeAt, draw, hitTest, path, snapPositions, type Paint } from '../web/render.js';
 import { chipHue, hueFor, setTheme, theme } from '../web/theme.js';
+import { fakeCtx } from './fixture.js';
 
 /** c2 → c1 → c0, and c2 holds a tree holding a blob. */
 const links: Link[] = [
@@ -185,28 +186,6 @@ describe('hues', () => {
         }
     });
 });
-
-/**
- * A canvas that records nothing and refuses nothing. Painting is checked by
- * looking at it; this is only here so the branches that decide *what* to paint
- * — every shape, every tier of label, leaving, marks, flashes — are walked, and
- * so the easing that tells the client whether to ask for another frame is.
- */
-function fakeCtx(): CanvasRenderingContext2D {
-    const it = {
-        globalAlpha: 1,
-        lineWidth: 1,
-        font: '',
-        fillStyle: '',
-        strokeStyle: '',
-        textAlign: 'left',
-        measureText: (s: string) => ({ width: s.length * 7 }),
-    } as unknown as Record<string, unknown>;
-    return new Proxy(it, {
-        get: (t, k) => (k in t ? t[k as string] : () => {}),
-        set: (t, k, v) => ((t[k as string] = v), true),
-    }) as unknown as CanvasRenderingContext2D;
-}
 
 describe('painting', () => {
     const full = {

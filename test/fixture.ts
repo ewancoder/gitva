@@ -135,3 +135,187 @@ export function fakeStep(extra: Partial<Step> = {}): Step {
         ...extra,
     };
 }
+
+// ---------------------------------------------------------------------------
+// The smallest browser `web/canvas.ts` will run in
+// ---------------------------------------------------------------------------
+
+/**
+ * A canvas context that records nothing and refuses nothing. Painting is checked
+ * by looking at it; this is here so the branches that decide *what* to paint are
+ * walked, and so is the easing that tells the canvas whether to ask for another
+ * frame.
+ */
+export function fakeCtx(): CanvasRenderingContext2D {
+    const it: Record<string, unknown> = {
+        globalAlpha: 1,
+        lineWidth: 1,
+        font: '',
+        fillStyle: '',
+        strokeStyle: '',
+        textAlign: 'left',
+        measureText: (s: string) => ({ width: s.length * 7 }),
+    };
+    return new Proxy(it, {
+        get: (t, k) => (k in t ? t[k as string] : () => {}),
+        set: (t, k, v) => ((t[k as string] = v), true),
+    }) as unknown as CanvasRenderingContext2D;
+}
+
+/** What a synthetic gesture carries, with the blanks a real event would fill. */
+export interface FakeEvent {
+    button: number;
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+    timeStamp: number;
+    shiftKey: boolean;
+    ctrlKey: boolean;
+    metaKey: boolean;
+    deltaX: number;
+    deltaY: number;
+    preventDefault: () => void;
+}
+
+/**
+ * An element, in the smallest possible print: enough for a canvas to be mounted
+ * in, sized, listened to and dragged on. Only what `web/canvas.ts` actually
+ * reaches for — a stub that grows past that is a second browser to maintain.
+ */
+export class FakeElement {
+    style: Record<string, string> = {};
+    clientWidth = 900;
+    clientHeight = 600;
+    width = 0;
+    height = 0;
+    readonly children: FakeElement[] = [];
+    parent: FakeElement | null = null;
+    readonly ownerDocument = { createElement: () => new FakeCanvas() };
+    private readonly handlers: Record<string, ((e: FakeEvent) => void)[]> = {};
+
+    addEventListener(type: string, f: (e: FakeEvent) => void, opts?: { signal?: AbortSignal }) {
+        (this.handlers[type] ??= []).push(f);
+        opts?.signal?.addEventListener('abort', () => {
+            this.handlers[type] = this.handlers[type].filter((h) => h !== f);
+        });
+    }
+
+    append(child: FakeElement) {
+        this.children.push(child);
+        child.parent = this;
+    }
+
+    remove() {
+        const at = this.parent?.children.indexOf(this) ?? -1;
+        if (this.parent && at >= 0) this.parent.children.splice(at, 1);
+        this.parent = null;
+    }
+
+    getBoundingClientRect() {
+        return { left: 0, top: 0 };
+    }
+
+    setPointerCapture() {}
+
+    getContext() {
+        return fakeCtx();
+    }
+
+    /** One gesture, from a test. */
+    fire(type: string, e: Partial<FakeEvent> = {}) {
+        const event: FakeEvent = {
+            button: 0,
+            pointerId: 1,
+            clientX: 0,
+            clientY: 0,
+            timeStamp: 0,
+            shiftKey: false,
+            ctrlKey: false,
+            metaKey: false,
+            deltaX: 0,
+            deltaY: 0,
+            preventDefault: () => {},
+            ...e,
+        };
+        for (const f of [...(this.handlers[type] ?? [])]) f(event);
+    }
+
+    /** Whether anything is still listening — what `destroy()` has to leave behind. */
+    get listening(): boolean {
+        return Object.values(this.handlers).some((h) => h.length > 0);
+    }
+}
+
+/** A `<canvas>`, told apart from any other element by `instanceof`, exactly as
+ *  `mount` tells them apart. */
+export class FakeCanvas extends FakeElement {}
+
+class FakeResizeObserver {
+    static readonly all: FakeResizeObserver[] = [];
+    private live = true;
+    constructor(private readonly f: () => void) {
+        FakeResizeObserver.all.push(this);
+    }
+    observe() {}
+    disconnect() {
+        this.live = false;
+    }
+    fire() {
+        if (this.live) this.f();
+    }
+}
+
+/** The globals, and what a test has to be able to do to them: let a frame
+ *  happen, let time pass, and change the size of the element. */
+export interface Browser {
+    /** Every frame asked for since the last call, run once. */
+    paint(): void;
+    /** Time passing, for the fades and for the flash. */
+    advance(ms: number): void;
+    /** The element changed size. */
+    resize(): void;
+    /** Frames still wanted — zero is what "idle costs nothing" looks like. */
+    readonly pending: number;
+    /** Read as a canvas is built, so set it before mounting one. */
+    reduceMotion: boolean;
+}
+
+/** Install them. `web/render.ts` keeps where each shape was last painted in one
+ *  module-level map — a page has one canvas — so a test that mounts a second one
+ *  destroys the first, or the two ease the same shape towards two places for
+ *  ever. */
+export function browser(): Browser {
+    const g = globalThis as unknown as {
+        HTMLCanvasElement: unknown;
+        devicePixelRatio: number;
+        matchMedia: (q: string) => { matches: boolean };
+        requestAnimationFrame: (f: () => void) => number;
+        ResizeObserver: unknown;
+    };
+    let queue: (() => void)[] = [];
+    let clock = 0;
+    const api: Browser = {
+        paint() {
+            const run = queue;
+            queue = [];
+            for (const f of run) f();
+        },
+        advance(ms) {
+            clock += ms;
+        },
+        resize() {
+            for (const o of FakeResizeObserver.all) o.fire();
+        },
+        get pending() {
+            return queue.length;
+        },
+        reduceMotion: false,
+    };
+    g.HTMLCanvasElement = FakeCanvas;
+    g.devicePixelRatio = 2;
+    g.matchMedia = () => ({ matches: api.reduceMotion });
+    g.requestAnimationFrame = (f) => queue.push(f);
+    g.ResizeObserver = FakeResizeObserver;
+    performance.now = () => clock;
+    return api;
+}
