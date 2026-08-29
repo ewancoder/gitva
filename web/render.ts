@@ -614,14 +614,20 @@ export function columnEdgeAt(scene: Scene, wx: number): string | null {
     return null;
 }
 
+/** What is under the pointer — tested against where each shape was *painted*,
+ *  which for the length of a slide is not where layout is sending it. A shape
+ *  with nothing in `drawnAt` was drawn at its layout position, so it is hit
+ *  there. The shape handed back is always the scene's own, temporary position
+ *  and all: callers read its `id`, `kind` and `oid`. */
 export function hitTest(scene: Scene, wx: number, wy: number): Shape | null {
     for (let i = scene.shapes.length - 1; i >= 0; i--) {
         const shape = scene.shapes[i];
+        const at = drawnAt.get(shape.id) ?? shape;
         const hit =
-            wx >= shape.x - 3 &&
-            wx <= shape.x + shape.w + 3 &&
-            wy >= shape.y - 3 &&
-            wy <= shape.y + shape.h + 3;
+            wx >= at.x - 3 &&
+            wx <= at.x + shape.w + 3 &&
+            wy >= at.y - 3 &&
+            wy <= at.y + shape.h + 3;
         if (hit) return shape;
     }
     return null;

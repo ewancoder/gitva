@@ -417,6 +417,19 @@ describe('painting', () => {
         assert.equal(draw(fakeCtx(), dragged(full), still), false);
     });
 
+    it('is hit where it is drawn, not where it is going', () => {
+        // A shape does not jump to a new place, it slides there. For the length of
+        // that slide a click has to land on the shape you can see.
+        snapPositions();
+        settle(full);
+        const moving = dragged(full); // c1 leaves y 0 for y 900
+        draw(fakeCtx(), moving, paint()); // one frame: a fifth of the way, y 180
+        const hit = hitTest(moving, 20, 190);
+        assert.equal(hit?.id, 'c1');
+        assert.equal(hit?.y, 900, "and the shape handed back is still the scene's own");
+        assert.equal(hitTest(moving, 20, 905), null, 'nothing is at the far end yet');
+    });
+
     it('draws nothing that is off screen', () => {
         snapPositions();
         // The camera is miles away: every shape and every link is culled, and the
