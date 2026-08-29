@@ -342,12 +342,15 @@ const source = new EventSource('/events');
  *  step that lands while you are paused. */
 source.addEventListener('steps', (e) => {
     showConnection(true);
-    if (!canvas.showAll(JSON.parse(e.data as string) as Step[])) {
+    const a = canvas.showAll(JSON.parse(e.data as string) as Step[]);
+    if (!a) {
         updateToolbars();
         return;
     }
-    showStep(null);
-    canvas.fitCamera();
+    showStep(a.prev);
+    // Only a browser that arrived with nothing is fitted: a reconnect that
+    // missed a step draws it like any other, camera untouched.
+    if (!a.prev) canvas.fitCamera();
 });
 
 source.addEventListener('step', (e) => {

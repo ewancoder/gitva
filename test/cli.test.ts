@@ -99,6 +99,16 @@ describe('arguments', () => {
         assert.throws(() => parseArgs(['--port=-1']), /--port: -1 is not a port/);
         // The port half of a --serve address is a port too, and --serve is what to say.
         assert.throws(() => parseArgs(['--serve', '10.0.0.2:99999']), /--serve: 99999/);
+        // Whatever follows the colon was typed as a port. Before this it became
+        // part of the host, and gitva listened on 4200 of a name like that.
+        assert.throws(() => parseArgs(['--serve=10.0.0.2:abc']), /--serve: abc is not a port/);
+        assert.throws(() => parseArgs(['--serve', '10.0.0.2:abc']), /--serve: abc is not a port/);
+        // But a drive letter is a folder on its way past, not a host called C.
+        assert.equal(parseArgs(['--serve', 'C:\\work\\repo']).repo, 'C:\\work\\repo');
+        assert.equal(parseArgs(['--serve', 'C:/work/repo']).repo, 'C:/work/repo');
+        assert.equal(parseArgs(['--serve=c:9000']).port, 9000, 'and the flag can still say so');
+        assert.throws(() => parseArgs(['--serve=10.0.0.2:']), /--serve:  is not a port/);
+        assert.throws(() => parseArgs(['--serve=[::1]:nope']), /--serve: nope is not a port/);
         // The edges of the range are ports.
         assert.deepEqual(
             [parseArgs(['--port', '0']).port, parseArgs(['--port', '65535']).port],

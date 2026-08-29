@@ -6,7 +6,16 @@
  */
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    statSync,
+    utimesSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -154,9 +163,15 @@ describe('keeping the recording', () => {
  * it just does not keep what it drew.
  */
 describe('holding the recording', () => {
-    /** A lock file as a crashed gitva leaves one: written, then never touched again. */
+    /** A lock file as a crashed gitva leaves one: its name in it, then never
+     *  touched again. */
     function abandoned(file: string, secondsAgo: number) {
-        writeFileSync(file, '');
+        writeFileSync(file, 'the gitva that died');
+        stopped(file, secondsAgo);
+    }
+
+    /** As if nothing had beaten on it for that long. */
+    function stopped(file: string, secondsAgo: number) {
         const then = new Date(Date.now() - secondsAgo * 1000);
         utimesSync(file, then, then);
     }
@@ -194,7 +209,7 @@ describe('holding the recording', () => {
         const lock = await takeLock(file, 5);
         assert.ok(lock);
         try {
-            abandoned(file, 60); // as if the holder had gone quiet a minute ago
+            stopped(file, 60); // as if the holder had gone quiet a minute ago
             await new Promise((r) => setTimeout(r, 50));
             assert.equal(await takeLock(file), null, 'beaten on since, so still held');
         } finally {
@@ -204,15 +219,114 @@ describe('holding the recording', () => {
 
     // Clearing the state directory mid-session is a thing people do. The beat
     // has nothing left to touch, and a throw out of a timer takes the process
-    // with it — so it does not throw.
-    it('carries on when its lock file is taken away underneath it', async () => {
+    // with it — so it does not throw. `saveRecording` makes the directory again
+    // on the next step, so the lock goes back beside it: a recording being
+    // written with nothing saying who by is how two gitva end up writing it.
+    it('puts its lock back when the file is taken away underneath it', async () => {
         const file = lockFile('swept-away', dir);
         const lock = await takeLock(file, 5);
         assert.ok(lock);
         rmSync(file);
         await new Promise((r) => setTimeout(r, 30));
-        assert.equal(existsSync(file), false, 'and it does not put it back');
+        assert.equal(lock.held, true, 'still writing the recording');
+        assert.equal(await takeLock(file), null, 'and still nobody else is');
         await lock.release();
+    });
+
+    // The other way the file can go: swept away, and another gitva through the
+    // door before the beat came round. Nothing to put back, and nothing to write.
+    it('stops writing when the lock it lost went to somebody else', async () => {
+        const file = lockFile('gone-to-another', dir);
+        const lock = await takeLock(file, 5);
+        assert.ok(lock);
+        rmSync(file);
+        const next = await takeLock(file);
+        assert.ok(next, 'nothing was holding it');
+        await new Promise((r) => setTimeout(r, 30));
+        assert.equal(lock.held, false, 'the first one may no longer save');
+        await lock.release();
+        assert.equal(existsSync(file), true, 'and let go of nothing');
+        await next.release();
+    });
+
+    // Two gitva started on a lock a crash left behind both find it stale. The
+    // taking is a rename, so exactly one of them can move the file that is
+    // there — before this, both removed it and both wrote it, and two processes
+    // numbered steps into the same recording.
+    it('hands a stale lock to one of the two gitva that find it', async () => {
+        const file = lockFile('both-found-it-stale', dir);
+        for (let attempt = 0; attempt < 20; attempt++) {
+            abandoned(file, 60);
+            // Straight away, with no beat to settle it: whichever way the two
+            // interleave, one of them was told no before it wrote anything.
+            const taken = await Promise.all([takeLock(file, 60_000), takeLock(file, 60_000)]);
+            assert.equal(
+                taken.filter((l) => l !== null).length,
+                1,
+                'one gitva keeps the recording, never both',
+            );
+            for (const lock of taken) await lock?.release();
+        }
+    });
+
+    // The other order: one gitva has already taken the stale lock over, and the
+    // second is still on its way in. It moves a lock that has become somebody's
+    // since it last looked, so it puts it back rather than take it over.
+    it('gives a lock back to the gitva that took it over first', async () => {
+        const file = lockFile('taken-over-already', dir);
+        abandoned(file, 60);
+        const first = await takeLock(file, 60_000);
+        assert.ok(first);
+        const written = readFileSync(file, 'utf8');
+        assert.equal(await takeLock(file), null, "the recording is the first one's");
+        assert.equal(readFileSync(file, 'utf8'), written, 'and its lock is where it left it');
+        assert.equal(first.held, true);
+        await first.release();
+    });
+
+    // Both halves of the taking are somebody else's to lose: the file moved out
+    // of the way, and the file put back. Whichever goes to another gitva, this
+    // one draws without keeping what it draws.
+    it('leaves a stale lock to whoever got to it first', async () => {
+        const file = lockFile('someone-got-there-first', dir);
+        abandoned(file, 60);
+        // Nothing can move the dead lock aside, exactly as if another gitva had
+        // already moved it: the taking is not this one's to finish.
+        mkdirSync(join(`${file}.dead`, 'in the way'), { recursive: true });
+        assert.equal(await takeLock(file), null, 'held, and by then it is');
+        rmSync(`${file}.dead`, { recursive: true });
+        rmSync(file);
+    });
+
+    // A laptop lid closed for a minute is a holder presumed dead: the recording
+    // is taken off it while it is stopped. Waking up, it must not beat on, write
+    // over, or remove the lock of the gitva that has it now.
+    it('lets go of a lock that was taken over while it was stopped', async () => {
+        const file = lockFile('taken-over', dir);
+        const lock = await takeLock(file, 5);
+        assert.ok(lock);
+        writeFileSync(file, 'the gitva that took over');
+        stopped(file, 60);
+        const untouched = statSync(file).mtimeMs;
+        await new Promise((r) => setTimeout(r, 30));
+        assert.equal(lock.held, false, 'and it knows it may no longer save');
+        assert.equal(statSync(file).mtimeMs, untouched, 'not beaten on');
+        await lock.release();
+        assert.equal(readFileSync(file, 'utf8'), 'the gitva that took over', 'not removed');
+        rmSync(file);
+    });
+
+    // The beat is not the only moment ownership can change: one that changed
+    // hands a millisecond ago is not this one's to remove, and the file is the
+    // only thing that says whose it is.
+    it('checks whose the lock is as it lets go, not when it last looked', async () => {
+        const file = lockFile('changed-hands', dir);
+        const lock = await takeLock(file, 60_000); // no beat comes round in this test
+        assert.ok(lock);
+        writeFileSync(file, 'the gitva that took over');
+        await lock.release();
+        assert.equal(readFileSync(file, 'utf8'), 'the gitva that took over', 'left alone');
+        rmSync(file);
     });
 
     it('lets go of the lock when it closes', async () => {
@@ -224,6 +338,17 @@ describe('holding the recording', () => {
         const next = await takeLock(file);
         assert.ok(next, 'the next gitva walks straight in');
         await next.release();
+    });
+
+    // Nothing to check whose it is, and nothing to remove: the state directory
+    // went while this gitva was still in it.
+    it('lets go quietly when the lock file is gone already', async () => {
+        const file = lockFile('nothing-to-let-go-of', dir);
+        const lock = await takeLock(file, 60_000); // no beat comes round to put it back
+        assert.ok(lock);
+        rmSync(file);
+        await lock.release();
+        assert.equal(existsSync(file), false);
     });
 
     it('draws anyway when the lock cannot be written at all', async () => {

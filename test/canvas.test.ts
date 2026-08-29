@@ -293,7 +293,7 @@ describe('a step arriving', () => {
     it('replays a whole recording without painting any of it', () => {
         const el = new FakeCanvas();
         const canvas = make(el);
-        assert.equal(canvas.showAll([repoStep(), nextStep()]), true);
+        assert.deepEqual(canvas.showAll([repoStep(), nextStep()]), { prev: null });
         assert.equal(canvas.drawn, null, 'recorded, not performed');
         assert.equal(canvas.recording.steps.length, 2);
     });
@@ -301,7 +301,16 @@ describe('a step arriving', () => {
     it('says nothing when the stream hands back a step it already holds', () => {
         const { canvas } = canvasOn([repoStep()]);
         assert.equal(canvas.show(repoStep()).kind, 'none');
-        assert.equal(canvas.showAll([repoStep()]), false);
+        assert.equal(canvas.showAll([repoStep()]), null);
+    });
+
+    // The stream reconnects by itself, and git may have moved while it was down.
+    // The recording arriving again is then a step like any other — what was on
+    // screen is where it came from, so the page can say what changed and leave
+    // the camera alone rather than treat the viewer as having just arrived.
+    it('comes from the step on screen when the stream reconnects with news', () => {
+        const { canvas } = canvasOn([repoStep()]);
+        assert.deepEqual(canvas.showAll([repoStep(), nextStep()]), { prev: repoStep() });
     });
 
     it('spends the accent only when the repository actually moved', () => {

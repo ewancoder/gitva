@@ -226,12 +226,15 @@ export class Canvas {
     }
 
     /** The whole recording, replayed: every step recorded, none performed, and
-     *  nothing painted — the caller redraws once at the end. True when one of them
-     *  was shown, which is the only time there is anything to redraw or refit: the
-     *  stream reconnects by itself and is handed the recording again, and a
-     *  reconnect must leave the camera where the viewer put it. */
-    showAll(steps: Step[]): boolean {
-        return this.recording.arriveAll(steps, this.arriving);
+     *  nothing painted — the caller redraws once at the end. Null when none of
+     *  them was shown, which is the only time there is nothing to redraw: the
+     *  stream reconnects by itself and is handed the recording again. `prev` is
+     *  what was on screen before the replay, so a reconnect that missed a step
+     *  says what changed and keeps the camera where the viewer put it — only a
+     *  browser that had nothing has nothing to come from. */
+    showAll(steps: Step[]): { prev: Step | null } | null {
+        const prev = this.recording.current;
+        return this.recording.arriveAll(steps, this.arriving) ? { prev } : null;
     }
 
     /** What a step arriving is answered under. */

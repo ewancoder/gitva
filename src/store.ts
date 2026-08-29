@@ -9,8 +9,8 @@
  * program's own state, one file per identifier.
  */
 
-import { createHash } from 'node:crypto';
-import { utimesSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -141,30 +141,62 @@ export function lockFile(key: string, dir: string = stateDir()): string {
     return join(dir, `${key}.lock`);
 }
 
-/** What holding the recording gets you: the right to write it, until you let go. */
+/** What holding the recording gets you: the right to write it, until you let go.
+ *  `held` goes false the moment the file stops saying your name — a holder that
+ *  went quiet long enough to be presumed dead can wake up to find another gitva
+ *  keeping the recording, and must not write over it. */
 export interface Lock {
+    held: boolean;
     release(): Promise<void>;
 }
 
-/** Takes the file, or answers that a live gitva is holding it. Throws only for
- *  a reason that is the disk's rather than anybody's. */
-async function claim(file: string): Promise<boolean> {
+/** Who is holding it, written inside the file. A lock is a name on a shelf: the
+ *  file existing says somebody holds it, and the name says whether that is
+ *  still you. */
+function name(): string {
+    return `${process.pid}:${randomUUID()}`;
+}
+
+/** Takes the file and answers with the name written in it, or `null` because
+ *  another gitva has it. Throws only for a reason that is the disk's rather
+ *  than anybody's. */
+async function claim(file: string): Promise<string | null> {
     await mkdir(dirname(file), { recursive: true });
+    const mine = name();
     try {
         // Exclusive, so two gitva starting on the same instant cannot both
         // believe they took it.
-        await writeFile(file, '', { flag: 'wx' });
-        return true;
+        await writeFile(file, mine, { flag: 'wx' });
+        return mine;
     } catch {
-        // Fresh means another gitva is alive and beating on it.
-        if (Date.now() - (await stat(file)).mtimeMs < STALE_MS) return false;
-        // Stale: the holder died without letting go, which is what a crash or a
-        // `kill -9` leaves behind. Unlink and retake — two processes arriving on
-        // this instant could still both take it, and the cost of that is an
-        // incoherent recording, never anything in the repository.
-        await rm(file, { force: true });
-        await writeFile(file, '', { flag: 'wx' });
-        return true;
+        // Somebody's lock is there. Move it aside before asking whose, because
+        // only one gitva can move the file that is there: the taking is settled
+        // before the question is, and the question is then about a file nobody
+        // else can still be changing. Asking first and moving second is what let
+        // two of them take turns being right — the one that stalled between the
+        // two would move a lock the other had just written and take it over.
+        const dead = `${file}.dead`;
+        try {
+            await rename(file, dead);
+            // Beaten on since: a live gitva is holding it, and this rename has
+            // taken its lock out from under it. Put it back exactly as it was —
+            // a third gitva starting inside this instant finds the file missing
+            // and takes it, and is put right by the beat rather than by the
+            // rename, which is as far as `rename` alone reaches.
+            if (Date.now() - (await stat(dead)).mtimeMs < STALE_MS) {
+                await rename(dead, file);
+                return null;
+            }
+            // Stale: the holder died without letting go, which is what a crash or
+            // a `kill -9` leaves behind.
+            await rm(dead, { force: true });
+            await writeFile(file, mine, { flag: 'wx' });
+            return mine;
+        } catch {
+            // Somebody else moved it first, and by now they hold it. Losing a
+            // recording for one run has never been a reason to stop drawing.
+            return null;
+        }
     }
 }
 
@@ -178,29 +210,55 @@ async function claim(file: string): Promise<boolean> {
  * has never been a reason to stop drawing.
  */
 export async function takeLock(file: string, beatMs = HEARTBEAT_MS): Promise<Lock | null> {
+    let mine: string | null;
     try {
-        if (!(await claim(file))) return null;
+        if (!(mine = await claim(file))) return null;
     } catch {
-        return { release: async () => {} };
+        return { held: true, release: async () => {} };
     }
+    const lock: Lock = {
+        held: true,
+        async release() {
+            clearInterval(beat);
+            lock.held = false;
+            // Only ours to remove, and the file is the only thing that says so:
+            // the recording may have changed hands since the last beat, and the
+            // gitva holding it now is the one whose name is in there.
+            await readFile(file, 'utf8')
+                .then((who) => (who === mine ? rm(file, { force: true }) : undefined))
+                .catch(() => {});
+        },
+    };
     // The heartbeat is the whole difference between a holder that is alive and
     // one that died: without it a gitva left running through a lecture would
     // look dead a few seconds in. Unref'd, as the server's poll timer is, so it
     // cannot hold the process open by itself.
     const beat = setInterval(() => {
         try {
+            // Reading it back first is what makes the beat a check as well as a
+            // beat: a laptop lid closed for a minute is a holder presumed dead,
+            // and the one that took over must not be touched.
+            if (readFileSync(file, 'utf8') !== mine) {
+                lock.held = false;
+                clearInterval(beat);
+                return;
+            }
             const now = new Date();
             utimesSync(file, now, now);
         } catch {
-            // The lock went out from under us. Anything to do about that is a
-            // protocol, and the point of this one is that it never waits.
+            // The lock file was swept away underneath us — clearing the state
+            // directory mid-session is a thing people do, and `saveRecording`
+            // makes it again on the next step. So put our name back, because
+            // holding the recording is the file saying we do; if something else
+            // got there first, it is theirs and we stop writing.
+            try {
+                writeFileSync(file, mine, { flag: 'wx' });
+            } catch {
+                lock.held = false;
+                clearInterval(beat);
+            }
         }
     }, beatMs);
     beat.unref();
-    return {
-        async release() {
-            clearInterval(beat);
-            await rm(file, { force: true });
-        },
-    };
+    return lock;
 }

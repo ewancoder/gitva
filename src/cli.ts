@@ -106,12 +106,20 @@ export function parseArgs(argv: string[]): Options {
     const defaultServeHost = '0.0.0.0';
     const defaultServePort = 4200;
     const defaultServeAddress = `${defaultServeHost}:${defaultServePort}`;
-    const serveAddressRegex = /^(.*):(\d+)$/;
+    // What the word after a bare `--serve` has to look like to be the address
+    // rather than the repository: a colon, with a host in front of it that has no
+    // slash in it either way round. `gitva --serve ./repo` is a folder, and so is
+    // `C:\\work\\repo` — a drive letter is one character, and a host worth typing is
+    // more. `--serve 10.0.0.2:abc` is somebody meaning an address and mistyping
+    // the port, and is told so rather than watched as a folder of that name on
+    // every interface. `--serve=` says address whatever it is given, for the
+    // machine on a network called `c`.
+    const looksLikeAddress = (word: string) =>
+        /^(\[[^\]]*\]|[^:/\\]*):/.test(word) && !/^[A-Za-z]:/.test(word);
 
     // Generate --serve if not specified.
     const at = argv.indexOf('--serve');
-    const address =
-        at < 0 || !serveAddressRegex.test(argv[at + 1] ?? '') ? undefined : argv[at + 1];
+    const address = at < 0 || !looksLikeAddress(argv[at + 1] ?? '') ? undefined : argv[at + 1];
     const args =
         at < 0
             ? argv
@@ -123,20 +131,21 @@ export function parseArgs(argv: string[]): Options {
 
     // Parse arguments.
     const { values, positionals } = nodeParseArgs({ args, options: FLAGS, allowPositionals: true });
-    // Fill in the half of a --serve address that was left out.
-    const serveAddress =
-        values.serve === undefined || serveAddressRegex.test(values.serve)
-            ? values.serve
-            : `${values.serve}:${defaultServePort}`;
-    const bindHostPort = serveAddressRegex.exec(serveAddress ?? '');
-    const bindIpAddress = bindHostPort?.[1] ?? '';
+    // The two halves of a --serve address, either of which may be left out: an
+    // IPv6 literal is bracketed, so the colon that splits them is the one outside
+    // the brackets. Whatever follows it was typed as a port — `10.0.0.2:abc` is
+    // the flag being wrong, not a host by that name.
+    const halves = /^(\[[^\]]*\]|[^:]*)(?::(.*))?$/.exec(values.serve ?? '')!;
+    const serving = values.serve !== undefined;
+    const bindIpAddress = serving ? halves[1] : '';
 
     // --port overrides the port of a --serve address, and 4200 is only a default.
-    const typedPort = values.port ?? bindHostPort?.[2] ?? '0';
+    const typedPort = values.port ?? (serving ? (halves[2] ?? String(defaultServePort)) : '0');
     const port = Number(typedPort);
-    // Left to listen(), a NaN or an out-of-range port throws a node internal error
-    // naming `options.port` — an option nobody typed. Name the flag they did.
-    if (!Number.isInteger(port) || port < 0 || port > 65535)
+    // Left to listen(), a port that is not a whole number in range throws a node
+    // internal error naming `options.port` — an option nobody typed. Name the flag
+    // they did.
+    if (!/^\d+$/.test(typedPort) || port > 65535)
         throw new Error(
             `${values.port === undefined ? '--serve' : '--port'}: ${typedPort} is not a port — use a whole number from 0 to 65535, or 0 to let the OS pick one`,
         );
@@ -144,7 +153,7 @@ export function parseArgs(argv: string[]): Options {
     return {
         repo: positionals[0] ?? '.',
         port,
-        host: !bindHostPort
+        host: !serving
             ? '127.0.0.1'
             : bindIpAddress.startsWith('[') && bindIpAddress.endsWith(']')
               ? bindIpAddress.slice(1, -1)

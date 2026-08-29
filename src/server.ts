@@ -160,7 +160,10 @@ export async function serve(
             recorded = true;
             const frame = `event: step\ndata: ${s}\n\n`;
             for (const c of clients) c.write(frame);
-            if (lock) await saveRecording(file, { signal, steps: steps });
+            // `held`, not merely taken: a gitva stopped long enough to look dead
+            // has had the recording taken off it, and the one holding it now is
+            // the one numbering the steps in that file.
+            if (lock?.held) await saveRecording(file, { signal, steps: steps });
         } catch (err) {
             const frame = `event: trouble\ndata: ${JSON.stringify({ message: String(err) })}\n\n`;
             for (const c of clients) c.write(frame);
@@ -193,7 +196,14 @@ export async function serve(
             /* no repository yet, or one mid-rewrite: try again on the next tick */
         }
     }
-    const timer = setInterval(() => void poll(), POLL_MS);
+    /** One poll at a time — `changeSignal` spawns git, and on a repository slow
+     *  enough to still be answering at the next tick, piling a second poll on top
+     *  buys nothing. It also leaves exactly one for closing to wait out. */
+    let polling: Promise<void> | null = null;
+    const timer = setInterval(
+        () => void (polling ??= poll().finally(() => (polling = null))),
+        POLL_MS,
+    );
     timer.unref?.();
 
     async function route(req: IncomingMessage, res: ServerResponse) {
@@ -299,9 +309,15 @@ export async function serve(
         port: bound,
         async close() {
             clearInterval(timer);
-            await lock?.release();
             for (const c of clients) c.end();
             await new Promise<void>((r) => server.close(() => r()));
+            // Let go last, and only once nothing is still building: a rebuild
+            // that answers after the lock is gone would write the recording over
+            // the gitva that has just taken it. Nothing new can start by then —
+            // the timer is stopped and the port is closed.
+            while (polling || initial || building)
+                await Promise.allSettled([polling, initial, building]);
+            await lock?.release();
         },
     };
 }

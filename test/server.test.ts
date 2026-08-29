@@ -763,6 +763,24 @@ describe('a recording that outlives the process', () => {
         repo.dispose();
     });
 
+    // Letting go is the last thing it does. A step still being built when the
+    // process is asked to stop would otherwise be written to the recording after
+    // the next gitva has taken it, and both would be numbering into that file.
+    it('finishes the step it was building before it lets go of the recording', async () => {
+        const repo = plumbedRepo();
+        const file = recordingFile(recordingKey(resolve(repo.dir)));
+        const server = await serve(repo.dir, 0);
+        // A browser arriving before the poller has anything is what asks for the
+        // first step, so by the time the headers are back it is being built.
+        const res = await fetch(`http://127.0.0.1:${server.port}/events`);
+        await server.close();
+        const written = readFileSync(file, 'utf8');
+        await res.body?.cancel();
+        await new Promise((r) => setTimeout(r, 100));
+        assert.equal(readFileSync(file, 'utf8'), written, 'and writes nothing after');
+        repo.dispose();
+    });
+
     it('starts a recording of its own for a folder nothing was kept for', async () => {
         const repo = plumbedRepo();
         const server = await serve(repo.dir, 0);
