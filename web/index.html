@@ -226,9 +226,12 @@
       aside dd.shas { display: flex; flex-wrap: wrap; gap: 4px; }
       aside dd .key { display: inline-block; }
       aside dd.sha:hover, aside dd .key:hover { border-color: var(--muted); }
+      /* The contents are the last thing in the column and the only thing worth
+         giving the leftover height to: it takes as much as it has and shrinks —
+         alone, the rest being text that may not — when there is not enough. */
       aside pre {
         background: var(--raised); border-radius: var(--r); padding: var(--u);
-        margin: 0; max-height: 40vh; overflow: auto; font-size: 12px;
+        margin: 0; flex: 0 1 auto; min-height: 4em; overflow: auto; font-size: 12px;
       }
       aside pre.unreadable { font-weight: 700; }
       aside .empty { color: var(--faint); }
