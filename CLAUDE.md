@@ -286,6 +286,13 @@ never into the observed repository — keyed by the repository's full path unles
 something else, along with the change signal it was built at, so a restart onto an untouched
 repository adds no step. `src/store.ts`.
 
+**One gitva keeps a recording at a time.** Two on the same folder file under the same key, so
+`takeLock` puts a heartbeat lockfile beside the recording. A second gitva never waits and is
+never refused — it draws exactly as the first does, says on the command line that this run will
+not be saved, and keeps its steps in memory only. A lock nothing has beaten on for ten seconds
+belonged to a process that died, and is taken over; taking it over resumes the kept steps, because
+they are the repository's, not the dead process's.
+
 The key is the sha of the identifier, cut to ten characters, and it is **itself an identifier**:
 `recordingKey` hands a key straight back, which is what makes the one the view toolbar shows —
 and copies on a click — worth copying. A folder that moved is resumed with `--id <that key>`.

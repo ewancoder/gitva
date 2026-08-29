@@ -6,6 +6,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { plumbedRepo, fakeStep, type Repo } from './fixture.js';
+import { loadRecording, recordingFile, recordingKey } from '../src/store.js';
+import { resolve } from 'node:path';
 import { RECORDING_CAP, type Step } from '../src/types.js';
 
 /** The steps off an event stream, one frame at a time. `quietMs` ends it
@@ -724,6 +726,41 @@ describe('a recording that outlives the process', () => {
         } finally {
             await second.close();
         }
+    });
+
+    /**
+     * Two gitva on one folder file under the same key, so both used to write the
+     * same file from their own `seq` and leave a recording of a session that
+     * never happened. The second one still draws every step — it is watching the
+     * same repository — it simply is not the one keeping them.
+     */
+    it('lets a second gitva draw the repository without writing the recording', async () => {
+        const repo = plumbedRepo();
+        const first = await serve(repo.dir, 0);
+        try {
+            assert.equal((await watch(first.port)).length, 1, 'the step the holder recorded');
+            const second = await serve(repo.dir, 0);
+            try {
+                repo.write('f.txt', 'zeta\n');
+                repo.git('hash-object', '-w', 'f.txt');
+                assert.deepEqual(
+                    (await watch(second.port)).map((s) => s.seq),
+                    [1, 2],
+                    'the kept step, then the one it watched happen',
+                );
+            } finally {
+                await second.close();
+            }
+        } finally {
+            await first.close();
+        }
+        // One sequence on disk, not two interleaved: only the holder wrote it.
+        const kept = await loadRecording(recordingFile(recordingKey(resolve(repo.dir))));
+        assert.deepEqual(
+            kept.steps.map((s) => (JSON.parse(s) as Step).seq),
+            [1, 2],
+        );
+        repo.dispose();
     });
 
     it('starts a recording of its own for a folder nothing was kept for', async () => {

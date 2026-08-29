@@ -6,7 +6,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -14,10 +14,12 @@ import {
     FORMAT,
     lastSeq,
     loadRecording,
+    lockFile,
     recordingFile,
     recordingKey,
     saveRecording,
     stateDir,
+    takeLock,
 } from '../src/store.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'gitva-store-'));
@@ -141,5 +143,96 @@ describe('keeping the recording', () => {
         writeFileSync(wall, 'in the way');
         // Drawing the repository matters; keeping the recording is a convenience.
         await saveRecording(join(wall, 'nope.json'), { signal: '', steps: [] });
+    });
+});
+
+/**
+ * One gitva writes a recording at a time. Two watching the same folder — which
+ * happens for the ordinary reason, you forgot one was running — used to number
+ * steps from their own `seq` into the same file, and what was left of it was a
+ * session that never happened. Nothing here ever waits: a second gitva draws,
+ * it just does not keep what it drew.
+ */
+describe('holding the recording', () => {
+    /** A lock file as a crashed gitva leaves one: written, then never touched again. */
+    function abandoned(file: string, secondsAgo: number) {
+        writeFileSync(file, '');
+        const then = new Date(Date.now() - secondsAgo * 1000);
+        utimesSync(file, then, then);
+    }
+
+    it('takes a lock nobody holds', async () => {
+        const file = lockFile('nobody-holds-it', dir);
+        const lock = await takeLock(file);
+        assert.ok(lock, 'the recording was free');
+        assert.equal(existsSync(file), true);
+        await lock.release();
+    });
+
+    it('leaves a fresh lock alone and says so', async () => {
+        const file = lockFile('held-by-another', dir);
+        abandoned(file, 0);
+        const before = readFileSync(file, 'utf8');
+        assert.equal(await takeLock(file), null, 'the second gitva does not persist');
+        // And it did not take it by force on the way past.
+        assert.equal(readFileSync(file, 'utf8'), before);
+        rmSync(file);
+    });
+
+    it('takes over a lock whose holder died', async () => {
+        const file = lockFile('holder-died', dir);
+        abandoned(file, 60);
+        const lock = await takeLock(file);
+        assert.ok(lock, 'a lock nothing is beating on is nobody holding it');
+        await lock.release();
+    });
+
+    // The heartbeat is the whole difference between the two cases above: without
+    // it a gitva left running through a lecture would look dead after ten seconds.
+    it('keeps its own lock looking alive', async () => {
+        const file = lockFile('still-here', dir);
+        const lock = await takeLock(file, 5);
+        assert.ok(lock);
+        try {
+            abandoned(file, 60); // as if the holder had gone quiet a minute ago
+            await new Promise((r) => setTimeout(r, 50));
+            assert.equal(await takeLock(file), null, 'beaten on since, so still held');
+        } finally {
+            await lock.release();
+        }
+    });
+
+    // Clearing the state directory mid-session is a thing people do. The beat
+    // has nothing left to touch, and a throw out of a timer takes the process
+    // with it — so it does not throw.
+    it('carries on when its lock file is taken away underneath it', async () => {
+        const file = lockFile('swept-away', dir);
+        const lock = await takeLock(file, 5);
+        assert.ok(lock);
+        rmSync(file);
+        await new Promise((r) => setTimeout(r, 30));
+        assert.equal(existsSync(file), false, 'and it does not put it back');
+        await lock.release();
+    });
+
+    it('lets go of the lock when it closes', async () => {
+        const file = lockFile('let-go', dir);
+        const lock = await takeLock(file);
+        assert.ok(lock);
+        await lock.release();
+        assert.equal(existsSync(file), false);
+        const next = await takeLock(file);
+        assert.ok(next, 'the next gitva walks straight in');
+        await next.release();
+    });
+
+    it('draws anyway when the lock cannot be written at all', async () => {
+        const wall = join(dir, 'a-wall-not-a-directory');
+        writeFileSync(wall, 'in the way');
+        // Nobody is holding the recording — the disk is simply unwritable, and
+        // `saveRecording` has always failed quietly rather than stop the canvas.
+        const lock = await takeLock(join(wall, 'nope.lock'));
+        assert.ok(lock, 'not held is not the same as unavailable');
+        await lock.release();
     });
 });

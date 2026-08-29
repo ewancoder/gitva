@@ -10,9 +10,13 @@
  */
 
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { utimesSync } from 'node:fs';
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+// The node one, so `unref()` is simply there: `lib.dom` makes the global's
+// return type a union, and this file is the server's alone.
+import { setInterval } from 'node:timers';
 
 /** Steps as the server holds them — already serialised — and the change signal
  *  they were built at, so a restart onto an untouched repository does not
@@ -122,4 +126,81 @@ export async function saveRecording(file: string, kept: Kept): Promise<void> {
  *  the repository rather than renumbering over ones the browser already has. */
 export function lastSeq(steps: string[]): number {
     return steps.length ? ((JSON.parse(steps[steps.length - 1]) as { seq: number }).seq ?? 0) : 0;
+}
+
+/**
+ * How often the holder touches its lock, and how old a lock has to be before
+ * its holder is presumed dead. `POLL_MS` in `server.ts` is 400 ms, so a beat a
+ * second is unhurried, and ten beats of slack means an ordinary scheduling
+ * hiccup — or a laptop lid — never makes a live gitva look dead.
+ */
+const HEARTBEAT_MS = 1_000;
+const STALE_MS = 10 * HEARTBEAT_MS;
+
+export function lockFile(key: string, dir: string = stateDir()): string {
+    return join(dir, `${key}.lock`);
+}
+
+/** What holding the recording gets you: the right to write it, until you let go. */
+export interface Lock {
+    release(): Promise<void>;
+}
+
+/** Takes the file, or answers that a live gitva is holding it. Throws only for
+ *  a reason that is the disk's rather than anybody's. */
+async function claim(file: string): Promise<boolean> {
+    await mkdir(dirname(file), { recursive: true });
+    try {
+        // Exclusive, so two gitva starting on the same instant cannot both
+        // believe they took it.
+        await writeFile(file, '', { flag: 'wx' });
+        return true;
+    } catch {
+        // Fresh means another gitva is alive and beating on it.
+        if (Date.now() - (await stat(file)).mtimeMs < STALE_MS) return false;
+        // Stale: the holder died without letting go, which is what a crash or a
+        // `kill -9` leaves behind. Unlink and retake — two processes arriving on
+        // this instant could still both take it, and the cost of that is an
+        // incoherent recording, never anything in the repository.
+        await rm(file, { force: true });
+        await writeFile(file, '', { flag: 'wx' });
+        return true;
+    }
+}
+
+/**
+ * One gitva writes a recording at a time. A second one still draws — it just
+ * does not persist — so nothing ever waits and there is no deadlock to have.
+ *
+ * `null` means a live gitva is holding it. A lock is handed back even when the
+ * file could not be written at all, because that is the disk being unwritable
+ * rather than the recording being taken, and a recording that cannot be kept
+ * has never been a reason to stop drawing.
+ */
+export async function takeLock(file: string, beatMs = HEARTBEAT_MS): Promise<Lock | null> {
+    try {
+        if (!(await claim(file))) return null;
+    } catch {
+        return { release: async () => {} };
+    }
+    // The heartbeat is the whole difference between a holder that is alive and
+    // one that died: without it a gitva left running through a lecture would
+    // look dead a few seconds in. Unref'd, as the server's poll timer is, so it
+    // cannot hold the process open by itself.
+    const beat = setInterval(() => {
+        try {
+            const now = new Date();
+            utimesSync(file, now, now);
+        } catch {
+            // The lock went out from under us. Anything to do about that is a
+            // protocol, and the point of this one is that it never waits.
+        }
+    }, beatMs);
+    beat.unref();
+    return {
+        async release() {
+            clearInterval(beat);
+            await rm(file, { force: true });
+        },
+    };
 }

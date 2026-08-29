@@ -24,7 +24,15 @@ import {
     readStep,
     type Repository,
 } from './git.js';
-import { lastSeq, loadRecording, recordingFile, recordingKey, saveRecording } from './store.js';
+import {
+    lastSeq,
+    loadRecording,
+    lockFile,
+    recordingFile,
+    recordingKey,
+    saveRecording,
+    takeLock,
+} from './store.js';
 import type { Capabilities } from './types.js';
 import { RECORDING_CAP } from './types.js';
 
@@ -73,6 +81,16 @@ export async function serve(
     // recording is shared, so one browser must not be able to end everyone's
     // session. The file is overwritten by the first step of this run.
     const kept = fresh ? { signal: '', steps: [] } : await loadRecording(file);
+    // One gitva writes a recording at a time. Forgetting that one is already
+    // watching this folder used to leave two processes numbering steps from
+    // their own `seq` into the same file, and a viewer resuming it saw a session
+    // that never happened. A second gitva draws exactly as before — it simply
+    // does not keep what it drew, and nothing ever waits for the first to finish.
+    const lock = await takeLock(lockFile(key));
+    if (!lock)
+        process.stdout.write(
+            `another gitva is already recording this repository (${key}) — this run will not be saved\n`,
+        );
     // The repository need not exist yet: `gitva` in an empty directory waits for
     // `git init`, so the very first plumbing command the tutorial teaches can be
     // watched happening rather than assumed to have happened already.
@@ -142,7 +160,7 @@ export async function serve(
             recorded = true;
             const frame = `event: step\ndata: ${s}\n\n`;
             for (const c of clients) c.write(frame);
-            await saveRecording(file, { signal, steps: steps });
+            if (lock) await saveRecording(file, { signal, steps: steps });
         } catch (err) {
             const frame = `event: trouble\ndata: ${JSON.stringify({ message: String(err) })}\n\n`;
             for (const c of clients) c.write(frame);
@@ -281,6 +299,7 @@ export async function serve(
         port: bound,
         async close() {
             clearInterval(timer);
+            await lock?.release();
             for (const c of clients) c.end();
             await new Promise<void>((r) => server.close(() => r()));
         },
