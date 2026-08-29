@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { ensureFirstStep, record, serve, type Server } from '../src/server.js';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { plumbedRepo, fakeStep, type Repo } from './fixture.js';
@@ -259,6 +259,36 @@ describe('a repository that moves under the server', () => {
             repo.dispose();
             await new Promise((r) => setTimeout(r, 1200));
             assert.equal((await fetch(base)).status, 200);
+            await stream.return(undefined);
+        } finally {
+            await server.close();
+            repo.dispose();
+        }
+    });
+
+    // The change signal moves for a repository git then refuses to read — an
+    // index half-rewritten is the everyday case. Stepping past that change would
+    // lose it out of the shared recording for good, and spend a step number on an
+    // attempt no viewer ever saw.
+    it('retries a change whose step could not be built', async () => {
+        const repo = plumbedRepo();
+        const server = await serve(repo.dir, 0);
+        const index = join(repo.dir, '.git', 'index');
+        const base = `http://127.0.0.1:${server.port}/`;
+        try {
+            const stream = stepsOf(await fetch(base + 'events'));
+            const before = await nextStep(stream);
+            // Every command that has to read the index now fails, while
+            // for-each-ref and count-objects answer perfectly well.
+            writeFileSync(index, 'not an index');
+            // A change made while git is unreadable: it has to survive the failure.
+            repo.write('later.txt', 'written while git could not answer\n');
+            const oid = repo.git('hash-object', '-w', 'later.txt');
+            await new Promise((r) => setTimeout(r, 1200));
+            repo.git('read-tree', 'HEAD');
+            const after = await nextStep(stream);
+            assert.equal(after.seq, before.seq + 1, 'a failed attempt burnt a step number');
+            assert.ok(after.objects[oid], 'the change made during the failure was lost');
             await stream.return(undefined);
         } finally {
             await server.close();

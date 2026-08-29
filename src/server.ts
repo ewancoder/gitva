@@ -103,8 +103,10 @@ export async function serve(
     /** Rebuilds run one at a time. Anything arriving mid-build asks for one more
      * pass; further requests join that pass instead of growing an unbounded queue. */
     let pending = false;
-    let building: Promise<void> | null = null;
-    function build(): Promise<void> {
+    let building: Promise<boolean> | null = null;
+    /** Resolves to whether the last pass recorded a step, so the caller can tell
+     *  a change that was drawn from one that has still to be tried again. */
+    function build(): Promise<boolean> {
         pending = true;
         building ??= drain();
         return building;
@@ -113,23 +115,31 @@ export async function serve(
     async function drain() {
         // A drain that ended without clearing this would be handed to every future
         // caller, and nothing would ever rebuild again.
+        let recorded = false;
         try {
             while (pending) {
                 pending = false;
-                await rebuild();
+                recorded = await rebuild();
             }
         } finally {
             building = null;
         }
+        return recorded;
     }
 
     /** `seq` counts steps of the repository, and only git moves it: every
      *  rebuild there is is a step, because only a change signal asks for one. */
     async function rebuild() {
+        // The step is built before the number is taken: git can fail against a
+        // repository mid-rebase or with a half-written index, and a `seq` spent on
+        // an attempt nobody ever saw is a gap in the shared recording.
+        let recorded = false;
         try {
             const { handle, capabilities } = await repository();
-            const s = JSON.stringify(await readStep(handle, capabilities, ++seq));
+            const s = JSON.stringify(await readStep(handle, capabilities, seq + 1));
+            seq++;
             record(steps, s);
+            recorded = true;
             const frame = `event: step\ndata: ${s}\n\n`;
             for (const c of clients) c.write(frame);
             await saveRecording(file, { signal, steps: steps });
@@ -137,6 +147,7 @@ export async function serve(
             const frame = `event: trouble\ndata: ${JSON.stringify({ message: String(err) })}\n\n`;
             for (const c of clients) c.write(frame);
         }
+        return recorded;
     }
 
     // The overwhelmingly common case is "nothing happened", and it costs one
@@ -152,8 +163,14 @@ export async function serve(
             const { handle } = await repository();
             const next = await changeSignal(handle.repo, handle.gitDir);
             if (next === signal) return;
+            // The signal is only committed once the change it stands for was drawn.
+            // Moving it first would step past a change git happened to fail on, and
+            // that change is gone for good — the repository has moved on and the
+            // next step would diff against a state nobody ever saw. `build()`
+            // collapses callers, so a failing repository retries once a tick.
+            const previous = signal;
             signal = next;
-            await build();
+            if (!(await build())) signal = previous;
         } catch {
             /* no repository yet, or one mid-rewrite: try again on the next tick */
         }
@@ -288,9 +305,9 @@ export function record(steps: string[], step: string): void {
 
 /** A poll may answer while the first client is measuring the repository. */
 export async function ensureFirstStep(
-    active: Promise<void> | null,
+    active: Promise<unknown> | null,
     hasStep: () => boolean,
-    build: () => Promise<void>,
+    build: () => Promise<unknown>,
 ): Promise<void> {
     if (active) await active;
     if (!hasStep()) await build();
