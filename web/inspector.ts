@@ -65,13 +65,14 @@ export interface Body {
 
 /** What `/object` answered, as the lines to show. */
 export function bodyText(body: Body): string {
-    if (body.entries) {
-        return body.entries
-            .map((x) => `${x.mode} ${x.type} ${x.oid.slice(0, 7)}\t${x.name}`)
-            .join('\n');
-    }
+    if (body.entries) return body.entries.map(entryLine).join('\n');
     if (body.text == null) return S.inspector.notText(body.size ?? 0);
     return body.truncated ? `${body.text}\n\n${S.inspector.truncated(body.size ?? 0)}` : body.text;
+}
+
+/** One tree entry, as git's own `ls-tree` says it. */
+function entryLine(x: { mode: string; type: string; oid: string; name: string }): string {
+    return `${x.mode} ${x.type} ${x.oid.slice(0, 7)}\t${x.name}`;
 }
 
 /** What is in .git/<name> — or, once packed, the line that replaced the file. */
@@ -143,7 +144,7 @@ export function renderInspector(
         .then((r) => r.json() as Promise<Body>)
         .then((body) => {
             if (mine !== token) return;
-            pre.textContent = bodyText(body);
+            fillContents(pre, body);
             // Where the bytes turned out to be kept. It comes back with them because
             // only git can say whether this one is still a file or has been packed.
             if (body.path) storedIn(dl, after, step.gitDir, body.path);
@@ -154,6 +155,27 @@ export function renderInspector(
             // A failure to read is a warning, not content: warning red, like `clear`.
             pre.className = 'unreadable danger';
         });
+}
+
+/** A tree's entries name shas, and a sha is a key you can take — so the seven
+ *  characters of each one are clickable, exactly as the sha field is. The rest
+ *  of the line is text like any other, and reads and selects as text. */
+function fillContents(pre: HTMLElement, body: Body) {
+    if (!body.entries) {
+        pre.textContent = bodyText(body);
+        return;
+    }
+    pre.replaceChildren(
+        ...body.entries.map((x) => {
+            const sha = el2('span', 'sha', x.oid.slice(0, 7));
+            sha.dataset.copy = x.oid;
+            // The line is its own element so that hovering the sha can light the
+            // whole of it: which name the key belongs to is the thing being read.
+            const line = el2('span', 'entry', '');
+            line.append(`${x.mode} ${x.type} `, sha, `\t${x.name}`);
+            return line;
+        }),
+    );
 }
 
 /** A fact's name in the strings rather than its words — what a row is hidden

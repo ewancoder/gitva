@@ -233,6 +233,16 @@
         background: var(--raised); border-radius: var(--r); padding: var(--u);
         margin: 0; flex: 0 1 auto; min-height: 4em; overflow: auto; font-size: 12px;
       }
+      /* A tree's contents name shas, and a sha is a key you can take: those seven
+         characters are the one clickable part of the line, so the rest reads and
+         selects as the text it is. Toned rather than hued — the three hues are
+         the object kinds'. */
+      aside pre .entry { display: block; border-radius: var(--r); }
+      aside pre .sha { color: var(--muted); cursor: pointer; border-radius: var(--r); }
+      /* The line lights up with the sha in it, because the key is only half of
+         what is being read: the other half is the name it is filed under. */
+      aside pre .entry:has(.sha:hover) { background: var(--hover); }
+      aside pre .sha:hover { color: var(--ink); }
       aside pre.unreadable { font-weight: 700; }
       aside .empty { color: var(--faint); }
       /* Compact along the bottom is the bytes and nothing else: what was clicked

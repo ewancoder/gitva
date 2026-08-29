@@ -104,26 +104,33 @@ class El {
     className = '';
     textContent = '';
     dataset: Record<string, string> = {};
-    children: El[] = [];
+    /** Text among the children: a tree's contents are lines with a clickable
+     *  sha in the middle of each, so the plain parts are text nodes. */
+    children: (El | string)[] = [];
     constructor(readonly tag: string) {}
-    append(...kids: El[]) {
+    append(...kids: (El | string)[]) {
         this.children.push(...kids);
     }
     insertBefore(kid: El, before: El | null) {
         const at = before ? this.children.indexOf(before) : this.children.length;
         this.children.splice(at, 0, kid);
     }
-    replaceChildren(...kids: El[]) {
+    replaceChildren(...kids: (El | string)[]) {
         this.children = kids;
     }
     /** Everything written into this element and its children, in order. */
     get text(): string {
-        return [this.textContent, ...this.children.map((c) => c.text)].filter(Boolean).join('\n');
+        return [this.textContent, ...this.children.map((c) => (typeof c === 'string' ? c : c.text))]
+            .filter(Boolean)
+            .join('\n');
+    }
+    get kids(): El[] {
+        return this.children.filter((c) => typeof c !== 'string');
     }
     find(tag: string): El | undefined {
         return (
-            this.children.find((c) => c.tag === tag) ??
-            this.children.flatMap((c) => c.find(tag) ?? []).at(0)
+            this.kids.find((c) => c.tag === tag) ??
+            this.kids.flatMap((c) => c.find(tag) ?? []).at(0)
         );
     }
 }
@@ -176,7 +183,7 @@ describe('the inspector on screen', () => {
         renderInspector(el as unknown as HTMLElement, step, blob('b1'), true);
         assert.doesNotMatch(el.text, /A blob is a file's contents/);
         assert.match(el.text, /^Blob/, 'the title still says what it is');
-        assert.equal(el.find('dl')!.children.length, 4, 'the facts stay');
+        assert.equal(el.find('dl')!.kids.length, 4, 'the facts stay');
     });
 
     it('drops an answer for the thing that was clicked before', async () => {
@@ -188,6 +195,41 @@ describe('the inspector on screen', () => {
         asked[0].answer({ text: 'the stale one\n' });
         await settle();
         assert.equal(el.find('pre')!.textContent, 'the one asked for last\n');
+    });
+
+    it('makes a tree entry’s sha the only clickable part of its line', async () => {
+        const el = new El('aside');
+        const asked = held();
+        renderInspector(el as unknown as HTMLElement, step, blob('b1'));
+        asked[0].answer({
+            entries: [
+                { mode: '100644', type: 'blob', oid: 'b1b1b1b1b1b1', name: 'a.txt' },
+                { mode: '040000', type: 'tree', oid: 't2t2t2t2t2t2', name: 'src' },
+            ],
+        });
+        await settle();
+        const lines = el.find('pre')!.kids;
+        // Each line is one element, so hovering its sha can light the whole of it.
+        assert.deepEqual(
+            lines.map((l) => l.className),
+            ['entry', 'entry'],
+        );
+        assert.deepEqual(
+            lines.map((l) =>
+                l.children.map((c) => (typeof c === 'string' ? c : [c.className, c.textContent])),
+            ),
+            [
+                ['100644 blob ', ['sha', 'b1b1b1b'], '\ta.txt'],
+                ['040000 tree ', ['sha', 't2t2t2t'], '\tsrc'],
+            ],
+            'the rest of the line is text, so it reads and selects as text',
+        );
+        // Seven characters on screen, the whole key on the clipboard — the sha
+        // field's own bargain.
+        assert.deepEqual(
+            lines.flatMap((l) => l.kids.map((c) => c.dataset.copy)),
+            ['b1b1b1b1b1b1', 't2t2t2t2t2t2'],
+        );
     });
 
     it('owns up when the body could not be read', async () => {
@@ -208,7 +250,7 @@ describe('the inspector on screen', () => {
         const el = new El('aside');
         held();
         renderInspector(el as unknown as HTMLElement, step, blob('b1'));
-        const fields = el.find('dl')!.children.filter((c) => c.tag === 'dd');
+        const fields = el.find('dl')!.kids.filter((c) => c.tag === 'dd');
         assert.deepEqual(
             fields.map((c) => [c.textContent, c.className]),
             [
@@ -224,9 +266,9 @@ describe('the inspector on screen', () => {
         renderInspector(el as unknown as HTMLElement, step, blob('b1'));
         asked[0].answer({ text: 'alpha\n', path: 'objects/b1/xyz' });
         await settle();
-        const rows = el.find('dl')!.children.map((c) => c.textContent);
+        const rows = el.find('dl')!.kids.map((c) => c.textContent);
         assert.deepEqual(rows, ['sha', 'b1', 'file', 'objects/b1/xyz', 'size', '3 B']);
-        const dd = el.find('dl')!.children.find((c) => c.textContent === 'objects/b1/xyz')!;
+        const dd = el.find('dl')!.kids.find((c) => c.textContent === 'objects/b1/xyz')!;
         // Shown inside .git, copied in full — the sha field's own bargain.
         assert.equal(dd.className, 'sha');
         assert.equal(dd.dataset.copy, '/tmp/fake/.git/objects/b1/xyz');
@@ -246,7 +288,7 @@ describe('the inspector on screen', () => {
         asked[0].answer({ text: 'alpha\n', path: 'objects/b1/xyz' });
         await settle();
         assert.deepEqual(
-            el.find('dl')!.children.map((c) => c.textContent),
+            el.find('dl')!.kids.map((c) => c.textContent),
             ['sha', 'b1', 'file', 'objects/b1/xyz', 'path', 'a.txt', 'mode', '100644'],
         );
     });
@@ -276,7 +318,7 @@ describe('the inspector on screen', () => {
         );
         asked[0].answer({ text: 'tree tree567890\n', path: 'objects/c1/xyz' });
         await settle();
-        const rows = el.find('dl')!.children;
+        const rows = el.find('dl')!.kids;
         assert.deepEqual(
             rows.filter((r) => r.className === 'sha').map((r) => r.textContent),
             ['c1', 'objects/c1/xyz'],
@@ -287,7 +329,7 @@ describe('the inspector on screen', () => {
         assert.deepEqual(
             rows
                 .filter((r) => r.className === 'shas')
-                .map((r) => r.children.map((c) => [c.className, c.textContent, c.dataset.copy])),
+                .map((r) => r.kids.map((c) => [c.className, c.textContent, c.dataset.copy])),
             [
                 [['sha key', 'tree567', 'tree567890']],
                 [
@@ -324,7 +366,7 @@ describe('the inspector on screen', () => {
             fakeStep({ commits: { c1: root } }),
             shape({ kind: 'commit', id: 'c1', oid: 'c1' }),
         );
-        const parents = el.find('dl')!.children.find((r) => r.textContent === 'none (root)')!;
+        const parents = el.find('dl')!.kids.find((r) => r.textContent === 'none (root)')!;
         assert.equal(parents.className, '');
     });
 
@@ -341,7 +383,7 @@ describe('the inspector on screen', () => {
         );
         const clickable = el
             .find('dl')!
-            .children.filter((c) => c.className === 'sha')
+            .kids.filter((c) => c.className === 'sha')
             .map((c) => c.textContent);
         assert.deepEqual(clickable, ['b1']);
     });

@@ -579,7 +579,12 @@ inspector.addEventListener('click', (e) => {
     if (!el.classList.contains('sha')) return;
     const text = el.textContent ?? '';
     const whole = el.dataset.copy;
-    copied(whole ?? text, whole ? text : text.slice(0, 7));
+    const key = whole ?? text;
+    // A sha in the contents names an object, and if that object is on screen,
+    // taking its key selects it too — the same as clicking the shape itself,
+    // which copies the sha on its way.
+    if (canvas.shape(key)) canvas.select(key);
+    else copied(key, whole ? text : text.slice(0, 7));
 });
 
 // ---------------------------------------------------------------------------

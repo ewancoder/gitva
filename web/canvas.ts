@@ -542,6 +542,17 @@ export class Canvas {
             this.unpin(id);
             return;
         }
+        this.select(id);
+    }
+
+    /**
+     * Select something by id, exactly as a click on it does — for a page that
+     * hands over a sha somewhere other than the canvas, as the inspector's
+     * contents do. What follows from a selection — the inspector, the clipboard —
+     * is `onSelect`'s, wherever the selection came from.
+     */
+    select(id: string | null): void {
+        const shape = this.shape(id);
         this.chosen = id;
         this.options.onSelect?.(shape);
         if (shape && this.settings.centreOnClick) {
