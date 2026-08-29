@@ -20,6 +20,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { browser, FakeCanvas, FakeElement, fakeStep, type FakeEvent } from './fixture.js';
 import { fit, refit, zoomOut } from '../web/camera.js';
+import { drawnPosition } from '../web/render.js';
 import { mount, setTheme, theme, type Canvas, type Changed, type Shape } from '../web/canvas.js';
 import type { Commit, Step, TreeEntry } from '../src/types.js';
 
@@ -313,6 +314,19 @@ describe('a step arriving', () => {
         assert.deepEqual(canvas.showAll([repoStep(), nextStep()]), { prev: repoStep() });
     });
 
+    // `--fresh` comes down that same frame, and it is not news about the recording
+    // on screen — it is a different recording. The page frames the object graph on
+    // a step it has nothing to come from, so a browser started over has to have
+    // nothing to come from, or the camera stays where it was around a scene the
+    // presenter has just replaced.
+    it('comes from nothing when --fresh replaces the recording it was holding', () => {
+        const { canvas } = canvasOn([repoStep(), nextStep()]);
+        // Numbered from one again, at another moment: the recording was started over.
+        const over = { ...repoStep(), seq: 1, time: 99 };
+        assert.deepEqual(canvas.showAll([over]), { prev: null });
+        assert.equal(canvas.recording.steps.length, 1, 'the old recording is gone');
+    });
+
     it('spends the accent only when the repository actually moved', () => {
         const { canvas } = canvasOn([repoStep()]);
         // Nothing has happened between these two, so there is nothing to flash.
@@ -482,6 +496,28 @@ describe('pinning', () => {
         assert.equal(canvas.pins.count, 0);
         assert.deepEqual(changes, ['pins', 'pins']);
         assert.equal(canvas.selected, null, 'and it is one act: nothing was selected');
+    });
+
+    // A shape slides to a new place rather than jumping there, and for the length
+    // of that slide it is drawn short of where layout is sending it. Grabbing one
+    // has to hold it where it was grabbed: taking the offset from the layout
+    // position threw it the rest of the way the moment the pointer moved.
+    it('holds a shape in flight where it was grabbed', () => {
+        const { el, canvas } = canvasOn([repoStep()]);
+        settle();
+        drag(el, SHUT.commit, [500, 300]);
+        settle();
+        click(el, 500, 300, { shiftKey: true }); // unpinned: it sets off home
+        b.paint(); // one frame, part of the way there
+
+        const at = drawnPosition(C1)!;
+        assert.notDeepEqual([at.x, at.y], [canvas.shape(C1)!.x, canvas.shape(C1)!.y]);
+        drag(el, [at.x + 10, at.y + 10], [at.x + 40, at.y + 30]);
+        assert.deepEqual(
+            [canvas.shape(C1)!.x, canvas.shape(C1)!.y],
+            [at.x + 30, at.y + 20],
+            'it moved with the pointer, not from wherever it was headed',
+        );
     });
 
     it('shift-clicking something that was never pinned changes nothing', () => {

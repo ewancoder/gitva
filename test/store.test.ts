@@ -194,6 +194,31 @@ describe('holding the recording', () => {
         rmSync(file);
     });
 
+    /**
+     * Two gitva starting on a repository somebody is already watching. Taking the
+     * lock means moving it aside before asking whose it is, so for the length of
+     * that question the file is not there — and a second contender starting inside
+     * it takes it cleanly. Putting the original back by renaming used to land on
+     * top of that one: two processes then believed they held the recording, and
+     * both wrote it, until the next beat put one right. Repeated, because the
+     * window is a real one rather than one a test can stand in.
+     */
+    it('never hands two gitva the recording at once', async () => {
+        for (let i = 0; i < 400; i++) {
+            const file = lockFile(`contended-${i}`, dir);
+            abandoned(file, 0);
+            const both = await Promise.all([takeLock(file), takeLock(file)]);
+            const held = both.filter((l) => l?.held);
+            // Whoever holds it is the name in the file; if it still says the gitva
+            // that was there, nobody else may be writing the recording.
+            if (readFileSync(file, 'utf8') === 'the gitva that died')
+                assert.deepEqual(held, [], `round ${i}: a lock taken out from under a live holder`);
+            else assert.equal(held.length, 1, `round ${i}: two gitva holding one recording`);
+            for (const lock of both) await lock?.release();
+            rmSync(file, { force: true });
+        }
+    });
+
     it('takes over a lock whose holder died', async () => {
         const file = lockFile('holder-died', dir);
         abandoned(file, 60);
@@ -231,6 +256,24 @@ describe('holding the recording', () => {
         assert.equal(lock.held, true, 'still writing the recording');
         assert.equal(await takeLock(file), null, 'and still nobody else is');
         await lock.release();
+    });
+
+    // And the folder goes as often as the file does: `rm -rf` on the state
+    // directory took the lock with it, and the beat had nowhere to put a name
+    // back — so the run stopped writing the recording for good, quietly, even
+    // once `saveRecording` had made the directory again.
+    it('puts its lock back when the whole state directory goes', async () => {
+        const gone = join(dir, 'swept-away-entirely');
+        mkdirSync(gone, { recursive: true });
+        const file = lockFile('k', gone);
+        const lock = await takeLock(file, 5);
+        assert.ok(lock);
+        rmSync(gone, { recursive: true });
+        await new Promise((r) => setTimeout(r, 30));
+        assert.equal(lock.held, true, 'still the one keeping the recording');
+        assert.equal(existsSync(file), true, 'and its name is back beside it');
+        await lock.release();
+        rmSync(gone, { recursive: true });
     });
 
     // The other way the file can go: swept away, and another gitva through the

@@ -31,7 +31,7 @@ import {
     zoomOut,
     type Camera,
 } from './camera.js';
-import { columnEdgeAt, draw, hitTest, snapPositions } from './render.js';
+import { columnEdgeAt, draw, drawnPosition, hitTest, snapPositions } from './render.js';
 import { isDouble, Pins, Recording, type Arrival, type Click, type Settings } from './recording.js';
 import { setTheme, theme, type Mode } from './theme.js';
 import type { Step, View } from '../src/types.js';
@@ -231,10 +231,15 @@ export class Canvas {
      *  stream reconnects by itself and is handed the recording again. `prev` is
      *  what was on screen before the replay, so a reconnect that missed a step
      *  says what changed and keeps the camera where the viewer put it — only a
-     *  browser that had nothing has nothing to come from. */
+     *  browser that had nothing has nothing to come from.
+     *
+     *  Nothing is where a browser started over comes from either: `--fresh`
+     *  replaces the recording down this same frame, and the step this browser
+     *  held is not the predecessor of the step that replaced it. */
     showAll(steps: Step[]): { prev: Step | null } | null {
         const prev = this.recording.current;
-        return this.recording.arriveAll(steps, this.arriving) ? { prev } : null;
+        const a = this.recording.arriveAll(steps, this.arriving);
+        return a ? { prev: a.first ? null : prev } : null;
     }
 
     /** What a step arriving is answered under. */
@@ -447,16 +452,18 @@ export class Canvas {
         const key = hit || !this.scene ? null : columnEdgeAt(this.scene, w.x);
         const column = this.scene?.columns.find((b) => b.key === key);
         this.resize = key && column ? { key, column: { x: column.x, w: column.w } } : null;
-        this.drag = hit
-            ? {
-                  id: hit.id,
-                  x: e.clientX,
-                  y: e.clientY,
-                  moved: false,
-                  dx: w.x - hit.x,
-                  dy: w.y - hit.y,
-              }
-            : { id: null, x: e.clientX, y: e.clientY, moved: false, dx: 0, dy: 0 };
+        // Grabbed where it was painted, not where layout is sending it: a shape
+        // still sliding into place would otherwise leap the rest of the way the
+        // moment you moved the pointer.
+        const at = (hit && drawnPosition(hit.id)) || hit;
+        this.drag = {
+            id: hit?.id ?? null,
+            x: e.clientX,
+            y: e.clientY,
+            moved: false,
+            dx: at ? w.x - at.x : 0,
+            dy: at ? w.y - at.y : 0,
+        };
     }
 
     private pointerMove(e: PointerEvent): void {

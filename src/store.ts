@@ -10,7 +10,7 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -178,18 +178,22 @@ async function claim(file: string): Promise<string | null> {
         const dead = `${file}.dead`;
         try {
             await rename(file, dead);
-            // Beaten on since: a live gitva is holding it, and this rename has
-            // taken its lock out from under it. Put it back exactly as it was —
-            // a third gitva starting inside this instant finds the file missing
-            // and takes it, and is put right by the beat rather than by the
-            // rename, which is as far as `rename` alone reaches.
-            if (Date.now() - (await stat(dead)).mtimeMs < STALE_MS) {
-                await rename(dead, file);
+            const held = await readFile(dead, 'utf8');
+            const beaten = (await stat(dead)).mtimeMs;
+            await rm(dead, { force: true });
+            if (Date.now() - beaten < STALE_MS) {
+                // Beaten on since: a live gitva is holding it, and this rename has
+                // taken its lock out from under it. Put its name back — but with
+                // `wx`, never a rename: a third gitva starting inside this instant
+                // finds the file missing and takes it, and a rename would put it
+                // back out from under *that* one and leave two of them believing
+                // they hold the recording until the next beat. Whoever is in the
+                // file when we get there is the holder, and it is not us.
+                await writeFile(file, held, { flag: 'wx' }).catch(() => {});
                 return null;
             }
             // Stale: the holder died without letting go, which is what a crash or
             // a `kill -9` leaves behind.
-            await rm(dead, { force: true });
             await writeFile(file, mine, { flag: 'wx' });
             return mine;
         } catch {
@@ -247,11 +251,12 @@ export async function takeLock(file: string, beatMs = HEARTBEAT_MS): Promise<Loc
             utimesSync(file, now, now);
         } catch {
             // The lock file was swept away underneath us — clearing the state
-            // directory mid-session is a thing people do, and `saveRecording`
-            // makes it again on the next step. So put our name back, because
-            // holding the recording is the file saying we do; if something else
-            // got there first, it is theirs and we stop writing.
+            // directory mid-session is a thing people do, and it takes the folder
+            // as often as the file. So make it again and put our name back,
+            // because holding the recording is the file saying we do; if
+            // something else got there first, it is theirs and we stop writing.
             try {
+                mkdirSync(dirname(file), { recursive: true });
                 writeFileSync(file, mine, { flag: 'wx' });
             } catch {
                 lock.held = false;

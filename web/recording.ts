@@ -165,13 +165,25 @@ export class Recording {
 
     /** A whole recording off the wire, replayed. The stream reconnects on its own
      *  and is handed the recording again every time, so most of these frames are
-     *  steps already held: true only when one of them was shown, which is the only
+     *  steps already held: null unless one of them was shown, which is the only
      *  time the page has anything to say or to refit. A blip must not pull the
-     *  canvas out from under everyone reading it. */
-    arriveAll(steps: Step[], settings: Settings): boolean {
+     *  canvas out from under everyone reading it.
+     *
+     *  `first` is carried out because `--fresh` arrives down this frame too: the
+     *  recording being replaced starts this browser over, and the step that lands
+     *  on the empty recording is a first step exactly as `arrive` says it is. A
+     *  single step arriving is already framed on that; one arriving in a whole
+     *  recording must be too. */
+    arriveAll(steps: Step[], settings: Settings): { first: boolean } | null {
         let shown = false;
-        for (const s of steps) shown = this.arrive(s, settings, true).kind === 'shown' || shown;
-        return shown;
+        let first = false;
+        for (const s of steps) {
+            const a = this.arrive(s, settings, true);
+            if (a.kind !== 'shown') continue;
+            shown = true;
+            first ||= a.first;
+        }
+        return shown ? { first } : null;
     }
 
     /**

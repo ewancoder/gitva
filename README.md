@@ -67,6 +67,10 @@ Gitva also records your sessions as independent **steps** and allows you (or any
 The recording lives on the server side, and is persisted on disk (outside of the repo),
 so you can restart `gitva` without losing the recording.
 
+One `gitva` keeps a recording at a time. Start a second one on the same repository and it draws
+everything the first one does — it just says on the command line that this run will not be saved,
+and leaves the recording to the one that has it.
+
 **A step is what git did. A view is how you look at it.** The server records the steps and is
 the only thing that writes one; a browser only ever reads them. Everything you do to what is on
 screen — expanding, collapsing, the toggles, pins, marks, the camera, the language, the theme —
