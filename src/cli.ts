@@ -131,10 +131,19 @@ export function parseArgs(argv: string[]): Options {
     const bindHostPort = serveAddressRegex.exec(serveAddress ?? '');
     const bindIpAddress = bindHostPort?.[1] ?? '';
 
+    // --port overrides the port of a --serve address, and 4200 is only a default.
+    const typedPort = values.port ?? bindHostPort?.[2] ?? '0';
+    const port = Number(typedPort);
+    // Left to listen(), a NaN or an out-of-range port throws a node internal error
+    // naming `options.port` — an option nobody typed. Name the flag they did.
+    if (!Number.isInteger(port) || port < 0 || port > 65535)
+        throw new Error(
+            `${values.port === undefined ? '--serve' : '--port'}: ${typedPort} is not a port — use a whole number from 0 to 65535, or 0 to let the OS pick one`,
+        );
+
     return {
         repo: positionals[0] ?? '.',
-        // --port overrides the port of a --serve address, and 4200 is only a default.
-        port: Number(values.port ?? bindHostPort?.[2] ?? 0),
+        port,
         host: !bindHostPort
             ? '127.0.0.1'
             : bindIpAddress.startsWith('[') && bindIpAddress.endsWith(']')
