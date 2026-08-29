@@ -30,6 +30,13 @@ describe('parsing what git hands back', () => {
         assert.equal(got.get('cccc')!.body.toString(), 'yo');
     });
 
+    it('drops a prefix too short to name one object', () => {
+        // git answers an ambiguous prefix on stdout, exit 0, with no size — a
+        // header that would otherwise become an object of type "ambiguous".
+        const got = parseBatch(Buffer.from('01d6 ambiguous\ncccc blob 2\nyo\n'));
+        assert.deepEqual([...got.keys()], ['cccc']);
+    });
+
     it('reads a tree, mode and name and raw sha', () => {
         const sha = Buffer.alloc(20, 0xab);
         const body = Buffer.concat([
@@ -203,6 +210,19 @@ describe('a repository read through its own plumbing', () => {
         assert.equal(body.text, 'alpha\n');
         const root = await readBody(handle, step.commits[step.head.oid!].tree);
         assert.ok(root.entries!.some((e) => e.name === 'lib'));
+    });
+
+    it('reads an object named by an abbreviated sha', async () => {
+        // git resolves a short sha and echoes the full forty back, so the answer
+        // is whatever the batch returned — not whatever we asked with.
+        const a = repo.git('hash-object', 'a.txt');
+        const body = await readBody(handle, a.slice(0, 7));
+        assert.equal(body.text, 'alpha\n');
+        assert.equal(body.path, `objects/${a.slice(0, 2)}/${a.slice(2)}`);
+    });
+
+    it('still refuses a sha no object answers to', async () => {
+        await assert.rejects(readBody(handle, 'deadbee'), /no such object deadbee/);
     });
 
     it('says when a large text body is only the first 64 KiB', async () => {
