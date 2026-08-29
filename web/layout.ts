@@ -11,6 +11,7 @@
  * here: generality bought nothing and cost slow, jumpy and generic-looking.
  */
 
+import { entryId } from './explain.js';
 import { S } from './localization/index.js';
 import type { Oid, Step, TreeEntry, View } from '../src/types.js';
 
@@ -314,7 +315,7 @@ export function layout(
     // its own, because that is where the link saying so can be drawn. `git
     // write-tree` is exactly this: the tree it writes is unreachable, and the
     // blobs still in the index are what it names.
-    const shownUnreachable = view.showUnreachable === false ? [] : unreachable;
+    const shownUnreachable = view.showUnreachable === false ? new Set<Oid>() : unreachable;
     const under = new Set(
         [...stagedOnly, ...shownUnreachable].flatMap((o) =>
             (step.trees[o] ?? []).map((e) => e.oid),
@@ -324,8 +325,24 @@ export function layout(
         (o) => (step.objects[o]?.type ?? 'blob') === 'blob' && !under.has(o),
     );
 
+    // The same band, reached from the other end: expanding an index entry draws the
+    // blob its sha names, beside the chip that names it. It is the index read
+    // forwards — a path holds a sha, and this is the object that sha is — without
+    // opening the commit that happens to name it too. Nothing that is already
+    // drawn somewhere is drawn again: an expanded commit keeps its blob down in
+    // the fan-out where the tree entry naming it can be drawn, and a staged or
+    // unreachable one keeps its place below. The gesture is on the entry and never
+    // on the blob, because one blob can sit in every tree in the window and there
+    // is no gesture worth making that draws them all.
+    const inGraphs = new Set([...graphs.values()].flatMap((g) => g.levels.flat()));
+    const revealed = (view.showIndex ? step.index : [])
+        .filter((e) => expanded.has(entryId(e.path, e.stage)))
+        .map((e) => e.oid)
+        .filter((o) => !inGraphs.has(o) && !stagedOnly.has(o) && !shownUnreachable.has(o));
+    const top = [...new Set([...stagedTop, ...revealed])];
+
     const rows: { oid: Oid; y: number; h: number }[] = [];
-    let y = 16 + (stagedTop.length > 0 ? stagedTop.length * M.objRowH + M.rowPad : 0);
+    let y = 16 + (top.length > 0 ? top.length * M.objRowH + M.rowPad : 0);
     let maxLevels = 0;
     for (const oid of commits) {
         const g = graphs.get(oid);
@@ -359,8 +376,8 @@ export function layout(
         return shape;
     };
 
-    // --- staged blobs, above everything, in the object column ---
-    stagedTop.forEach((oid, i) => {
+    // --- blobs the index is holding, above everything, in the object column ---
+    top.forEach((oid, i) => {
         put({
             id: oid,
             kind: 'blob',
@@ -371,7 +388,7 @@ export function layout(
             h: M.objH,
             label: short(oid),
             sub: 'blob',
-            staged: true,
+            staged: stagedOnly.has(oid),
             stray: true,
         });
     });
@@ -716,7 +733,7 @@ export function layout(
             const wanted = blob ? blob.y : cursor;
             const iy = Math.max(wanted, cursor);
             cursor = iy + M.indexH + M.indexGap;
-            const id = `index:${e.stage}:${e.path}`;
+            const id = entryId(e.path, e.stage);
             const n = put({
                 id,
                 kind: 'index',

@@ -78,6 +78,11 @@ that is the one thing about branches worth understanding. Never `arrow` or `edge
 git already uses it (`explain.ts`: a packed ref is *"folded into .git/packed-refs"*). **Never
 "open"**: it implies the tree is inside the commit, when a commit holds one 40-character sha and
 the tree is a separate object. The tooltip carries the truth — *"show what this commit links to"*.
+An **index entry** expands too, and it is the only one that expands *backwards*: it draws the blob
+its sha names, because the index is the one place where the name is what you have and the object
+is what you are looking for. Never the blob itself — one blob sits in as many trees as name it, and
+a gesture that drew them all would draw the whole window. `View.expanded` holds the entry's shape
+id (`entryId`) beside the commit shas, since both are things you opened.
 
 **select** (click) — read it in the inspector, and copy its sha. **mark** (right-click) — follow
 it as the object graph moves. **pin** (drag) / **unpin** (shift-click).

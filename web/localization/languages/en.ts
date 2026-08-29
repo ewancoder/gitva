@@ -86,6 +86,8 @@ export const en = {
         'help.keys.doubleCommit.does': 'expand or collapse — show what this commit links to',
         'help.keys.doubleTree': 'double-click tree',
         'help.keys.doubleTree.does': 'expand or collapse that subtree',
+        'help.keys.doubleIndex': 'double-click index entry',
+        'help.keys.doubleIndex.does': 'expand or collapse — draw the blob this sha names',
         'help.keys.drag': 'drag anything',
         'help.keys.drag.does': 'pin it where you put it (“reset view” drops every pin)',
         'help.keys.shiftClick': 'shift-click it',

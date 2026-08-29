@@ -210,6 +210,18 @@ describe('what is collapsed', () => {
         assert.ok(t.view.expanded.includes(oid('b')), 'it collapsed a commit nobody could see');
     });
 
+    it('shuts the index entries you opened when everything is collapsed', () => {
+        // An entry is expanded by the chip that names it, so a collapse that left
+        // one open would leave a blob on screen with no chip on it to shut it.
+        const t = new Recording();
+        t.arrive(step(1, ['a']), SHUT);
+        t.toggle('index:0:x.txt');
+        assert.deepEqual(t.view.expanded, ['index:0:x.txt']);
+        t.collapseAll();
+        assert.deepEqual(t.view.expanded, []);
+        assert.equal(t.answers['index:0:x.txt'], false, 'and it stays shut across a reload');
+    });
+
     it('opens every repository collapsed, however small', () => {
         const big = new Recording();
         big.arrive(step(1, []), SHUT);

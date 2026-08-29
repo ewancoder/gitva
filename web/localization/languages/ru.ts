@@ -72,6 +72,9 @@ export const ru: Strings = {
         'help.keys.doubleTree': 'двойной щелчок по дереву',
         'help.keys.doubleTree.does':
             'развернуть или свернуть это дерево (то, на что оно ссылается)',
+        'help.keys.doubleIndex': 'двойной щелчок по записи индекса',
+        'help.keys.doubleIndex.does':
+            'развернуть или свернуть — показать блоб, на который указывает этот sha',
         'help.keys.drag': 'перетащить что угодно',
         'help.keys.drag.does': 'закрепить в другом месте («сбросить вид» снимает все закрепления)',
         'help.keys.shiftClick': 'shift-щелчок по нему',

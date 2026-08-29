@@ -123,6 +123,7 @@ Click anything to read what it is or inspect its content.
 | right-click | mark with a red outline for tracking |
 | double-click a commit | expand or collapse what it links to |
 | double-click a tree | expand or collapse that subtree |
+| double-click an index entry | draw the blob its SHA names, beside the entry |
 | drag anything | pin it where you put it; shift+click unpins |
 | shift+click | unpin an object from a specific location back to the default one |
 | drag a column edge | change the size of the column |
@@ -136,7 +137,7 @@ Click anything to read what it is or inspect its content.
 The view toolbar has additional controls:
 
 - **Expand all** - expands all commits and trees
-- **Collapse all** - collapses all commits (excluding trees)
+- **Collapse all** - collapses all commits and index entries (excluding trees)
 - **Index** - show/hide Index column
 - **Unreachable** - show unreachable git objects
 - **Links from unreachable** - show links from unreachable objects to reachable ones
@@ -207,8 +208,9 @@ canvas.goto(0);
 ```
 
 You get the object graph and every gesture on it - drag to pin, drag empty space to pan,
-wheel to scroll, ctrl-wheel to zoom, double-click to expand a commit or a tree, right-click
-to mark, shift-click to unpin, and a column edge to drag. Give the element a size: the
+wheel to scroll, ctrl-wheel to zoom, double-click to expand a commit, a tree or an index
+entry, right-click to mark, shift-click to unpin, and a column edge to drag. Give the
+element a size: the
 canvas fills it.
 
 The toolbars are yours to build. You can use these methods to control the canvas:

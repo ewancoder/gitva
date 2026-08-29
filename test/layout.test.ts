@@ -630,6 +630,90 @@ describe('the scene', () => {
         assert.ok(chip.y <= shape(blob).y, 'and the chip holding it comes up beside it');
     });
 
+    it('draws the blob an index entry names when you expand the entry', () => {
+        // The index read forwards: a path holds a sha, and this is the object that
+        // sha is. Nothing links it to a tree — no tree is open — so the chip that
+        // named it is the only thing pointing at it.
+        const s = fakeCommits({ a: [] });
+        const blob = oid('bfile');
+        s.objects[blob] = { oid: blob, type: 'blob', size: 3 };
+        s.trees[oid('ta')] = [{ mode: '100644', name: 'x.txt', oid: blob, type: 'blob' }];
+        s.index = [{ path: 'x.txt', oid: blob, mode: '100644', stage: 0 }];
+
+        const shut = layout(s, DEFAULT_VIEW);
+        assert.ok(!shut.shapes.some((n) => n.id === blob), 'nothing drawn until you ask');
+
+        const scene = layout(s, { ...DEFAULT_VIEW, expanded: ['index:0:x.txt'] });
+        const shape = (o: string) => scene.shapes.find((n) => n.id === o)!;
+        const objects = scene.columns.find((b) => b.key === 'treesAndBlobs')!;
+        assert.equal(shape(blob).kind, 'blob');
+        assert.equal(shape(blob).x, objects.x, 'in the object column, where objects go');
+        assert.equal(shape(blob).staged, false, 'the history holds it too — this is no git add');
+        assert.ok(shape(blob).y < shape(oid('a')).y, 'above the history, beside its chip');
+        const chip = scene.shapes.find((n) => n.kind === 'index')!;
+        assert.ok(chip.y <= shape(blob).y);
+        assert.ok(
+            scene.links.some((e) => e.from === chip.id && e.to === blob && e.kind === 'stage'),
+        );
+        assert.ok(!scene.links.some((e) => e.kind === 'entry'), 'and no tree is open to name it');
+    });
+
+    it('leaves an expanded entry\u2019s blob in the fan-out when a commit already names it', () => {
+        // Drawn twice it would be two shapes for one object, and the one up top
+        // would be the one with no tree entry saying what it is called.
+        const s = fakeCommits({ a: [] });
+        const blob = oid('bfile');
+        s.objects[blob] = { oid: blob, type: 'blob', size: 3 };
+        s.trees[oid('ta')] = [{ mode: '100644', name: 'x.txt', oid: blob, type: 'blob' }];
+        s.index = [{ path: 'x.txt', oid: blob, mode: '100644', stage: 0 }];
+
+        const scene = layout(s, { ...DEFAULT_VIEW, expanded: [oid('a'), 'index:0:x.txt'] });
+        const shape = (o: string) => scene.shapes.find((n) => n.id === o)!;
+        assert.equal(scene.shapes.filter((n) => n.id === blob).length, 1);
+        assert.ok(shape(blob).x > shape(oid('ta')).x, 'still out beside the tree that names it');
+        assert.ok(scene.links.some((e) => e.to === blob && e.kind === 'entry'));
+    });
+
+    it('leaves an expanded entry\u2019s blob below when it is unreachable or only staged', () => {
+        // Both are already drawn, in the region shaped for them. An expanded entry
+        // asks for the blob on screen, not for a second copy of it up top.
+        const s = fakeCommits({ a: [] });
+        const [lost, added] = ['blost', 'badded'].map(oid);
+        s.objects[lost] = { oid: lost, type: 'blob', size: 1 };
+        s.objects[added] = { oid: added, type: 'blob', size: 1 };
+        s.unreachable = [lost];
+        s.stagedOnly = [added];
+        s.index = [
+            { path: 'lost.txt', oid: lost, mode: '100644', stage: 0 },
+            { path: 'added.txt', oid: added, mode: '100644', stage: 0 },
+        ];
+
+        const scene = layout(s, {
+            ...DEFAULT_VIEW,
+            expanded: ['index:0:lost.txt', 'index:0:added.txt'],
+        });
+        const shape = (o: string) => scene.shapes.find((n) => n.id === o)!;
+        assert.ok(shape(lost).y > shape(oid('a')).y, 'the ghost stays with the strays');
+        assert.equal(shape(lost).unreachable, true);
+        assert.equal(shape(added).staged, true, 'and git add still wrote this one');
+    });
+
+    it('reveals nothing while the index is switched off', () => {
+        // The chip is the only way to shut it again, so a blob it drew with the
+        // index hidden could not be put back.
+        const s = fakeCommits({ a: [] });
+        const blob = oid('bfile');
+        s.objects[blob] = { oid: blob, type: 'blob', size: 3 };
+        s.index = [{ path: 'x.txt', oid: blob, mode: '100644', stage: 0 }];
+
+        const scene = layout(s, {
+            ...DEFAULT_VIEW,
+            showIndex: false,
+            expanded: ['index:0:x.txt'],
+        });
+        assert.ok(!scene.shapes.some((n) => n.id === blob));
+    });
+
     it('draws a submodule as a submodule, not a blob', () => {
         // The whole point of a gitlink: mode 160000 names a commit this object
         // database does not have, so `step.objects` can never say what it is and

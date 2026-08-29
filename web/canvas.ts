@@ -523,6 +523,9 @@ export class Canvas {
             // folder everywhere else — and empty space pulls the whole object graph back.
             if (shape?.kind === 'commit') this.recording.toggle(shape.id);
             else if (shape?.kind === 'tree') this.recording.toggleTree(shape.id);
+            // An index entry opens the other way round: it draws the blob its sha
+            // names, rather than what that blob links to — a blob links to nothing.
+            else if (shape?.kind === 'index') this.recording.toggle(shape.id);
             else if (!shape && this.scene) {
                 this.camera = zoomOut(this.scene, this.viewport, this.at(e).y);
                 this.glide = null;
