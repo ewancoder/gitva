@@ -23,6 +23,7 @@ function fakeCommits(commits: Record<string, string[]>, extra: Partial<Step> = {
         author: 'A <a@b>',
         authorDate: 0,
         committer: 'A <a@b>',
+        committerDate: 1_700_000_000_000,
         subject: `commit ${o}`,
         message: `commit ${o}`,
     });
@@ -325,6 +326,23 @@ describe('the scene', () => {
         assert.equal(column(back).w, column(plain).w);
     });
 
+    it('grows the scene down to hold a shape dragged below everything else', () => {
+        const s = fakeCommits({ c: ['b'], b: ['a'], a: [] });
+        const plain = layout(s, DEFAULT_VIEW);
+        const chip = plain.shapes.find((n) => n.kind === 'commit')!;
+        const down = layout(s, DEFAULT_VIEW, { [chip.id]: { x: chip.x, y: plain.height + 500 } });
+        assert.ok(down.height > plain.height + 500, 'and the canvas can be panned to it');
+    });
+
+    it('grows the scene up to hold a shape dragged above everything else', () => {
+        const s = fakeCommits({ c: ['b'], b: ['a'], a: [] });
+        const plain = layout(s, DEFAULT_VIEW);
+        const chip = plain.shapes.find((n) => n.kind === 'commit')!;
+        const up = layout(s, DEFAULT_VIEW, { [chip.id]: { x: chip.x, y: -500 } });
+        assert.ok(up.y < -500, 'the scene starts above it');
+        assert.ok(up.y + up.height >= plain.y + plain.height, 'and still reaches the bottom');
+    });
+
     it('widens a column by hand, moving every column after it along', () => {
         const plain = layout(step, DEFAULT_VIEW);
         const wide = layout(step, DEFAULT_VIEW, {}, { pointersAndTags: 400 });
@@ -345,11 +363,15 @@ describe('the scene', () => {
     it('explains the ref chips it draws — the scene keys them, the inspector looks them up', () => {
         const chip = layout(step, DEFAULT_VIEW).shapes.find((n) => n.kind === 'ref')!;
         const facts = explain(step, 'ref', chip.id).facts;
+        // The name is the part you type; the whole of it is the file's path.
         assert.deepEqual(
             facts.find(([k]) => k === 'name'),
-            ['name', 'refs/heads/main'],
+            ['name', 'main'],
         );
-        assert.ok(facts.some(([k, v]) => k === 'contains' && v === oid('c')));
+        assert.deepEqual(facts.find(([k]) => k === 'file')![1], {
+            short: 'refs/heads/main',
+            full: `${step.gitDir}/refs/heads/main`,
+        });
     });
 
     // There is nothing to draw a parent outside the window *to*, and no button to
@@ -608,6 +630,90 @@ describe('the scene', () => {
         assert.ok(chip.y <= shape(blob).y, 'and the chip holding it comes up beside it');
     });
 
+    it('draws the blob an index entry names when you expand the entry', () => {
+        // The index read forwards: a path holds a sha, and this is the object that
+        // sha is. Nothing links it to a tree — no tree is open — so the chip that
+        // named it is the only thing pointing at it.
+        const s = fakeCommits({ a: [] });
+        const blob = oid('bfile');
+        s.objects[blob] = { oid: blob, type: 'blob', size: 3 };
+        s.trees[oid('ta')] = [{ mode: '100644', name: 'x.txt', oid: blob, type: 'blob' }];
+        s.index = [{ path: 'x.txt', oid: blob, mode: '100644', stage: 0 }];
+
+        const shut = layout(s, DEFAULT_VIEW);
+        assert.ok(!shut.shapes.some((n) => n.id === blob), 'nothing drawn until you ask');
+
+        const scene = layout(s, { ...DEFAULT_VIEW, expanded: ['index:0:x.txt'] });
+        const shape = (o: string) => scene.shapes.find((n) => n.id === o)!;
+        const objects = scene.columns.find((b) => b.key === 'treesAndBlobs')!;
+        assert.equal(shape(blob).kind, 'blob');
+        assert.equal(shape(blob).x, objects.x, 'in the object column, where objects go');
+        assert.equal(shape(blob).staged, false, 'the history holds it too — this is no git add');
+        assert.ok(shape(blob).y < shape(oid('a')).y, 'above the history, beside its chip');
+        const chip = scene.shapes.find((n) => n.kind === 'index')!;
+        assert.ok(chip.y <= shape(blob).y);
+        assert.ok(
+            scene.links.some((e) => e.from === chip.id && e.to === blob && e.kind === 'stage'),
+        );
+        assert.ok(!scene.links.some((e) => e.kind === 'entry'), 'and no tree is open to name it');
+    });
+
+    it('leaves an expanded entry\u2019s blob in the fan-out when a commit already names it', () => {
+        // Drawn twice it would be two shapes for one object, and the one up top
+        // would be the one with no tree entry saying what it is called.
+        const s = fakeCommits({ a: [] });
+        const blob = oid('bfile');
+        s.objects[blob] = { oid: blob, type: 'blob', size: 3 };
+        s.trees[oid('ta')] = [{ mode: '100644', name: 'x.txt', oid: blob, type: 'blob' }];
+        s.index = [{ path: 'x.txt', oid: blob, mode: '100644', stage: 0 }];
+
+        const scene = layout(s, { ...DEFAULT_VIEW, expanded: [oid('a'), 'index:0:x.txt'] });
+        const shape = (o: string) => scene.shapes.find((n) => n.id === o)!;
+        assert.equal(scene.shapes.filter((n) => n.id === blob).length, 1);
+        assert.ok(shape(blob).x > shape(oid('ta')).x, 'still out beside the tree that names it');
+        assert.ok(scene.links.some((e) => e.to === blob && e.kind === 'entry'));
+    });
+
+    it('leaves an expanded entry\u2019s blob below when it is unreachable or only staged', () => {
+        // Both are already drawn, in the region shaped for them. An expanded entry
+        // asks for the blob on screen, not for a second copy of it up top.
+        const s = fakeCommits({ a: [] });
+        const [lost, added] = ['blost', 'badded'].map(oid);
+        s.objects[lost] = { oid: lost, type: 'blob', size: 1 };
+        s.objects[added] = { oid: added, type: 'blob', size: 1 };
+        s.unreachable = [lost];
+        s.stagedOnly = [added];
+        s.index = [
+            { path: 'lost.txt', oid: lost, mode: '100644', stage: 0 },
+            { path: 'added.txt', oid: added, mode: '100644', stage: 0 },
+        ];
+
+        const scene = layout(s, {
+            ...DEFAULT_VIEW,
+            expanded: ['index:0:lost.txt', 'index:0:added.txt'],
+        });
+        const shape = (o: string) => scene.shapes.find((n) => n.id === o)!;
+        assert.ok(shape(lost).y > shape(oid('a')).y, 'the ghost stays with the strays');
+        assert.equal(shape(lost).unreachable, true);
+        assert.equal(shape(added).staged, true, 'and git add still wrote this one');
+    });
+
+    it('reveals nothing while the index is switched off', () => {
+        // The chip is the only way to shut it again, so a blob it drew with the
+        // index hidden could not be put back.
+        const s = fakeCommits({ a: [] });
+        const blob = oid('bfile');
+        s.objects[blob] = { oid: blob, type: 'blob', size: 3 };
+        s.index = [{ path: 'x.txt', oid: blob, mode: '100644', stage: 0 }];
+
+        const scene = layout(s, {
+            ...DEFAULT_VIEW,
+            showIndex: false,
+            expanded: ['index:0:x.txt'],
+        });
+        assert.ok(!scene.shapes.some((n) => n.id === blob));
+    });
+
     it('draws a submodule as a submodule, not a blob', () => {
         // The whole point of a gitlink: mode 160000 names a commit this object
         // database does not have, so `step.objects` can never say what it is and
@@ -753,6 +859,27 @@ describe('the scene', () => {
         const on = parent({ ...DEFAULT_VIEW, showLinksFromUnreachable: true });
         assert.equal(on.length, 1);
         assert.equal(on[0].kind, 'parent');
+    });
+
+    it('draws a discarded commit\u2019s link to the live tree it shares', () => {
+        // Two unrelated commits over one tree, only one of them reachable: the
+        // ghost still names that tree, and nothing else on screen says so.
+        const s = fakeCommits({ a: [] });
+        const lost = oid('lost');
+        s.trees[oid('ta')] = [{ mode: '100644', name: 'a.txt', oid: oid('bl'), type: 'blob' }];
+        s.objects[oid('ta')] = { oid: oid('ta'), type: 'tree', size: 1 };
+        s.objects[oid('bl')] = { oid: oid('bl'), type: 'blob', size: 1 };
+        s.commits[lost] = { ...s.commits[oid('a')], oid: lost, tree: oid('ta'), parents: [] };
+        s.objects[lost] = { oid: lost, type: 'commit', size: 1 };
+        s.unreachable = [lost];
+
+        const tree = (v: View) =>
+            layout(s, v).links.filter((e) => e.from === lost && e.to === oid('ta'));
+        const open = { ...DEFAULT_VIEW, expanded: [oid('a')] };
+        assert.equal(tree(open).length, 0, 'off by default, like any link from unreachable');
+        const on = tree({ ...open, showLinksFromUnreachable: true });
+        assert.equal(on.length, 1);
+        assert.equal(on[0].kind, 'tree');
     });
 
     it('says nothing about the entries of a collapsed unreachable object, links from unreachable or not', () => {

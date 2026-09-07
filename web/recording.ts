@@ -71,10 +71,10 @@ export class Recording {
      *  browser writes it out and hands it back on the next load, so a commit
      *  that was in the repository before the session started comes back the way
      *  they left it rather than at its default. */
-    answers: Record<Oid, boolean> = {};
+    answers: Record<string, boolean> = {};
 
     /** Their answers over whatever the defaults worked out to. */
-    private answered(open: Oid[]): Oid[] {
+    private answered(open: string[]): string[] {
         const on = new Set(open);
         for (const [oid, want] of Object.entries(this.answers))
             if (want) on.add(oid);
@@ -163,6 +163,29 @@ export class Recording {
         return { kind: 'shown', prev, first };
     }
 
+    /** A whole recording off the wire, replayed. The stream reconnects on its own
+     *  and is handed the recording again every time, so most of these frames are
+     *  steps already held: null unless one of them was shown, which is the only
+     *  time the page has anything to say or to refit. A blip must not pull the
+     *  canvas out from under everyone reading it.
+     *
+     *  `first` is carried out because `--fresh` arrives down this frame too: the
+     *  recording being replaced starts this browser over, and the step that lands
+     *  on the empty recording is a first step exactly as `arrive` says it is. A
+     *  single step arriving is already framed on that; one arriving in a whole
+     *  recording must be too. */
+    arriveAll(steps: Step[], settings: Settings): { first: boolean } | null {
+        let shown = false;
+        let first = false;
+        for (const s of steps) {
+            const a = this.arrive(s, settings, true);
+            if (a.kind !== 'shown') continue;
+            shown = true;
+            first ||= a.first;
+        }
+        return shown ? { first } : null;
+    }
+
     /**
      * `--fresh` starts the recording over, and step numbers start over with it.
      * The stream reconnects on its own and is handed the whole recording, so a
@@ -226,15 +249,14 @@ export class Recording {
         };
     }
 
-    /** The three expand and collapse gestures — the only things that own `expanded`. */
-    toggle(oid: Oid) {
-        const on = this.view.expanded.includes(oid);
-        this.answers[oid] = !on;
+    /** The three expand and collapse gestures — the only things that own `expanded`.
+     *  A commit's sha or an index entry's id: both are things you opened. */
+    toggle(id: string) {
+        const on = this.view.expanded.includes(id);
+        this.answers[id] = !on;
         this.view = {
             ...this.view,
-            expanded: on
-                ? this.view.expanded.filter((o) => o !== oid)
-                : [...this.view.expanded, oid],
+            expanded: on ? this.view.expanded.filter((o) => o !== id) : [...this.view.expanded, id],
         };
     }
     /** Both act on what is on screen: collapses made elsewhere in the recording are not
@@ -245,7 +267,13 @@ export class Recording {
         this.view = { ...this.view, expanded: [...on], collapsed: [] };
     }
     collapseAll() {
-        const off = new Set(this.current?.window.commits ?? []);
+        // Index entries you opened close too: the gesture is "shut everything", and
+        // the blob one drew has no other way back — collapse it by the chip that
+        // named it, or by this.
+        const off = new Set([
+            ...(this.current?.window.commits ?? []),
+            ...this.view.expanded.filter((id) => id.startsWith('index:')),
+        ]);
         for (const c of off) this.answers[c] = false;
         this.view = { ...this.view, expanded: this.view.expanded.filter((o) => !off.has(o)) };
     }

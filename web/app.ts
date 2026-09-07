@@ -72,6 +72,13 @@ interface Settings {
     showLinksFromUnreachable: boolean | null;
     theme: Mode;
     inspectorWidth: number;
+    inspectorHeight: number;
+    /** Which edge the inspector sits on. On a narrow screen — a projector, a
+     *  laptop half-screen — a column wide enough to read is most of the canvas. */
+    inspectorAtBottom: boolean;
+    /** Less on screen, everywhere: for now the inspector drops its teaching text,
+     *  and anything else that gets a compact form answers to this one setting. */
+    compact: boolean;
 }
 const keptSettings = kept<Partial<Settings & CanvasSettings>>('gitva.settings', '{}');
 const DEFAULTS: Settings = {
@@ -81,6 +88,9 @@ const DEFAULTS: Settings = {
     showLinksFromUnreachable: null,
     theme: 'dark',
     inspectorWidth: 430,
+    inspectorHeight: 260,
+    inspectorAtBottom: false,
+    compact: false,
 };
 // This file's own keys off what was kept, and no others: the rest of that object
 // is the canvas's, and each half is only ever written back from the one that
@@ -210,7 +220,7 @@ async function chooseLanguage(code: string) {
     applyWords();
     showConnection(source.readyState !== 2);
     updateToolbars();
-    renderInspector(inspector, recording.current, canvas.shape(canvas.selected));
+    renderInspector(inspector, recording.current, canvas.shape(canvas.selected), settings.compact);
     showChange(recording.current ? describe(shownFrom, recording.current) : '');
     canvas.redraw(false);
 }
@@ -233,7 +243,7 @@ const canvas = mount($<HTMLCanvasElement>('canvas'), {
     onSelect: (shape) => {
         if (shape) localStorage.setItem('gitva.selected', shape.id);
         else localStorage.removeItem('gitva.selected');
-        renderInspector(inspector, recording.current, shape);
+        renderInspector(inspector, recording.current, shape, settings.compact);
         // Anything with a sha is a key in the key-value store, so a click hands
         // you the key: the whole point is that you can paste it into the next
         // command.
@@ -294,7 +304,12 @@ function showStep(prev: Step | null, drawn = false) {
 function redressed() {
     updateToolbars();
     if (canvas.selected)
-        renderInspector(inspector, recording.current, canvas.shape(canvas.selected));
+        renderInspector(
+            inspector,
+            recording.current,
+            canvas.shape(canvas.selected),
+            settings.compact,
+        );
 }
 
 // ---------------------------------------------------------------------------
@@ -319,13 +334,23 @@ const source = new EventSource('/events');
  *  recorded, not performed: a page opened an hour in would otherwise strobe
  *  through the whole session, painting and posting a view per step on the
  *  way. One step is painted at the end — the newest — exactly as the very
- *  first step is. */
+ *  first step is.
+ *
+ *  This frame comes down every connection, and the stream reconnects on its own,
+ *  so most of them hand over the recording this browser is already holding: with
+ *  nothing new in it there is nothing to say and nothing to refit, the same as a
+ *  step that lands while you are paused. */
 source.addEventListener('steps', (e) => {
     showConnection(true);
-    const steps = JSON.parse(e.data as string) as Step[];
-    for (const s of steps) canvas.show(s, true);
-    showStep(null);
-    canvas.fitCamera();
+    const a = canvas.showAll(JSON.parse(e.data as string) as Step[]);
+    if (!a) {
+        updateToolbars();
+        return;
+    }
+    showStep(a.prev);
+    // Only a browser that arrived with nothing is fitted: a reconnect that
+    // missed a step draws it like any other, camera untouched.
+    if (!a.prev) canvas.fitCamera();
 });
 
 source.addEventListener('step', (e) => {
@@ -460,6 +485,14 @@ pinBox.addEventListener('change', () => {
     saveSettings();
     canvas.schedule();
 });
+const compactBox = $<HTMLInputElement>('compact');
+compactBox.checked = settings.compact;
+compactBox.addEventListener('change', () => {
+    settings.compact = compactBox.checked;
+    saveSettings();
+    dockInspector();
+    redressed();
+});
 const refitBox = $<HTMLInputElement>('refit-on-change');
 refitBox.checked = canvas.settings.refitOnChange;
 refitBox.addEventListener('change', () => {
@@ -490,23 +523,52 @@ addEventListener('keydown', (e) => {
         e.preventDefault();
         $('play').click();
     } else if (e.key === 'i') $('toggle-index').click();
+    // Presentation: the toolbars go, the canvas gets the height. A mode for the
+    // next ten minutes rather than an answer about how you like to work, so
+    // unlike the settings it is not kept — a reload is back to the toolbars.
+    else if (e.key === 'p') document.body.classList.toggle('presentation');
 });
 
 // ---------------------------------------------------------------------------
 // The inspector
 // ---------------------------------------------------------------------------
 
-/** How wide the teaching is, is yours. The canvas follows on its own — its
- *  ResizeObserver is what redraws it. */
+/** How big the teaching is, and which edge it sits on, are yours. The canvas
+ *  follows on its own — its ResizeObserver is what redraws it. The size is kept
+ *  per edge: docking to the bottom and back must not turn a 430px column into a
+ *  430px-tall one. */
 const inspectorEdgeEl = $('inspector-edge');
-const setInspectorWidth = (w: number) => {
-    settings.inspectorWidth = Math.max(240, Math.min(w, innerWidth - 240));
-    inspector.style.width = `${settings.inspectorWidth}px`;
+const setInspectorSize = (n: number) => {
+    const bottom = settings.inspectorAtBottom;
+    const size = Math.max(160, Math.min(n, (bottom ? innerHeight : innerWidth) - 240));
+    if (bottom) settings.inspectorHeight = size;
+    else settings.inspectorWidth = size;
+    inspector.style.width = bottom ? '' : `${size}px`;
+    inspector.style.height = bottom ? `${size}px` : '';
 };
-setInspectorWidth(settings.inspectorWidth);
+const dockInspector = () => {
+    $('main').classList.toggle('bottom', settings.inspectorAtBottom);
+    // Compact *and* along the bottom is the contents alone — a strip that deep
+    // has room for the bytes or for everything about them, not both.
+    $('main').classList.toggle('compact', settings.compact);
+    setInspectorSize(
+        settings.inspectorAtBottom ? settings.inspectorHeight : settings.inspectorWidth,
+    );
+};
+dockInspector();
+const bottomBox = $<HTMLInputElement>('inspector-at-bottom');
+bottomBox.checked = settings.inspectorAtBottom;
+bottomBox.addEventListener('change', () => {
+    settings.inspectorAtBottom = bottomBox.checked;
+    dockInspector();
+    saveSettings();
+});
 inspectorEdgeEl.addEventListener('pointerdown', (e) => {
     inspectorEdgeEl.setPointerCapture(e.pointerId);
-    const move = (m: PointerEvent) => setInspectorWidth(innerWidth - m.clientX);
+    const move = (m: PointerEvent) =>
+        setInspectorSize(
+            settings.inspectorAtBottom ? innerHeight - m.clientY : innerWidth - m.clientX,
+        );
     inspectorEdgeEl.addEventListener('pointermove', move);
     // Written out at the end of the gesture, like the columns and the pins.
     inspectorEdgeEl.addEventListener(
@@ -527,7 +589,12 @@ inspector.addEventListener('click', (e) => {
     if (!el.classList.contains('sha')) return;
     const text = el.textContent ?? '';
     const whole = el.dataset.copy;
-    copied(whole ?? text, whole ? text : text.slice(0, 7));
+    const key = whole ?? text;
+    // A sha in the contents names an object, and if that object is on screen,
+    // taking its key selects it too — the same as clicking the shape itself,
+    // which copies the sha on its way.
+    if (canvas.shape(key)) canvas.select(key);
+    else copied(key, whole ? text : text.slice(0, 7));
 });
 
 // ---------------------------------------------------------------------------

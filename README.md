@@ -67,6 +67,10 @@ Gitva also records your sessions as independent **steps** and allows you (or any
 The recording lives on the server side, and is persisted on disk (outside of the repo),
 so you can restart `gitva` without losing the recording.
 
+One `gitva` keeps a recording at a time. Start a second one on the same repository and it draws
+everything the first one does — it just says on the command line that this run will not be saved,
+and leaves the recording to the one that has it.
+
 **A step is what git did. A view is how you look at it.** The server records the steps and is
 the only thing that writes one; a browser only ever reads them. Everything you do to what is on
 screen — expanding, collapsing, the toggles, pins, marks, the camera, the language, the theme —
@@ -123,18 +127,22 @@ Click anything to read what it is or inspect its content.
 | right-click | mark with a red outline for tracking |
 | double-click a commit | expand or collapse what it links to |
 | double-click a tree | expand or collapse that subtree |
+| double-click an index entry | draw the blob its SHA names, beside the entry |
 | drag anything | pin it where you put it; shift+click unpins |
 | shift+click | unpin an object from a specific location back to the default one |
 | drag a column edge | change the size of the column |
-| click on SHA in the inspector | copy the SHA |
+| click on SHA in the inspector | copy the SHA — and select that object, if it is on screen |
+| click a SHA in a tree's contents | select the blob or tree that line names, and copy its SHA |
 | click on file path in the inspector | copy absolute file path |
+| drag the inspector edge | resize the inspector — settings dock it along the bottom instead of the side, for a narrow screen |
 | *reset view* | drops every pin (reset to default object positions) and puts the columns width back |
 | <kbd>f</kbd> <kbd>←</kbd>/<kbd>[</kbd> <kbd>→</kbd>/<kbd>]</kbd> <kbd>space</kbd> <kbd>i</kbd> | fit · step back · step forward · pause · index |
+| <kbd>p</kbd> | presentation: hide every toolbar so the canvas has the whole window — press again to bring them back |
 
 The view toolbar has additional controls:
 
 - **Expand all** - expands all commits and trees
-- **Collapse all** - collapses all commits (excluding trees)
+- **Collapse all** - collapses all commits and index entries (excluding trees)
 - **Index** - show/hide Index column
 - **Unreachable** - show unreachable git objects
 - **Links from unreachable** - show links from unreachable objects to reachable ones
@@ -205,8 +213,9 @@ canvas.goto(0);
 ```
 
 You get the object graph and every gesture on it - drag to pin, drag empty space to pan,
-wheel to scroll, ctrl-wheel to zoom, double-click to expand a commit or a tree, right-click
-to mark, shift-click to unpin, and a column edge to drag. Give the element a size: the
+wheel to scroll, ctrl-wheel to zoom, double-click to expand a commit, a tree or an index
+entry, right-click to mark, shift-click to unpin, and a column edge to drag. Give the
+element a size: the
 canvas fills it.
 
 The toolbars are yours to build. You can use these methods to control the canvas:

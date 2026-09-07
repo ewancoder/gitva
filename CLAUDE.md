@@ -78,6 +78,11 @@ that is the one thing about branches worth understanding. Never `arrow` or `edge
 git already uses it (`explain.ts`: a packed ref is *"folded into .git/packed-refs"*). **Never
 "open"**: it implies the tree is inside the commit, when a commit holds one 40-character sha and
 the tree is a separate object. The tooltip carries the truth — *"show what this commit links to"*.
+An **index entry** expands too, and it is the only one that expands *backwards*: it draws the blob
+its sha names, because the index is the one place where the name is what you have and the object
+is what you are looking for. Never the blob itself — one blob sits in as many trees as name it, and
+a gesture that drew them all would draw the whole window. `View.expanded` holds the entry's shape
+id (`entryId`) beside the commit shas, since both are things you opened.
 
 **select** (click) — read it in the inspector, and copy its sha. **mark** (right-click) — follow
 it as the object graph moves. **pin** (drag) / **unpin** (shift-click).
@@ -95,6 +100,11 @@ Everything horizontal across the top is a **toolbar**, each named for its job, n
 | **inspector** | what you selected: the full sha, the fields, the teaching text, the body |
 | **help** | a dialog holding two sections: **legend** and the keys |
 | **settings** | its own dialog, opened from the button beside help |
+
+**presentation** (`p`) hides every toolbar so the canvas has the whole window — a
+mode for the next ten minutes, so unlike the settings it is not kept. It touches nothing else:
+the inspector and the index are not toolbars and keep whatever you set them to. Not to be
+confused with `Recording.presenting()`, which is what the presenter said on the command line.
 
 The canvas columns are **pointers and tags | commits | trees and blobs | index**. Not "objects"
 — commits and tags are objects too, and a column labelled otherwise teaches the opposite of the
@@ -177,7 +187,7 @@ dependency passes the one-sentence test in `INITIAL_DESIGN.md` §14.
 | `web/` | `index.html` (all CSS), `canvas.ts` (the mounted `<canvas>`: paint loop, camera, gestures — **the published entry point**), `app.ts` (the page around it: toolbars, inspector, the stream of steps, `localStorage`), `render.ts` (canvas), `layout.ts`, `diff.ts`, `explain.ts`, `recording.ts` (steps, cursor, view, pins — no DOM), `camera.ts` (arithmetic only), `inspector.ts`, `theme.ts`. |
 | `web/localization/` | `languages/en.ts` — **every string the browser shows**; `languages/ru.ts`; `strings.ts` (`Strings`, the shape a translation fills, read off `en`); `index.ts` (`LANGUAGES`, a loader per language, the live binding `S`, `setLanguage`). No language but English is loaded until it is chosen. |
 | `samples/webapp/` | a page built on `gitva/canvas` and nothing else: recorded steps, a slide each, its own twenty-line static server. Not compiled and not served by gitva — `test/sample.test.ts` draws its steps so a change to `Step` cannot break it quietly. |
-| `test/` | `fixture.ts` builds real repos with real plumbing, and `fakeStep` for what is said rather than what git did; the rest are `node:test`. `boundary.test.ts` is the split itself, enforced. |
+| `test/` | `fixture.ts` builds real repos with real plumbing, `fakeStep` for what is said rather than what git did, and `browser()` — the handful of stubs (`ResizeObserver`, `matchMedia`, a frame queue, a clock, an element to fire pointers at) that let `canvas.ts` be mounted and gestured at in `node:test`; the rest are `node:test`. `boundary.test.ts` is the split itself, enforced. |
 
 **`src/` is the server, `web/` is the browser, and `src/types.ts` is the one file both hold.**
 
@@ -276,6 +286,13 @@ never into the observed repository — keyed by the repository's full path unles
 something else, along with the change signal it was built at, so a restart onto an untouched
 repository adds no step. `src/store.ts`.
 
+**One gitva keeps a recording at a time.** Two on the same folder file under the same key, so
+`takeLock` puts a heartbeat lockfile beside the recording. A second gitva never waits and is
+never refused — it draws exactly as the first does, says on the command line that this run will
+not be saved, and keeps its steps in memory only. A lock nothing has beaten on for ten seconds
+belonged to a process that died, and is taken over; taking it over resumes the kept steps, because
+they are the repository's, not the dead process's.
+
 The key is the sha of the identifier, cut to ten characters, and it is **itself an identifier**:
 `recordingKey` hands a key straight back, which is what makes the one the view toolbar shows —
 and copies on a click — worth copying. A folder that moved is resumed with `--id <that key>`.
@@ -365,9 +382,22 @@ in the language the process was built with.
   checked by looking at it, but *what* to paint is not: `path()` and `hitTest()` decide things,
   so they have tests, and `draw()` is walked over every kind and every zoom tier with a stub
   canvas so a shape nobody drew in anger cannot throw.
-- Three things are deliberately not covered, and are the only three: `openBrowser` in `cli.ts`
-  (it launches your browser), the entry-point guard beside it, and the `stdin` error
-  swallow in `git.ts`. Anything else uncovered is an oversight, not a policy.
+- **`web/canvas.ts` is tested by mounting it**, not by splitting further: it is the published
+  entry point, so its gestures *are* the contract, and a test that presses a synthetic pointer
+  on `canvas.recording.view`, `canvas.pins`, `canvas.marked`, `canvas.columnWidths`,
+  `canvas.selected` and the two callbacks is a test of what `gitva/canvas` promises. It needs a
+  browser only in the smallest print — `browser()` in `test/fixture.ts`. One thing to know
+  before mounting a second one: `render.ts` keeps where each shape was last painted in one
+  module-level map, because a page has one canvas, so a test destroys what it mounted or two
+  canvases ease the same shape towards two places for ever.
+- Four things are deliberately not covered, and are the only four: `openBrowser` in `cli.ts`
+  (it launches your browser), the entry-point guard beside it, the `stdin` error
+  swallow in `git.ts`, and **`web/app.ts`**. Anything else uncovered is an oversight, not a policy.
+- **`web/app.ts` is exempt because it is the page and nothing else**: element ids, listeners,
+  `localStorage`, `EventSource`, the clipboard and the dialogs, running at import. Covering it
+  means standing a whole DOM up, which buys a test of the browser rather than of gitva — every
+  decision it used to make has already been moved out, and the rule stays that a new one goes to
+  `recording.ts`, `camera.ts`, `inspector.ts` or `canvas.ts` rather than being written here.
 - **Every edge case found by hand gets a test in the same pass** — a bug that reached the screen
   is a case nobody thought of, so the fix is not done until something fails when it comes back.
   Name the test after the situation, not the function.

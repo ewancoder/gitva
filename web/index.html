@@ -152,7 +152,25 @@
       #notes-toolbar li { list-style: none; }
       #notes-toolbar ul { display: contents; margin: 0; padding: 0; }
 
+      /* Presentation: every toolbar gone, so the object graph has the whole
+         window. The inspector and the index are not toolbars and keep whatever
+         you set them to. The rows go with the toolbars: a hidden toolbar is not
+         a grid item, so the canvas would otherwise land in the first `auto` row
+         — its own height — and leave the `1fr` one empty below it. */
+      body.presentation { grid-template-rows: 1fr; }
+      body.presentation #view-toolbar,
+      body.presentation #recording-toolbar,
+      body.presentation #notes-toolbar { display: none; }
+
       main { display: grid; grid-template-columns: 1fr auto auto; min-height: 0; }
+      /* A grid item refuses to shrink below its content, and the canvas element
+         carries an intrinsic size in *device* pixels — 1920 wide on a 1280px
+         screen at 1.5 scale. Without this the object graph claims all of that
+         and pushes the inspector off the edge of the screen entirely. */
+      main > * { min-width: 0; min-height: 0; }
+      /* Docked at the bottom instead: the same three cells, stacked. On a
+         narrow screen a 430px column is most of the object graph. */
+      main.bottom { grid-template-columns: 1fr; grid-template-rows: 1fr auto auto; }
       #canvas { display: block; width: 100%; height: 100%; cursor: grab; }
       /* Behind the object graph, in the same cell: on that one ground the
          canvas's own ground is painted translucent, so this shows through it
@@ -171,6 +189,8 @@
       /* The details inspector is where the teaching lives, so it earns width —
          and how much is yours to drag, the way a canvas column's width is. */
       #inspector-edge { width: 5px; cursor: col-resize; background: var(--line); }
+      main.bottom #inspector-edge { width: auto; height: 5px; cursor: row-resize; }
+      main.bottom aside { width: auto; }
       aside {
         width: 430px; background: var(--surface);
         overflow-y: auto; scroll-behavior: smooth; padding: calc(var(--u) * 2);
@@ -181,24 +201,63 @@
       aside .made {
         background: var(--raised); border-radius: var(--r);
         padding: var(--u); font-family: var(--mono); font-size: 12px; color: var(--tree);
-        overflow-x: auto;
+        /* The command that makes one of these is short and it is the point of the
+           box: it wraps rather than scrolls, and the column may not shrink it
+           below the line it holds. */
+        flex: none; overflow-wrap: anywhere; white-space: pre-wrap;
       }
       aside dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px var(--u); margin: 0; }
       aside dt { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
       aside dd { margin: 0; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
       /* The sha is the key to the store, and a click hands it over — so it is
          drawn as the one field you can take, not as another fact. */
-      aside dd.sha {
+      aside dd.sha, aside dd .key {
         background: var(--raised); border: 1px solid var(--line); border-radius: var(--r);
         padding: 2px 6px; margin: -2px 0; cursor: pointer;
+        /* One line, whatever the inspector's width: a sha is a key you take whole
+           on a click, so wrapping one only costs the field a second row. The
+           string form is what it should say, the keyword the fallback. */
+        min-width: 0; white-space: nowrap; overflow: hidden;
+        text-overflow: ellipsis; text-overflow: '..';
       }
-      aside dd.sha:hover { border-color: var(--muted); }
+      /* The keys one field holds, side by side and wrapping when they must: each
+         is a chip the width of the seven characters it shows, the other thirty-three
+         being on the clipboard rather than on the screen. */
+      aside dd.shas { display: flex; flex-wrap: wrap; gap: 4px; }
+      aside dd .key { display: inline-block; }
+      aside dd.sha:hover, aside dd .key:hover { border-color: var(--muted); }
+      /* The contents are the last thing in the column and the only thing worth
+         giving the leftover height to: it takes as much as it has and shrinks —
+         alone, the rest being text that may not — when there is not enough. */
       aside pre {
         background: var(--raised); border-radius: var(--r); padding: var(--u);
-        margin: 0; max-height: 40vh; overflow: auto; font-size: 12px;
+        margin: 0; flex: 0 1 auto; min-height: 8em; overflow: auto; font-size: 12px;
       }
+      /* A tree's contents name shas, and a sha is a key you can take: those seven
+         characters are the one clickable part of the line, so the rest reads and
+         selects as the text it is. Toned rather than hued — the three hues are
+         the object kinds'. */
+      aside pre .entry { display: block; border-radius: var(--r); }
+      aside pre .sha { color: var(--muted); cursor: pointer; border-radius: var(--r); }
+      /* The line lights up with the sha in it, because the key is only half of
+         what is being read: the other half is the name it is filed under. */
+      aside pre .entry:has(.sha:hover) { background: var(--hover); }
+      aside pre .sha:hover { color: var(--ink); }
       aside pre.unreadable { font-weight: 700; }
       aside .empty { color: var(--faint); }
+      /* Compact along the bottom is the bytes and nothing else: what was clicked
+         is still on the canvas, so the title, the fields and the contents heading
+         are height the contents can have instead. */
+      main.bottom.compact aside { padding-top: 6px; gap: 6px; }
+      main.bottom.compact aside h2,
+      main.bottom.compact aside > dt { display: none; }
+      /* What is left of the fields: the key, where git keeps it, and where a
+         pointer ends up — never more than two rows, whatever the kind. Hidden,
+         never re-shown, so a value with a layout of its own keeps it. */
+      main.bottom.compact aside dl > :not([data-field='sha'], [data-field='file'],
+        [data-field='resolvesTo']) { display: none; }
+      /* HEAD is the one hop worth the row: the file is .git/HEAD every time. */
+      main.bottom.compact aside[data-kind='head'] dl > [data-field='file'] { display: none; }
 
       /* `body` is a grid, so a dialog left to flow would be placed in a row
          rather than in the middle of the window: fixed and auto-margined puts
@@ -223,7 +282,7 @@
       .legend > span { display: flex; align-items: center; gap: 6px; }
       /* A key is machine text and gets <kbd>; what it does is not. */
       .keys { display: grid; grid-template-columns: max-content 1fr; gap: 6px calc(var(--u) * 1.5); align-items: baseline; }
-      .keys > :nth-child(odd) { color: var(--muted); }
+      #help .keys > :nth-child(odd) { color: var(--muted); }
       .swatch { width: 16px; height: 16px; flex: none; }
       .swatch.commit { border-radius: 50%; background: var(--commit); }
       .swatch.tree { background: var(--tree); clip-path: polygon(30% 0, 100% 0, 100% 100%, 30% 100%, 0 70%, 0 30%); }
@@ -309,7 +368,7 @@
 
     <div id="notes-toolbar"><ul id="notes-list"></ul></div>
 
-    <main>
+    <main id="main">
       <canvas id="rain" aria-hidden="true"></canvas>
       <canvas id="canvas"></canvas>
       <div id="copied" aria-live="polite"></div>
@@ -343,6 +402,7 @@
         <span data-t="help.keys.rightClick"></span><span data-t="help.keys.rightClick.does"></span>
         <span data-t="help.keys.doubleCommit"></span><span data-t="help.keys.doubleCommit.does"></span>
         <span data-t="help.keys.doubleTree"></span><span data-t="help.keys.doubleTree.does"></span>
+        <span data-t="help.keys.doubleIndex"></span><span data-t="help.keys.doubleIndex.does"></span>
         <span data-t="help.keys.drag"></span><span data-t="help.keys.drag.does"></span>
         <span data-t="help.keys.shiftClick"></span><span data-t="help.keys.shiftClick.does"></span>
         <span data-t="help.keys.columnEdge"></span><span data-t="help.keys.columnEdge.does"></span>
@@ -351,6 +411,7 @@
         <span><kbd>&larr;</kbd> or <kbd>[</kbd></span><span data-t="help.keys.back.does"></span>
         <span><kbd>&rarr;</kbd> or <kbd>]</kbd></span><span data-t="help.keys.forward.does"></span>
         <span><kbd>space</kbd></span><span data-t="help.keys.space.does"></span>
+        <span><kbd>p</kbd></span><span data-t="help.keys.presentation.does"></span>
       </div>
       <footer>
         <button data-t="close" onclick="this.closest('dialog').close()"></button>
@@ -365,6 +426,8 @@
       <label><input type="checkbox" id="refit-on-change" /> <span data-t="settings.refitOnChange"></span></label>
       <label><input type="checkbox" id="show-pins" /> <span data-t="settings.showPins"></span></label>
       <label><input type="checkbox" id="expand-new-commits" /> <span data-t="settings.expandNewCommits"></span></label>
+      <label><input type="checkbox" id="compact" /> <span data-t="settings.compact"></span></label>
+      <label><input type="checkbox" id="inspector-at-bottom" /> <span data-t="settings.inspectorAtBottom"></span></label>
       <footer><button data-t="close" onclick="this.closest('dialog').close()"></button></footer>
     </dialog>
 

@@ -7,10 +7,15 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { entryId, explain, explainKind, refName } from '../web/explain.js';
+import { entryId, explain, explainKind, refName, type Fact } from '../web/explain.js';
 import { fakeStep } from './fixture.js';
 
-const fact = (facts: [string, string][], key: string) => facts.find(([k]) => k === key)?.[1];
+/** What a field says. A field holding keys says the short forms it shows. */
+const fact = (facts: Fact[], key: string) => {
+    const v = facts.find(([k]) => k === key)?.[1];
+    if (typeof v === 'string' || v === undefined) return v;
+    return Array.isArray(v) ? v.map((k) => k.short).join(' ') : v.short;
+};
 
 describe('what each kind is', () => {
     it('has plain language and a command for every kind it draws', () => {
@@ -42,6 +47,40 @@ describe('objects', () => {
         assert.equal(fact(explain(step, 'blob', 'b2').facts, 'size'), '2.0 KiB');
     });
 
+    it('takes an object’s mode off the entries that name it, however many that is', () => {
+        assert.equal(fact(explain(step, 'blob', 'b1').facts, 'mode'), '100644');
+        // The same blob under two entries has two modes, because the mode was
+        // never the blob's.
+        const both = fakeStep({
+            objects: step.objects,
+            trees: {
+                t1: [{ mode: '100644', name: 'a.txt', oid: 'b1', type: 'blob' }],
+                t2: [{ mode: '100755', name: 'run.sh', oid: 'b1', type: 'blob' }],
+            },
+        });
+        assert.equal(fact(explain(both, 'blob', 'b1').facts, 'mode'), '100644, 100755');
+        // Staged and in no tree yet: the index is the only entry there is.
+        const staged = fakeStep({
+            objects: step.objects,
+            index: [{ path: 'a.txt', oid: 'b1', mode: '100644', stage: 0 }],
+        });
+        assert.equal(fact(explain(staged, 'blob', 'b1').facts, 'mode'), '100644');
+    });
+
+    it('gives a subtree and a submodule the mode of the entry that names it', () => {
+        const s = fakeStep({
+            objects: { t2: { oid: 't2', type: 'tree', size: 30 } },
+            trees: {
+                t1: [
+                    { mode: '40000', name: 'lib', oid: 't2', type: 'tree' },
+                    { mode: '160000', name: 'vendor', oid: 'c9', type: 'commit' },
+                ],
+            },
+        });
+        assert.equal(fact(explain(s, 'tree', 't2').facts, 'mode'), '40000');
+        assert.equal(fact(explain(s, 'commit', 'c9').facts, 'mode'), '160000');
+    });
+
     it('says nothing about the size of an object the step does not carry', () => {
         const facts = explain(step, 'blob', 'nope').facts;
         assert.deepEqual(facts, [['sha', 'nope']]);
@@ -71,17 +110,56 @@ describe('commits', () => {
         author: 'A <a@b>',
         authorDate: 1_700_000_000_000,
         committer: 'A <a@b>',
+        committerDate: 1_700_000_000_000,
         subject: 'a subject',
         message: 'a subject\n\nand a body\n',
     });
 
-    it('names the tree it points at, its parents, and what it says', () => {
+    it('keeps the committer to itself while it is the author', () => {
+        const facts = explain(fakeStep({ commits: { c1: commit([]) } }), 'commit', 'c1').facts;
+        assert.equal(fact(facts, 'committer'), undefined);
+        assert.equal(fact(facts, 'committed'), undefined);
+    });
+
+    it('says nothing about a committer date a step never carried', () => {
+        const old = { ...commit([]), committerDate: 0 };
+        const facts = explain(fakeStep({ commits: { c1: old } }), 'commit', 'c1').facts;
+        assert.equal(fact(facts, 'committer'), undefined);
+    });
+
+    it('shows the committer once a rebase or an amend has made it someone else', () => {
+        const rebased = { ...commit([]), committer: 'B <b@c>', committerDate: 1_700_000_009_000 };
+        const facts = explain(fakeStep({ commits: { c1: rebased } }), 'commit', 'c1').facts;
+        assert.deepEqual(
+            facts.map(([k]) => k),
+            ['sha', 'tree', 'parents', 'author', 'authored', 'committer', 'committed'],
+        );
+        assert.equal(fact(facts, 'committer'), 'B <b@c>');
+    });
+
+    it('shows it for the same person at a different moment, which is what an amend is', () => {
+        const amended = { ...commit([]), committerDate: 1_700_000_009_000 };
+        const facts = explain(fakeStep({ commits: { c1: amended } }), 'commit', 'c1').facts;
+        assert.equal(fact(facts, 'committer'), 'A <a@b>');
+        assert.ok(fact(facts, 'committed'));
+    });
+
+    it('names the tree it points at and its parents, and leaves the message to the bytes', () => {
         const s = fakeStep({ commits: { c1: commit(['p123456789', 'p223456789']) } });
         const facts = explain(s, 'commit', 'c1').facts;
         assert.equal(fact(facts, 'tree'), 'tree567');
-        assert.equal(fact(facts, 'parents'), 'p123456, p223456');
-        assert.equal(fact(facts, 'message'), 'a subject\n\nand a body');
+        // One row per parent, as the commit's own bytes have one `parent` line
+        // each — showing a short sha, handing over the whole of it.
+        assert.deepEqual(facts.find(([k]) => k === 'parents')![1], [
+            { short: 'p123456', full: 'p123456789' },
+            { short: 'p223456', full: 'p223456789' },
+        ]);
+        // The shas it holds sit with its own, ahead of everything that is not one.
+        assert.deepEqual(facts.map(([k]) => k).slice(0, 3), ['sha', 'tree', 'parents']);
         assert.ok(fact(facts, 'authored'));
+        // The message is read out under `contents`, where it can be as long as it
+        // likes — a field is for what is short enough to sit beside a label.
+        assert.equal(fact(facts, 'message'), undefined);
     });
 
     it('calls a commit with no parents what it is', () => {
@@ -100,7 +178,7 @@ describe('commits', () => {
 });
 
 describe('tags', () => {
-    it('reads an annotated tag out: its name, its target and its message', () => {
+    it('reads an annotated tag out: its name, its target and who tagged it', () => {
         const s = fakeStep({
             tags: {
                 g1: {
@@ -115,8 +193,35 @@ describe('tags', () => {
         });
         const facts = explain(s, 'tag', 'g1').facts;
         assert.equal(fact(facts, 'tag name'), 'v1');
-        assert.equal(fact(facts, 'points at'), 'commit c123456');
-        assert.equal(fact(facts, 'message'), 'the first release');
+        // It says the kind and the short sha; it hands over the sha alone.
+        assert.deepEqual(facts.find(([k]) => k === 'points at')![1], {
+            short: 'commit c123456',
+            full: 'c123456789',
+        });
+        // The message is in the bytes under `contents`, not in a field.
+        assert.equal(fact(facts, 'message'), undefined);
+    });
+
+    it('looks a tag up by its sha, not by the key the scene gave the chip', () => {
+        const s = fakeStep({
+            objects: { g1: { oid: 'g1', type: 'tag', size: 7 } },
+            tags: {
+                g1: {
+                    oid: 'g1',
+                    target: 'c123456789',
+                    targetType: 'commit',
+                    name: 'v1',
+                    tagger: 'A <a@b>',
+                    message: 'the first release\n',
+                },
+            },
+        });
+        // The chip is keyed `tag:<oid>` so it cannot collide with the ref of the
+        // same name; what is shown is the sha you can hand to cat-file.
+        const facts = explain(s, 'tag', 'tag:g1').facts;
+        assert.equal(fact(facts, 'sha'), 'g1');
+        assert.equal(fact(facts, 'size'), '7 B');
+        assert.equal(fact(facts, 'tag name'), 'v1');
     });
 
     it('says only the sha of a tag object it has not read', () => {
@@ -133,35 +238,65 @@ describe('pointers', () => {
     it('says a branch is a file with a sha in it, and where', () => {
         const e = explain(ref(false), 'ref', 'ref:refs/heads/main');
         assert.match(e.what, /a file with a sha in it/);
-        assert.equal(fact(e.facts, 'file'), '/tmp/fake/.git/refs/heads/main');
-        assert.equal(fact(e.facts, 'contains'), 'aaa');
+        // Shown inside .git — the part you can type — and copied whole.
+        assert.deepEqual(e.facts.find(([k]) => k === 'file')![1], {
+            short: 'refs/heads/main',
+            full: '/tmp/fake/.git/refs/heads/main',
+        });
         assert.match(fact(e.facts, 'stored')!, /loose/);
+        // The name is the part you type, the file is the whole of it, and what it
+        // contains is the file — read out under `contents`, not said twice.
+        assert.equal(fact(e.facts, 'name'), 'main');
+        assert.equal(fact(e.facts, 'contains'), undefined);
+        assert.deepEqual(
+            e.facts.map(([k]) => k),
+            ['file', 'name', 'stored'],
+        );
     });
 
-    it('says where a packed ref went, and what an annotated tag peels to', () => {
+    it('says where a packed ref went, and where an annotated tag ends up', () => {
         const e = explain(ref(true, 'ccc'), 'ref', 'ref:refs/heads/main');
         assert.match(fact(e.facts, 'stored')!, /packed-refs/);
-        assert.equal(fact(e.facts, 'peels to'), 'ccc');
+        // The same hop HEAD makes, said the same way, and taken whole on a click.
+        assert.deepEqual(e.facts.find(([k]) => k === 'resolves to')![1], {
+            short: 'ccc',
+            full: 'ccc',
+        });
+        // A packed ref has no file of its own, so it offers no path to open — and
+        // the fields you can take from sit together, ahead of the rest.
+        assert.equal(fact(e.facts, 'file'), undefined);
+        assert.deepEqual(
+            e.facts.map(([k]) => k),
+            ['resolves to', 'name', 'stored'],
+        );
     });
 
     it('says nothing about a ref that is not in this step', () => {
         assert.deepEqual(explain(fakeStep(), 'ref', 'ref:refs/heads/gone').facts, []);
     });
 
-    it('explains HEAD as a pointer to a pointer', () => {
+    it('says where HEAD ends up, which is the hop its own file does not hold', () => {
         const e = explain(fakeStep(), 'head', 'HEAD');
-        assert.equal(fact(e.facts, 'contains'), 'ref: refs/heads/main');
-        assert.equal(fact(e.facts, 'resolves to'), 'a'.repeat(40));
+        // Taken whole on a click, like every other sha.
+        assert.deepEqual(e.facts.find(([k]) => k === 'resolves to')![1], {
+            short: 'a'.repeat(40),
+            full: 'a'.repeat(40),
+        });
+        // What the file holds is the file, read out under `contents`.
+        assert.deepEqual(
+            e.facts.map(([k]) => k),
+            ['file', 'resolves to'],
+        );
     });
 
-    it('explains what an unborn HEAD is', () => {
+    it('has no hop to show for an unborn HEAD: the branch it names has no sha', () => {
         const s = fakeStep({ head: { ref: 'refs/heads/main', detached: false, unborn: true } });
-        assert.match(fact(explain(s, 'head', 'HEAD').facts, 'contains')!, /does not exist yet/);
+        assert.equal(fact(explain(s, 'head', 'HEAD').facts, 'resolves to'), undefined);
     });
 
-    it('explains a detached HEAD as the raw sha it is', () => {
+    it('has none for a detached HEAD either — the sha is the file', () => {
         const s = fakeStep({ head: { oid: 'ccc', detached: true, unborn: false } });
-        assert.match(fact(explain(s, 'head', 'HEAD').facts, 'contains')!, /ccc — detached/);
+        assert.equal(fact(explain(s, 'head', 'HEAD').facts, 'resolves to'), undefined);
     });
 });
 
@@ -173,13 +308,13 @@ describe('the index', () => {
         ],
     });
 
-    it('names the path, the blob and the mode of a staged entry', () => {
+    it('names the sha, the path and the mode of a staged entry', () => {
         const facts = explain(s, 'index', entryId('a.txt', 0)).facts;
         assert.deepEqual(
             facts.map(([k]) => k),
-            ['path', 'blob', 'mode'],
+            ['sha', 'path', 'mode'],
         );
-        assert.equal(fact(facts, 'blob'), 'b1');
+        assert.equal(fact(facts, 'sha'), 'b1');
     });
 
     it('explains the three sides of a conflict', () => {

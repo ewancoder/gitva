@@ -110,7 +110,10 @@ export function parseBatch(buf: Buffer): Map<Oid, { type: ObjectType; body: Buff
         const header = buf.toString('utf8', p, nl);
         p = nl + 1;
         const [oid, type, size] = header.split(' ');
-        if (type === undefined || type === 'missing') continue;
+        // `missing` and `ambiguous` are git's two ways of saying it has no one
+        // object for what was asked — an ambiguous prefix is reachable now that
+        // an abbreviated sha resolves at all.
+        if (type === undefined || type === 'missing' || type === 'ambiguous') continue;
         const n = Number(size);
         out.set(oid, { type: type as ObjectType, body: buf.subarray(p, p + n) });
         p += n + 1;
@@ -157,6 +160,7 @@ export function parseCommit(oid: Oid, body: string): Commit {
         author: '',
         authorDate: 0,
         committer: '',
+        committerDate: 0,
         subject: message.split('\n')[0] ?? '',
         message,
     };
@@ -170,7 +174,10 @@ export function parseCommit(oid: Oid, body: string): Commit {
         else if (key === 'author') {
             c.author = identName(value);
             c.authorDate = identDate(value);
-        } else if (key === 'committer') c.committer = identName(value);
+        } else if (key === 'committer') {
+            c.committer = identName(value);
+            c.committerDate = identDate(value);
+        }
     }
     return c;
 }
@@ -651,9 +658,13 @@ export async function readBody(
     path: string | null;
 }> {
     const batch = parseBatch(await run(h.repo, ['cat-file', '--batch'], oid + '\n'));
-    const got = batch.get(oid);
-    if (!got) throw new GitError(`no such object ${oid}`);
-    const path = await objectPath(h, oid);
+    // One request in, at most one object out, so the single entry is the answer.
+    // Looking it up by what was asked for would miss every abbreviated sha: git
+    // resolves those happily and echoes the full forty back in the header.
+    const [entry] = batch;
+    if (!entry) throw new GitError(`no such object ${oid}`);
+    const [full, got] = entry;
+    const path = await objectPath(h, full);
     if (got.type === 'tree') {
         return {
             type: 'tree',

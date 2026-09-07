@@ -51,6 +51,9 @@ export interface Commit {
     author: string;
     authorDate: number;
     committer: string;
+    /** A commit is written twice over: rebase, amend and am keep the author and
+     *  set a new committer, so the two dates are not the same commit's. */
+    committerDate: number;
     subject: string;
     message: string;
 }
@@ -114,7 +117,10 @@ export interface Capabilities {
  * already in the step.
  */
 export interface View {
-    expanded: Oid[];
+    /** Commits you opened, and index entries you opened — an entry's id, not its
+     *  sha, because a path is what you double-clicked and two paths can hold one
+     *  blob. Both are "show me what this names", so both live here. */
+    expanded: string[];
     /** Trees you closed. Trees arrive open — a commit you opened is a
      *  promise to show what is in it — so this is the collapsed ones, not the open
      *  ones, and an empty list means the whole tree is on screen. */

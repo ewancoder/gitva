@@ -24,7 +24,15 @@ import {
     readStep,
     type Repository,
 } from './git.js';
-import { lastSeq, loadRecording, recordingFile, recordingKey, saveRecording } from './store.js';
+import {
+    lastSeq,
+    loadRecording,
+    lockFile,
+    recordingFile,
+    recordingKey,
+    saveRecording,
+    takeLock,
+} from './store.js';
 import type { Capabilities } from './types.js';
 import { RECORDING_CAP } from './types.js';
 
@@ -73,6 +81,16 @@ export async function serve(
     // recording is shared, so one browser must not be able to end everyone's
     // session. The file is overwritten by the first step of this run.
     const kept = fresh ? { signal: '', steps: [] } : await loadRecording(file);
+    // One gitva writes a recording at a time. Forgetting that one is already
+    // watching this folder used to leave two processes numbering steps from
+    // their own `seq` into the same file, and a viewer resuming it saw a session
+    // that never happened. A second gitva draws exactly as before — it simply
+    // does not keep what it drew, and nothing ever waits for the first to finish.
+    const lock = await takeLock(lockFile(key));
+    if (!lock)
+        process.stdout.write(
+            `another gitva is already recording this repository (${key}) — this run will not be saved\n`,
+        );
     // The repository need not exist yet: `gitva` in an empty directory waits for
     // `git init`, so the very first plumbing command the tutorial teaches can be
     // watched happening rather than assumed to have happened already.
@@ -103,8 +121,12 @@ export async function serve(
     /** Rebuilds run one at a time. Anything arriving mid-build asks for one more
      * pass; further requests join that pass instead of growing an unbounded queue. */
     let pending = false;
-    let building: Promise<void> | null = null;
-    function build(): Promise<void> {
+    let building: Promise<boolean> | null = null;
+    /** Resolves to whether any pass recorded a step, so the caller can tell a
+     *  change that was drawn from one that has still to be tried again. Any, not
+     *  the last: a caller joining mid-drain adds a pass of its own, and a git that
+     *  hiccupped on that one does not un-draw the change this caller asked for. */
+    function build(): Promise<boolean> {
         pending = true;
         building ??= drain();
         return building;
@@ -113,30 +135,42 @@ export async function serve(
     async function drain() {
         // A drain that ended without clearing this would be handed to every future
         // caller, and nothing would ever rebuild again.
+        let recorded = false;
         try {
             while (pending) {
                 pending = false;
-                await rebuild();
+                recorded = (await rebuild()) || recorded;
             }
         } finally {
             building = null;
         }
+        return recorded;
     }
 
     /** `seq` counts steps of the repository, and only git moves it: every
      *  rebuild there is is a step, because only a change signal asks for one. */
     async function rebuild() {
+        // The step is built before the number is taken: git can fail against a
+        // repository mid-rebase or with a half-written index, and a `seq` spent on
+        // an attempt nobody ever saw is a gap in the shared recording.
+        let recorded = false;
         try {
             const { handle, capabilities } = await repository();
-            const s = JSON.stringify(await readStep(handle, capabilities, ++seq));
+            const s = JSON.stringify(await readStep(handle, capabilities, seq + 1));
+            seq++;
             record(steps, s);
+            recorded = true;
             const frame = `event: step\ndata: ${s}\n\n`;
             for (const c of clients) c.write(frame);
-            await saveRecording(file, { signal, steps: steps });
+            // `held`, not merely taken: a gitva stopped long enough to look dead
+            // has had the recording taken off it, and the one holding it now is
+            // the one numbering the steps in that file.
+            if (lock?.held) await saveRecording(file, { signal, steps: steps });
         } catch (err) {
             const frame = `event: trouble\ndata: ${JSON.stringify({ message: String(err) })}\n\n`;
             for (const c of clients) c.write(frame);
         }
+        return recorded;
     }
 
     // The overwhelmingly common case is "nothing happened", and it costs one
@@ -152,13 +186,26 @@ export async function serve(
             const { handle } = await repository();
             const next = await changeSignal(handle.repo, handle.gitDir);
             if (next === signal) return;
+            // The signal is only committed once the change it stands for was drawn.
+            // Moving it first would step past a change git happened to fail on, and
+            // that change is gone for good — the repository has moved on and the
+            // next step would diff against a state nobody ever saw. `build()`
+            // collapses callers, so a failing repository retries once a tick.
+            const previous = signal;
             signal = next;
-            await build();
+            if (!(await build())) signal = previous;
         } catch {
             /* no repository yet, or one mid-rewrite: try again on the next tick */
         }
     }
-    const timer = setInterval(() => void poll(), POLL_MS);
+    /** One poll at a time — `changeSignal` spawns git, and on a repository slow
+     *  enough to still be answering at the next tick, piling a second poll on top
+     *  buys nothing. It also leaves exactly one for closing to wait out. */
+    let polling: Promise<void> | null = null;
+    const timer = setInterval(
+        () => void (polling ??= poll().finally(() => (polling = null))),
+        POLL_MS,
+    );
     timer.unref?.();
 
     async function route(req: IncomingMessage, res: ServerResponse) {
@@ -209,14 +256,21 @@ export async function serve(
     }
 
     async function firstBuild() {
+        // The same bargain the poller makes: the signal stands for a change that
+        // was drawn, so it is only committed once one was. Moving it for a step
+        // git refused to build would leave the poller seeing nothing to do, and
+        // the browser that asked for it looking at an empty canvas until either
+        // the repository moves again or somebody else opens a tab.
+        const previous = signal;
         signal = await repository()
             .then(({ handle }) => changeSignal(handle.repo, handle.gitDir))
             .catch(() => signal);
-        await ensureFirstStep(
+        const built = await ensureFirstStep(
             building,
             () => steps.length > 0,
             () => build(),
         );
+        if (!built) signal = previous;
     }
 
     async function object(url: URL, res: ServerResponse) {
@@ -256,7 +310,22 @@ export async function serve(
         }
     }
 
-    await new Promise<void>((r) => server.listen(port, host, r));
+    // A port already in use reaches `listen` as an `error` event, and an event
+    // nothing is listening for is thrown past `main`'s own handler as a node
+    // stack trace. Say which address, and let go of the recording on the way out.
+    await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        // Off again once it is listening, so a later fault is thrown rather than
+        // swallowed by a promise that has already settled.
+        server.listen(port, host, () => {
+            server.off('error', reject);
+            resolve();
+        });
+    }).catch(async (err: NodeJS.ErrnoException) => {
+        clearInterval(timer);
+        await lock?.release();
+        throw new Error(`cannot listen on ${host}:${port} — ${err.message}`);
+    });
     const address = server.address();
     const bound = typeof address === 'object' && address ? address.port : port;
 
@@ -266,6 +335,13 @@ export async function serve(
             clearInterval(timer);
             for (const c of clients) c.end();
             await new Promise<void>((r) => server.close(() => r()));
+            // Let go last, and only once nothing is still building: a rebuild
+            // that answers after the lock is gone would write the recording over
+            // the gitva that has just taken it. Nothing new can start by then —
+            // the timer is stopped and the port is closed.
+            while (polling || initial || building)
+                await Promise.allSettled([polling, initial, building]);
+            await lock?.release();
         },
     };
 }
@@ -288,10 +364,12 @@ export function record(steps: string[], step: string): void {
 
 /** A poll may answer while the first client is measuring the repository. */
 export async function ensureFirstStep(
-    active: Promise<void> | null,
+    active: Promise<boolean> | null,
     hasStep: () => boolean,
-    build: () => Promise<void>,
-): Promise<void> {
+    build: () => Promise<boolean>,
+): Promise<boolean> {
     if (active) await active;
-    if (!hasStep()) await build();
+    // A step somebody else's build put there is a step: only a build of our own
+    // that recorded nothing leaves the change still to be tried again.
+    return hasStep() || (await build());
 }

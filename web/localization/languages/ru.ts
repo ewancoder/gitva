@@ -72,6 +72,9 @@ export const ru: Strings = {
         'help.keys.doubleTree': 'двойной щелчок по дереву',
         'help.keys.doubleTree.does':
             'развернуть или свернуть это дерево (то, на что оно ссылается)',
+        'help.keys.doubleIndex': 'двойной щелчок по записи индекса',
+        'help.keys.doubleIndex.does':
+            'развернуть или свернуть — показать блоб, на который указывает этот sha',
         'help.keys.drag': 'перетащить что угодно',
         'help.keys.drag.does': 'закрепить в другом месте («сбросить вид» снимает все закрепления)',
         'help.keys.shiftClick': 'shift-щелчок по нему',
@@ -83,6 +86,7 @@ export const ru: Strings = {
         'help.keys.back.does': 'шаг назад по записи',
         'help.keys.forward.does': 'шаг вперёд по записи',
         'help.keys.space.does': 'пауза или к живой записи',
+        'help.keys.presentation.does': 'скрыть панели для показа, и вернуть их обратно',
         close: 'закрыть',
 
         'settings.title': 'настройки',
@@ -91,6 +95,8 @@ export const ru: Strings = {
         'settings.refitOnChange': 'авто-масштабирование, когда в репозитории что-то происходит',
         'settings.showPins': 'показать булавку на всём, что вы передвинули вручную',
         'settings.expandNewCommits': 'новые коммиты сразу развёрнуты',
+        'settings.compact': 'компактно: меньше на экране, без пояснений',
+        'settings.inspectorAtBottom': 'инспектор снизу, а не сбоку',
     },
 
     canvas: {
@@ -174,10 +180,7 @@ export const ru: Strings = {
         unreadable: 'не удалось прочитать',
         unexplained: 'Пояснение для этого ещё не написано.',
         heading: {
-            entries: 'записи',
-            object: 'объект как есть',
             contents: 'содержимое',
-            raw: 'содержимое как есть',
         },
         notText: (size: number) => `${size} ${plural(size, 'байт', 'байта', 'байт')}, не текст.`,
         truncated: (size: number) =>
@@ -195,21 +198,17 @@ export const ru: Strings = {
             parents: 'родители',
             author: 'автор',
             authored: 'создано',
-            message: 'сообщение',
+            committer: 'коммитер',
+            committed: 'закоммичено',
             entries: 'записи',
             tagName: 'имя тега',
             pointsAt: 'указывает на',
             tagger: 'автор тега',
             name: 'имя',
             file: 'файл',
-            contains: 'содержит',
-            peelsTo: 'в итоге указывает на',
             resolvesTo: 'разрешается в',
             stored: 'хранится',
-            storedIn: 'лежит в',
             path: 'путь',
-            blob: 'блоб',
-            commit: 'коммит',
             mode: 'режим доступа',
             stage: 'stage',
         },
@@ -225,10 +224,6 @@ export const ru: Strings = {
             // «перенесена».
             packed: 'упакована — перенесена в .git/packed-refs, так что самого файла больше нет',
             loose: 'loose — настоящий файл на диске',
-            unborn: (ref: string) =>
-                `ref: ${ref} — которого ещё нет. Ещё не начавшаяся ветка: HEAD называет файл, который появится с первым коммитом.`,
-            detached: (oid: string) => `${oid} — отделён, чистый sha без ветки посередине`,
-            headRef: (ref: string) => `ref: ${ref}`,
             pointsAt: (type: string, oid: string) => `${type} ${oid}`,
             conflictStage: (stage: number) =>
                 `${stage} — запись конфликта (1 = общий предок, 2 = наша версия, 3 = их версия). Разрешение конфликта пишет вместо них одну чистую запись stage 0.`,

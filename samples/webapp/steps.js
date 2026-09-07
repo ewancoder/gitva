@@ -64,6 +64,7 @@ export function fill(recorded) {
             author: WHO,
             authorDate: WHEN,
             committer: WHO,
+            committerDate: WHEN,
             message: `${commit.subject}\n`,
             ...commit,
         }));

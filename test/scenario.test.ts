@@ -87,7 +87,7 @@ test('both halves are drawn at once', () => {
     assert.ok(!aShape.unreachable, 'solid, not a ghost — the index holds it');
     assert.equal(aShape.staged, true, 'and marked as held by the index alone');
     assert.match(
-        explain(reset, 'blob', aBlob).facts.find(([k]) => k === 'reachable')![1],
+        explain(reset, 'blob', aBlob).facts.find(([k]) => k === 'reachable')![1] as string,
         /only through the index/,
     );
     assert.ok(
